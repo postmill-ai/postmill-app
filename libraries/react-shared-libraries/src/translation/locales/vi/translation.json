@@ -5056,5 +5056,21 @@
   "templates_panel_custom_category": "Tùy chỉnh",
   "templates_panel_ig_post_category": "Bài đăng IG",
   "templates_panel_preview_template": "Xem trước {{name}}",
-  "template_folder_unfiled": "Không có thư mục"
+  "template_folder_unfiled": "Không có thư mục",
+  "designer_bulk_card_description": "Chuyển bảng tính thành các biến thể thiết kế có thể chỉnh sửa",
+  "designer_bulk_choose_source": "Chọn thiết kế hình ảnh hoặc mẫu để dùng làm nguồn.",
+  "designer_bulk_from_template": "Tạo hàng loạt từ mẫu này",
+  "designer_bulk_static_only": "Tính năng tạo hàng loạt khả dụng cho thiết kế hình ảnh.",
+  "designer_bulk_source": "Nguồn: {{name}}",
+  "designer_bulk_open_batch": "Mở lô",
+  "designer_back_to_batch": "← Quay lại lô",
+  "my_designs_panel_all_designs": "← Tất cả thiết kế",
+  "my_designs_panel_batch_failed": "Không thể tải lô",
+  "my_designs_panel_variation_count_one": "{{count}} biến thể",
+  "my_designs_panel_variation_count_other": "{{count}} biến thể",
+  "my_designs_panel_batches": "Lô tạo hàng loạt",
+  "my_designs_panel_batch_badge": "LÔ",
+  "my_designs_panel_load_more_batches": "Tải thêm lô",
+  "my_designs_panel_no_image_designs": "Chưa có thiết kế hình ảnh.",
+  "designer_bulk_image_target_thumbnail": "Hình thu nhỏ của {{name}}"
 }

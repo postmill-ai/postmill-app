@@ -183,6 +183,8 @@ export interface DesignerState {
   designSession: number;
   designTemplateId: string | null;
   templateId: string | null;
+  batchId: string | null;
+  batchName: string | null;
   designName: string;
   isDirty: boolean; isSaving: boolean; lastSaved: Date | null;
   /** Editor-only projection state; preview patches never enter `doc` or history. */
@@ -419,7 +421,13 @@ export interface DesignerActions {
   markSaved: () => void; setSaving: (saving: boolean) => void; setSaveFailed: (failed: boolean) => void;
   setSaveRetryPaused: (paused: boolean) => void;
   reset: (width?: number, height?: number) => void;
-  loadDesign: (doc: any, id: string, name: string, templateId?: string | null) => void;
+  loadDesign: (
+    doc: any,
+    id: string | null,
+    name: string,
+    templateId?: string | null,
+    batch?: { id: string; name: string } | null,
+  ) => void;
   // video mode
   addTrack: (outputIndex: number, type: VideoTrack['type']) => void;
   removeTrack: (outputIndex: number, trackId: string) => void;
@@ -679,6 +687,7 @@ export const createDesignerStore = (
       history: [initialDoc], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
       designId: null, designSession: 0, designTemplateId: null, templateId: null,
+      batchId: null, batchName: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
       previewRevision: 0,
@@ -2133,6 +2142,7 @@ export const createDesignerStore = (
           fitNonce: get().fitNonce + 1,
           history: [newDoc], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designSession: get().designSession + 1, designTemplateId: null, templateId: null,
+          batchId: null, batchName: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false, saveRetryPaused: false,
           editFormatOnly: false,
           brandEnforcement: false,
@@ -2148,7 +2158,7 @@ export const createDesignerStore = (
         });
       },
 
-      loadDesign: (doc, id, name, templateId = null) => {
+      loadDesign: (doc, id, name, templateId = null, batch = null) => {
         get().clearElementPreview();
         const migrated = migrateDoc(doc);
         // Buffers from the previously open design would otherwise live (and
@@ -2157,6 +2167,7 @@ export const createDesignerStore = (
         rawSet({
           doc: migrated, designId: id, designSession: get().designSession + 1, designName: name,
           templateId, designTemplateId: templateId,
+          batchId: batch?.id || null, batchName: batch?.name || null,
           selectedIds: [], currentOutput: 0, currentPage: 0,
           // The zoom and viewport belonged to whatever was open before. Reset
           // them and ask for a fit: leaving a stale zoom on screen for a frame

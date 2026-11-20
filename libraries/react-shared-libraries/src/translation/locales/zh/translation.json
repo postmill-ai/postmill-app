@@ -5056,5 +5056,21 @@
   "templates_panel_custom_category": "自定义",
   "templates_panel_ig_post_category": "IG 帖子",
   "templates_panel_preview_template": "预览{{name}}",
-  "template_folder_unfiled": "无文件夹"
+  "template_folder_unfiled": "无文件夹",
+  "designer_bulk_card_description": "将电子表格转换为可编辑的设计变体",
+  "designer_bulk_choose_source": "选择要用作源的图片设计或模板。",
+  "designer_bulk_from_template": "从此模板批量创建",
+  "designer_bulk_static_only": "批量创建可用于图片设计。",
+  "designer_bulk_source": "来源：{{name}}",
+  "designer_bulk_open_batch": "打开批次",
+  "designer_back_to_batch": "← 返回批次",
+  "my_designs_panel_all_designs": "← 所有设计",
+  "my_designs_panel_batch_failed": "无法加载批次",
+  "my_designs_panel_variation_count_one": "{{count}} 个变体",
+  "my_designs_panel_variation_count_other": "{{count}} 个变体",
+  "my_designs_panel_batches": "批量创建批次",
+  "my_designs_panel_batch_badge": "批次",
+  "my_designs_panel_load_more_batches": "加载更多批次",
+  "my_designs_panel_no_image_designs": "还没有图片设计。",
+  "designer_bulk_image_target_thumbnail": "{{name}} 缩略图"
 }

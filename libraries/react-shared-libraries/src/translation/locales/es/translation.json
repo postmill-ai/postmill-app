@@ -5056,5 +5056,21 @@
   "templates_panel_custom_category": "Personalizado",
   "templates_panel_ig_post_category": "Publicación de IG",
   "templates_panel_preview_template": "Vista previa de {{name}}",
-  "template_folder_unfiled": "Sin carpeta"
+  "template_folder_unfiled": "Sin carpeta",
+  "designer_bulk_card_description": "Convierte una hoja de cálculo en variaciones de diseño editables",
+  "designer_bulk_choose_source": "Elige un diseño de imagen o una plantilla como origen.",
+  "designer_bulk_from_template": "Creación masiva desde esta plantilla",
+  "designer_bulk_static_only": "La creación masiva está disponible para diseños de imagen.",
+  "designer_bulk_source": "Origen: {{name}}",
+  "designer_bulk_open_batch": "Abrir lote",
+  "designer_back_to_batch": "← Volver al lote",
+  "my_designs_panel_all_designs": "← Todos los diseños",
+  "my_designs_panel_batch_failed": "No se pudo cargar el lote",
+  "my_designs_panel_variation_count_one": "{{count}} variación",
+  "my_designs_panel_variation_count_other": "{{count}} variaciones",
+  "my_designs_panel_batches": "Lotes de creación masiva",
+  "my_designs_panel_batch_badge": "LOTE",
+  "my_designs_panel_load_more_batches": "Cargar más lotes",
+  "my_designs_panel_no_image_designs": "Aún no hay diseños de imagen.",
+  "designer_bulk_image_target_thumbnail": "Miniatura de {{name}}"
 }

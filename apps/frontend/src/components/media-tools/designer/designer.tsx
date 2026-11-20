@@ -69,7 +69,7 @@ import { QrCodeDialog } from './qr-code-dialog';
 import { ShareDialog } from './share-dialog';
 import { fetchDesignForEditor } from './load-design';
 import { downloadPdesignArtifact, replaceDesignerDesignId } from './pdesign-file';
-import { BulkCreateDialog } from './bulk-create-dialog';
+import { BulkCreateDialog, type BulkCreateSource } from './bulk-create-dialog';
 import { EditAsVideoDialog } from './edit-as-video-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addMediaToTimeline } from './add-media-to-timeline';
@@ -143,6 +143,7 @@ interface DesignerProps {
     durationMs?: number;
   };
   designId?: string;
+  batchId?: string;
 }
 
 // Phrase-group word timings into caption clips — mirrors the video-timeline's
@@ -227,6 +228,7 @@ const DesignerContent: FC<
   initialCaptionVideo,
   initialTimelineMedia,
   designId,
+  batchId: initialBatchId,
 }) => {
   const fetch = useFetch();
   const toaster = useToaster();
@@ -387,6 +389,7 @@ const DesignerContent: FC<
 
   const designName = store((s) => s.designName);
   const currentDesignId = store((s) => s.designId);
+  const currentBatchId = store((s) => s.batchId);
   const isDirty = store((s) => s.isDirty);
   const isSaving = store((s) => s.isSaving);
   const saveFailed = store((s) => s.saveFailed);
@@ -618,7 +621,7 @@ const DesignerContent: FC<
     fetchDesignForEditor(fetch, designId)
       .then((design) => {
         if (!design) throw new Error('Design unavailable');
-        if (!cancelled) store.getState().loadDesign(design.doc, design.id, design.name);
+        if (!cancelled) store.getState().loadDesign(design.doc, design.id, design.name, null, design.batch);
       })
       .catch(() => {
         if (!cancelled) setDesignLoadError(true);
@@ -708,6 +711,27 @@ const DesignerContent: FC<
   const handleExport = useCallback(() => openExportDialog(), [openExportDialog]);
   const handleSaveToFiles = useCallback(() => openExportDialog('save'), [openExportDialog]);
   const handleCreatePost = useCallback(() => openExportDialog('create-post'), [openExportDialog]);
+  const openBulkCreate = useCallback((source?: BulkCreateSource) => {
+    const current = store.getState();
+    if ((source?.doc?.mode || current.doc.mode) !== 'image') {
+      toaster.show(translate('designer_bulk_static_only', 'Bulk Create is available for image designs.'), 'warning');
+      return;
+    }
+    const resolvedSource: BulkCreateSource = source || (current.designId
+      ? { kind: 'design', id: current.designId, name: current.designName }
+      : current.templateId
+        ? { kind: 'template', id: current.templateId, name: current.designName }
+        : { kind: 'draft', name: current.designName });
+    const dialogStore = source?.doc ? createDesignerStore() : store;
+    if (source?.doc) dialogStore.getState().loadDesign(source.doc, null, source.name, source.id);
+    modals.openModal({
+      title: translate('designer_bulk_title', 'Bulk Create'),
+      size: 800,
+      children: (close: () => void) => (
+        <BulkCreateDialog store={dialogStore} source={resolvedSource} onClose={close} />
+      ),
+    });
+  }, [modals, store, toaster, translate]);
 
   const handleSave = useCallback(async () => {
     const s = store.getState();
@@ -1240,7 +1264,7 @@ const DesignerContent: FC<
                 const res = await fetch(`/media/designs/${d.id}`);
                 if (!res.ok) return;
                 const full = await res.json();
-                store.getState().loadDesign(full.doc, full.id, full.name, null);
+                store.getState().loadDesign(full.doc, full.id, full.name, null, full.batch);
                 close();
               }}
             />
@@ -1253,7 +1277,12 @@ const DesignerContent: FC<
           maxSize: 'calc(100vw - 24px)',
           children: (close: () => void) => (
             <BrandKitModalProvider store={store}>
-              <TemplatesPanel store={store as any} onClose={close} guard={confirmDiscardIfDirty} />
+              <TemplatesPanel
+                store={store as any}
+                onClose={close}
+                guard={confirmDiscardIfDirty}
+                onBulkCreate={openBulkCreate}
+              />
             </BrandKitModalProvider>
           ),
         }),
@@ -1275,12 +1304,7 @@ const DesignerContent: FC<
           children: (close: () => void) => <QrCodeDialog store={store} onClose={close} />,
         }),
       onExport: handleSaveToFiles,
-      onBulkCreate: () =>
-        modals.openModal({
-          title: translate('designer_bulk_title', 'Bulk Create'),
-          size: 800,
-          children: (close: () => void) => <BulkCreateDialog store={store} onClose={close} />,
-        }),
+      onBulkCreate: () => openBulkCreate(),
       onExportPostmill: handleExportPostmill,
       pdesignExporting,
       onImportDesign: () => importInputRef.current?.click(),
@@ -1483,6 +1507,7 @@ const DesignerContent: FC<
       handleSaveAsTemplate,
       handleExport,
       handleSaveToFiles,
+      openBulkCreate,
       handleExportPostmill,
       pdesignExporting,
       designAutosave,
@@ -1548,6 +1573,14 @@ const DesignerContent: FC<
       <div className="flex items-center gap-3 px-3 py-1.5 border-b border-studioBorder bg-newBgColorInner shrink-0">
         <div className="flex items-center gap-2 shrink-0">
           <Logo size={26} className="" />
+          {currentBatchId && (
+            <a
+              href={`/media/designer?batchId=${encodeURIComponent(currentBatchId)}`}
+              className="px-2 py-1 rounded-md text-[12px] text-btnPrimaryAccent hover:bg-designerAccent/10 whitespace-nowrap"
+            >
+              {translate('designer_back_to_batch', '← Back to batch')}
+            </a>
+          )}
           <input
             value={designName}
             onChange={(e) => store.getState().setDesignName(e.target.value)}
@@ -1664,6 +1697,10 @@ const DesignerContent: FC<
               </>
             }
             items={[
+              ...(docMode === 'image' ? [{
+                label: translate('designer_bulk_title', 'Bulk Create'),
+                onClick: () => openBulkCreate(),
+              }] : []),
               {
                 label: translate('designer_save_to_files', 'Save to Files'),
                 onClick: handleSaveToFiles,
@@ -1913,7 +1950,9 @@ const DesignerContent: FC<
         <StartDialog
           store={store}
           fetchFn={fetch}
-          onImportSuccess={syncDesignLocation}
+          onImportSuccess={syncImportedDesignLocation}
+          onBulkCreate={openBulkCreate}
+          initialBatchId={initialBatchId}
           onDone={() => setShowStart(false)}
         />
       )}

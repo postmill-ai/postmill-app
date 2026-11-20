@@ -5055,5 +5055,21 @@
   "templates_panel_custom_category": "Custom",
   "templates_panel_ig_post_category": "IG Post",
   "templates_panel_preview_template": "Preview {{name}}",
-  "template_folder_unfiled": "No folder"
+  "template_folder_unfiled": "No folder",
+  "designer_bulk_card_description": "Turn a spreadsheet into editable design variations",
+  "designer_bulk_choose_source": "Choose an image design or template to use as the source.",
+  "designer_bulk_from_template": "Bulk Create from this template",
+  "designer_bulk_static_only": "Bulk Create is available for image designs.",
+  "designer_bulk_source": "Source: {{name}}",
+  "designer_bulk_open_batch": "Open batch",
+  "designer_back_to_batch": "← Back to batch",
+  "my_designs_panel_all_designs": "← All designs",
+  "my_designs_panel_batch_failed": "Failed to load batch",
+  "my_designs_panel_variation_count_one": "{{count}} variation",
+  "my_designs_panel_variation_count_other": "{{count}} variations",
+  "my_designs_panel_batches": "Bulk Create batches",
+  "my_designs_panel_batch_badge": "BATCH",
+  "my_designs_panel_load_more_batches": "Load more batches",
+  "my_designs_panel_no_image_designs": "No image designs yet.",
+  "designer_bulk_image_target_thumbnail": "{{name}} thumbnail"
 }

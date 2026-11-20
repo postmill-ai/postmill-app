@@ -5056,5 +5056,21 @@
   "templates_panel_custom_category": "Benutzerdefiniert",
   "templates_panel_ig_post_category": "IG-Beitrag",
   "templates_panel_preview_template": "Vorschau von {{name}}",
-  "template_folder_unfiled": "Kein Ordner"
+  "template_folder_unfiled": "Kein Ordner",
+  "designer_bulk_card_description": "Verwandle eine Tabelle in bearbeitbare Designvarianten",
+  "designer_bulk_choose_source": "Wähle ein Bilddesign oder eine Vorlage als Quelle.",
+  "designer_bulk_from_template": "Bulk Create aus dieser Vorlage",
+  "designer_bulk_static_only": "Bulk Create ist für Bilddesigns verfügbar.",
+  "designer_bulk_source": "Quelle: {{name}}",
+  "designer_bulk_open_batch": "Batch öffnen",
+  "designer_back_to_batch": "← Zurück zum Batch",
+  "my_designs_panel_all_designs": "← Alle Designs",
+  "my_designs_panel_batch_failed": "Batch konnte nicht geladen werden",
+  "my_designs_panel_variation_count_one": "{{count}} Variante",
+  "my_designs_panel_variation_count_other": "{{count}} Varianten",
+  "my_designs_panel_batches": "Bulk-Create-Batches",
+  "my_designs_panel_batch_badge": "BATCH",
+  "my_designs_panel_load_more_batches": "Weitere Batches laden",
+  "my_designs_panel_no_image_designs": "Noch keine Bilddesigns.",
+  "designer_bulk_image_target_thumbnail": "Miniaturansicht von {{name}}"
 }

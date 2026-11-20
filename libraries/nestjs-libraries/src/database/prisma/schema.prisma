@@ -75,6 +75,7 @@ model Organization {
   apiKeys              ApiKey[]
   roles                AppRole[]
   designs              Design[]
+  designBatches        DesignBatch[]
   designVersions       DesignVersion[]
   designTemplates      DesignTemplate[]
   designTemplateFolders DesignTemplateFolder[]
@@ -146,6 +147,7 @@ model User {
   profile               UserProfile?
   sessions              Session[]
   designs               Design[]
+  designBatches         DesignBatch[]
   designVersions        DesignVersion[]
   designerRecentOpens   DesignerRecentOpen[]
   notificationReads     NotificationRead[]
@@ -1847,6 +1849,7 @@ model Design {
   previewFileId   String?
   createdById     String
   campaignId      String?
+  batchId         String?
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -1855,13 +1858,36 @@ model Design {
   createdBy       User          @relation(fields: [createdById], references: [id])
   campaign        Campaign?     @relation(fields: [campaignId], references: [id])
   previewFile     File?         @relation(fields: [previewFileId], references: [id])
+  batch           DesignBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
   versions        DesignVersion[]
   recentOpens     DesignerRecentOpen[]
 
   @@index([organizationId])
   @@index([createdById])
   @@index([campaignId])
+  @@index([batchId])
   @@index([deletedAt])
+}
+
+// A persisted Bulk Create group. Source ids are validated org-scoped references;
+// they remain optional because drafts and imported documents have no saved source.
+model DesignBatch {
+  id               String   @id @default(cuid())
+  organizationId   String
+  createdById      String
+  name             String
+  jobId            String   @unique
+  sourceDesignId   String?
+  sourceTemplateId String?
+  sourceName       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  designs      Design[]
+
+  @@index([organizationId, updatedAt])
 }
 
 // Named/automatic snapshots of a Design's doc — the Designer's version history.

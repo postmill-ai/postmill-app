@@ -7592,6 +7592,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: group
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -7615,6 +7620,39 @@ paths:
                 type: object
       tags:
         - Design
+  /media/designs/batches:
+    get:
+      operationId: DesignController_listBatches
+      parameters:
+        - name: page
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: limit
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
+  /media/designs/batches/{id}:
+    get:
+      operationId: DesignController_getBatch
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design
   /media/designs/{id}:
     get:
       operationId: DesignController_get
@@ -7627,6 +7665,10 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
     put:
@@ -12953,6 +12995,15 @@ components:
           type: string
           maxLength: 200
         folderId:
+          type: string
+          maxLength: 200
+        sourceDesignId:
+          type: string
+          maxLength: 200
+        sourceTemplateId:
+          type: string
+          maxLength: 200
+        sourceName:
           type: string
           maxLength: 200
       required:

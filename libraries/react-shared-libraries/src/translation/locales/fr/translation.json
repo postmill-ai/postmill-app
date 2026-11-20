@@ -5056,5 +5056,21 @@
   "templates_panel_custom_category": "Personnalisé",
   "templates_panel_ig_post_category": "Publication IG",
   "templates_panel_preview_template": "Aperçu de {{name}}",
-  "template_folder_unfiled": "Aucun dossier"
+  "template_folder_unfiled": "Aucun dossier",
+  "designer_bulk_card_description": "Transformez un tableur en variations de design modifiables",
+  "designer_bulk_choose_source": "Choisissez un design d’image ou un modèle comme source.",
+  "designer_bulk_from_template": "Création en masse à partir de ce modèle",
+  "designer_bulk_static_only": "La création en masse est disponible pour les designs d’image.",
+  "designer_bulk_source": "Source : {{name}}",
+  "designer_bulk_open_batch": "Ouvrir le lot",
+  "designer_back_to_batch": "← Retour au lot",
+  "my_designs_panel_all_designs": "← Tous les designs",
+  "my_designs_panel_batch_failed": "Échec du chargement du lot",
+  "my_designs_panel_variation_count_one": "{{count}} variation",
+  "my_designs_panel_variation_count_other": "{{count}} variations",
+  "my_designs_panel_batches": "Lots de création en masse",
+  "my_designs_panel_batch_badge": "LOT",
+  "my_designs_panel_load_more_batches": "Charger plus de lots",
+  "my_designs_panel_no_image_designs": "Aucun design d’image pour l’instant.",
+  "designer_bulk_image_target_thumbnail": "Miniature de {{name}}"
 }

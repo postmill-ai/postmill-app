@@ -130,10 +130,11 @@ export class DesignService {
     page: number = 1,
     limit: number = 20,
     options: DesignGalleryOptions = {},
+    rootOnly = false,
   ) {
     const [designs, total] = await Promise.all([
-      this._designRepository.findByOrg(orgId, page, limit, options),
-      this._designRepository.countByOrg(orgId, options.query),
+      this._designRepository.findByOrg(orgId, page, limit, options, rootOnly),
+      this._designRepository.countByOrg(orgId, options.query, rootOnly),
     ]);
     return {
       designs: designs.map((design) => ({
@@ -156,6 +157,7 @@ export class DesignService {
     previewFileId?: string;
     campaignId?: string;
     sourceTemplateId?: string;
+    batchId?: string;
   }) {
     const { sourceTemplateId, ...designData } = data;
     if (sourceTemplateId) {
@@ -193,6 +195,7 @@ export class DesignService {
     previewDataUrl?: string;
     previewFileId?: string;
     campaignId?: string;
+    batchId?: string;
   }) {
     let payload: any = { ...data, organizationId: orgId, createdById: userId };
     if (data.previewFileId) {
@@ -327,6 +330,72 @@ export class DesignService {
 
   async deleteDesign(orgId: string, id: string) {
     return this._designRepository.softDelete(id, orgId);
+  }
+
+  createBatch(orgId: string, userId: string, data: {
+    name: string;
+    jobId: string;
+    sourceDesignId?: string;
+    sourceTemplateId?: string;
+    sourceName?: string;
+  }) {
+    return this._designRepository.createBatch({
+      organizationId: orgId,
+      createdById: userId,
+      ...data,
+    });
+  }
+
+  getBatchByJobId(orgId: string, jobId: string) {
+    return this._designRepository.findBatchByJobId(orgId, jobId);
+  }
+
+  deleteBatch(orgId: string, id: string) {
+    return this._designRepository.deleteBatch(orgId, id);
+  }
+
+  async listBatches(orgId: string, page = 1, limit = 20) {
+    const [batches, total] = await Promise.all([
+      this._designRepository.findBatchesByOrg(orgId, page, limit),
+      this._designRepository.countBatchesByOrg(orgId),
+    ]);
+    return {
+      batches: batches.map((batch) => {
+        const first = batch.designs[0];
+        return {
+          id: batch.id,
+          name: batch.name,
+          sourceName: batch.sourceName,
+          createdAt: batch.createdAt,
+          updatedAt: batch.updatedAt,
+          count: batch._count.designs,
+          previewUrl: first?.previewFile?.path ?? null,
+          mode: 'image',
+        };
+      }),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async getBatch(orgId: string, id: string) {
+    const batch = await this._designRepository.findBatchById(orgId, id);
+    if (!batch) return null;
+    return {
+      id: batch.id,
+      name: batch.name,
+      sourceName: batch.sourceName,
+      createdAt: batch.createdAt,
+      updatedAt: batch.updatedAt,
+      designs: batch.designs.map((design) => ({
+        id: design.id,
+        name: design.name,
+        updatedAt: design.updatedAt,
+        previewUrl: design.previewFile?.path ?? null,
+        mode: 'image',
+      })),
+    };
   }
 
   // ── Version history ─────────────────────────────────────────────────────

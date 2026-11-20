@@ -43,6 +43,7 @@ export interface DesignBulkCreatePayload {
   organizationId: string;
   userId: string;
   nameBase: string;
+  batchId?: string;
   folderId?: string;
   folderOwned?: boolean;
   doc: DesignerDoc;
@@ -154,6 +155,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     if (!job || job.organizationId !== orgId || job.operation !== DESIGN_BULK_CREATE_OPERATION) {
       return null;
     }
+    const batch = await this._designService.getBatchByJobId(orgId, jobId);
     let progress: unknown = null;
     let results: DesignBulkCreateRowResult[] | undefined;
     try {
@@ -171,6 +173,7 @@ export class DesignBulkCreateService extends DesignBulkService {
     return {
       id: job.id,
       status: job.status,
+      batchId: batch?.id,
       artifactUrl: job.status === 'completed' ? job.artifactUrl : undefined,
       error: job.status === 'failed' ? job.error : undefined,
       progress,
@@ -186,10 +189,28 @@ export class DesignBulkCreateService extends DesignBulkService {
       rows: Record<string, string>[];
       nameBase?: string;
       folderId?: string;
+      sourceDesignId?: string;
+      sourceTemplateId?: string;
+      sourceName?: string;
     }
   ) {
     const doc = this._designerDocService.validate(input.doc);
     if (doc.mode !== 'image') {
+      throw new BadRequestException('Bulk Create currently supports static image designs only.');
+    }
+    if (input.sourceDesignId && input.sourceTemplateId) {
+      throw new BadRequestException('Bulk Create accepts one source design or template.');
+    }
+    const sourceDesign = input.sourceDesignId
+      ? await this._designService.getDesign(orgId, input.sourceDesignId)
+      : null;
+    const sourceTemplate = input.sourceTemplateId
+      ? await this._designService.getTemplate(orgId, input.sourceTemplateId)
+      : null;
+    if ((input.sourceDesignId && !sourceDesign) || (input.sourceTemplateId && !sourceTemplate)) {
+      throw new BadRequestException('The Bulk Create source is unavailable.');
+    }
+    if ((sourceDesign?.doc as any)?.mode === 'video' || (sourceTemplate?.doc as any)?.mode === 'video') {
       throw new BadRequestException('Bulk Create currently supports static image designs only.');
     }
     if (!input.rows.length) throw new BadRequestException('Add at least one data row.');
@@ -236,28 +257,46 @@ export class DesignBulkCreateService extends DesignBulkService {
       costUsd: 0,
       creditType: NO_CREDIT,
     });
-    const folderId = input.folderId || (await this._fileService.createFolder(orgId, {
-      name: `${nameBase} (${job.id})`,
-    })).id;
-    const payload: DesignBulkCreatePayload = {
-      organizationId: orgId,
-      userId,
-      nameBase,
-      folderId,
-      folderOwned: !input.folderId,
-      doc,
-      rows,
-      enqueuedAt: new Date().toISOString(),
-    };
-    await ioRedis.set(payloadKey(job.id), JSON.stringify(payload), 'EX', PAYLOAD_TTL_SECONDS);
-    if (isInngestEnabled()) {
-      await inngest.send({
-        name: DESIGN_EXPORT_EVENT,
-        data: { jobId: job.id },
-        id: designExportEventId(job.id),
+    let folderId = input.folderId;
+    let batchId: string | undefined;
+    try {
+      folderId ||= (await this._fileService.createFolder(orgId, {
+        name: `${nameBase} (${job.id})`,
+      })).id;
+      const batch = await this._designService.createBatch(orgId, userId, {
+        name: nameBase,
+        jobId: job.id,
+        sourceDesignId: input.sourceDesignId,
+        sourceTemplateId: input.sourceTemplateId,
+        sourceName: input.sourceName?.trim() || sourceDesign?.name || sourceTemplate?.name || nameBase,
       });
+      batchId = batch.id;
+      const payload: DesignBulkCreatePayload = {
+        organizationId: orgId,
+        userId,
+        nameBase,
+        batchId: batch.id,
+        folderId,
+        folderOwned: !input.folderId,
+        doc,
+        rows,
+        enqueuedAt: new Date().toISOString(),
+      };
+      await ioRedis.set(payloadKey(job.id), JSON.stringify(payload), 'EX', PAYLOAD_TTL_SECONDS);
+      if (isInngestEnabled()) {
+        await inngest.send({
+          name: DESIGN_EXPORT_EVENT,
+          data: { jobId: job.id },
+          id: designExportEventId(job.id),
+        });
+      }
+      return { id: job.id, status: job.status, batchId: batch.id };
+    } catch (error) {
+      if (batchId) await this._designService.deleteBatch(orgId, batchId).catch(() => undefined);
+      if (!input.folderId && folderId) await this._fileService.deleteFolder(orgId, folderId).catch(() => undefined);
+      await ioRedis.del(payloadKey(job.id));
+      throw error;
     }
-    return { id: job.id, status: job.status };
   }
 
   private _collectRemoteImageSources(
@@ -578,6 +617,13 @@ export class DesignBulkCreateService extends DesignBulkService {
         this._logger.warn(`Bulk Create rollback could not delete batch folder: ${(error as Error)?.message}`);
       }
     }
+    if (payload.batchId) {
+      try {
+        await this._designService.deleteBatch(orgId, payload.batchId);
+      } catch (error) {
+        this._logger.warn(`Bulk Create rollback could not delete batch metadata: ${(error as Error)?.message}`);
+      }
+    }
   }
 
   async processBulkCreate(jobId: string): Promise<void> {
@@ -629,7 +675,11 @@ export class DesignBulkCreateService extends DesignBulkService {
           const doc = applyBulkRow(payload.doc, rows[index]);
           await this._persistRemoteImages(orgId, doc, remoteImageCache, templateSources);
           const name = `${payload.nameBase} ${index + 1}`;
-          const design = await this._designService.createDesign(orgId, payload.userId, { name, doc });
+          const design = await this._designService.createDesign(orgId, payload.userId, {
+            name,
+            doc,
+            batchId: payload.batchId,
+          });
           designIds.push(design.id);
           if (design.previewFileId) previewFileIds.push(design.previewFileId);
           result.designId = design.id;

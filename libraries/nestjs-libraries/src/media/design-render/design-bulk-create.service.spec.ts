@@ -87,6 +87,11 @@ const makeService = () => {
       return { id: `design-${data.doc.outputs[0].children[0].text}`, ...data };
     }),
     deleteDesign: vi.fn(async () => undefined),
+    getDesign: vi.fn(async () => null),
+    getTemplate: vi.fn(async () => null),
+    createBatch: vi.fn(async (_org: string, _user: string, data: any) => ({ id: 'batch-1', ...data })),
+    getBatchByJobId: vi.fn(async () => ({ id: 'batch-1', name: 'Launch' })),
+    deleteBatch: vi.fn(async () => undefined),
   };
   const designerDocService = new DesignerDocService();
   vi.spyOn(designerDocService, 'validate');
@@ -177,7 +182,7 @@ const seedPayload = (rows = [
   { name: 'Grace', image: 'https://cdn.example.test/b.png' },
 ]) => {
   redis.set('design-bulk:payload:job-1', JSON.stringify({
-    organizationId: 'org-1', userId: 'user-1', nameBase: 'Campaign',
+    organizationId: 'org-1', userId: 'user-1', nameBase: 'Campaign', batchId: 'batch-1',
     folderId: 'batch-folder', folderOwned: true, doc: makeDoc(), rows,
   }));
 };
@@ -204,19 +209,26 @@ beforeEach(() => {
 
 describe('DesignBulkCreateService enqueue and status', () => {
   it('validates and enqueues an org-owned static batch', async () => {
-    const { service, lifecycle, designerDocService, fileService } = makeService();
+    const { service, lifecycle, designerDocService, fileService, designService } = makeService();
     const rows = [{ name: 'Ada' }];
     const result = await service.enqueueBulkCreate('org-1', 'user-1', {
       doc: makeDoc(), rows, nameBase: 'Launch', folderId: 'folder-1',
     });
 
-    expect(result).toEqual({ id: 'job-1', status: 'pending' });
+    expect(result).toEqual({ id: 'job-1', status: 'pending', batchId: 'batch-1' });
     expect(designerDocService.validate).toHaveBeenCalled();
     expect(fileService.getFolder).toHaveBeenCalledWith('org-1', 'folder-1');
     expect(lifecycle.createPendingJob).toHaveBeenCalledWith(expect.objectContaining({
       organizationId: 'org-1', userId: 'user-1', operation: DESIGN_BULK_CREATE_OPERATION,
     }));
-    expect(JSON.parse(redis.get('design-bulk:payload:job-1')!).rows).toEqual(rows);
+    expect(JSON.parse(redis.get('design-bulk:payload:job-1')!)).toMatchObject({
+      rows,
+      batchId: 'batch-1',
+    });
+    expect(designService.createBatch).toHaveBeenCalledWith('org-1', 'user-1', {
+      name: 'Launch', jobId: 'job-1', sourceDesignId: undefined,
+      sourceTemplateId: undefined, sourceName: 'Launch',
+    });
     expect(inngest.send).toHaveBeenCalledWith(expect.objectContaining({
       name: 'media/design-export', data: { jobId: 'job-1' },
     }));
@@ -230,6 +242,46 @@ describe('DesignBulkCreateService enqueue and status', () => {
 
     expect(fileService.createFolder).toHaveBeenCalledWith('org-1', { name: 'Launch (job-1)' });
     expect(JSON.parse(redis.get('design-bulk:payload:job-1')!).folderId).toBe('batch-folder');
+  });
+
+  it('validates source context through org-scoped reads and rejects unavailable sources', async () => {
+    const { service, designService, lifecycle } = makeService();
+    designService.getDesign.mockResolvedValue({ id: 'source-1', name: 'Catalog', doc: makeDoc() });
+
+    await service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada' }], sourceDesignId: 'source-1',
+    });
+
+    expect(designService.getDesign).toHaveBeenCalledWith('org-1', 'source-1');
+    expect(designService.createBatch).toHaveBeenCalledWith('org-1', 'user-1', expect.objectContaining({
+      sourceDesignId: 'source-1', sourceName: 'Catalog',
+    }));
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada' }], sourceTemplateId: 'foreign-template',
+    })).rejects.toThrow('source is unavailable');
+    expect(designService.getTemplate).toHaveBeenCalledWith('org-1', 'foreign-template');
+    expect(lifecycle.createPendingJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects ambiguous and video source context before creating a job', async () => {
+    const { service, designService, lifecycle } = makeService();
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada' }],
+      sourceDesignId: 'source-1', sourceTemplateId: 'template-1',
+    })).rejects.toThrow('one source design or template');
+    expect(designService.getDesign).not.toHaveBeenCalled();
+    expect(designService.getTemplate).not.toHaveBeenCalled();
+
+    designService.getDesign.mockResolvedValue({
+      id: 'source-1', name: 'Video source', doc: { ...makeDoc(), mode: 'video' },
+    });
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada' }], sourceDesignId: 'source-1',
+    })).rejects.toThrow('static image designs only');
+    expect(designService.getDesign).toHaveBeenCalledWith('org-1', 'source-1');
+    expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
   });
 
   it('rejects video documents, empty batches and non-string cell values', async () => {
@@ -427,7 +479,7 @@ describe('DesignBulkCreateService enqueue and status', () => {
 
     await expect(service.enqueueBulkCreate('org-1', 'user-1', {
       doc, rows: [{ name: 'Ada' }],
-    })).resolves.toEqual({ id: 'job-1', status: 'pending' });
+    })).resolves.toEqual({ id: 'job-1', status: 'pending', batchId: 'batch-1' });
     expect(mockSafeFetch).not.toHaveBeenCalled();
   });
 
@@ -440,12 +492,28 @@ describe('DesignBulkCreateService enqueue and status', () => {
 
     await expect(service.enqueueBulkCreate('org-1', 'user-1', {
       doc: makeDoc(), rows, nameBase: 'Launch',
-    })).resolves.toEqual({ id: 'job-1', status: 'pending' });
+    })).resolves.toEqual({ id: 'job-1', status: 'pending', batchId: 'batch-1' });
+  });
+
+  it('rolls back batch metadata and its owned folder when starting the job fails', async () => {
+    const { service, designService, fileService } = makeService();
+    vi.mocked(inngest.send).mockRejectedValueOnce(new Error('Queue unavailable'));
+
+    await expect(service.enqueueBulkCreate('org-1', 'user-1', {
+      doc: makeDoc(), rows: [{ name: 'Ada' }], nameBase: 'Launch',
+    })).rejects.toThrow('Queue unavailable');
+
+    expect(designService.deleteBatch).toHaveBeenCalledWith('org-1', 'batch-1');
+    expect(fileService.deleteFolder).toHaveBeenCalledWith('org-1', 'batch-folder');
+    expect(redis.has('design-bulk:payload:job-1')).toBe(false);
   });
 
   it('returns only the matching operation and org, and tolerates malformed result state', async () => {
-    const { service, aiSettings } = makeService();
-    expect(await service.getJob('org-1', 'job-1')).toMatchObject({ id: 'job-1', results: undefined });
+    const { service, aiSettings, designService } = makeService();
+    expect(await service.getJob('org-1', 'job-1')).toMatchObject({
+      id: 'job-1', batchId: 'batch-1', results: undefined,
+    });
+    expect(designService.getBatchByJobId).toHaveBeenCalledWith('org-1', 'job-1');
     expect(await service.getJob('other-org', 'job-1')).toBeNull();
     aiSettings.getMediaJobById.mockResolvedValueOnce({ id: 'other', organizationId: 'org-1', operation: 'other' });
     expect(await service.getJob('org-1', 'job-1')).toBeNull();
@@ -466,6 +534,9 @@ describe('DesignBulkCreateService processing', () => {
     await service.processBulkCreate('job-1');
 
     expect(designService.createDesign).toHaveBeenCalledTimes(2);
+    for (const [, , data] of designService.createDesign.mock.calls) {
+      expect(data.batchId).toBe('batch-1');
+    }
     expect(designService.createDesign.mock.calls[0][2].doc.outputs[0].children[0].text).toBe('Hello Ada');
     expect(designService.createDesign.mock.calls[1][2].doc.outputs[0].children[0].text).toBe('Hello Grace');
     expect(aiMediaService.saveUrlToFile).toHaveBeenCalledTimes(2);
@@ -775,6 +846,7 @@ describe('DesignBulkCreateService processing', () => {
     }
     expect(fileService.saveGeneratedMedia.mock.calls.some(([, data]) => data.name === 'Campaign.zip')).toBe(false);
     expect(fileService.deleteFolder).toHaveBeenCalledWith('org-1', 'batch-folder');
+    expect(designService.deleteBatch).toHaveBeenCalledWith('org-1', 'batch-1');
     expect(aiSettings.updateMediaJob.mock.calls.some(([, , update]) => update.status === 'completed')).toBe(false);
     const failed = aiSettings.updateMediaJob.mock.calls.find(([, , update]) => update.status === 'failed')?.[2];
     expect(failed.error).toBe('Row 2: Blocked URL');

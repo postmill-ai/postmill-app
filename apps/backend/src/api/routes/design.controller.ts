@@ -136,6 +136,7 @@ export class DesignController {
     @Query('limit') limit?: string,
     @Query('query') query?: string,
     @Query('sort') sort?: string,
+    @Query('group') group?: string,
     @GetUserFromRequest() user?: User,
   ) {
     return this._designService.listDesigns(
@@ -143,7 +144,31 @@ export class DesignController {
       galleryPage(page),
       galleryLimit(limit, 20),
       { query: galleryQuery(query), sort: gallerySort(sort), userId: user?.id },
+      group === 'root',
     );
+  }
+
+  @Get('/batches')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async listBatches(
+    @GetOrgFromRequest() org: Organization,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this._designService.listBatches(org.id, Number(page) || 1, Number(limit) || 20);
+  }
+
+  @Get('/batches/:id')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async getBatch(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+  ) {
+    const batch = await this._designService.getBatch(org.id, id);
+    if (!batch) throw new NotFoundException('Design batch not found');
+    return batch;
   }
 
   @Get('/:id')
@@ -475,6 +500,9 @@ export class DesignController {
       rows: body.rows,
       nameBase: body.nameBase,
       folderId: body.folderId,
+      sourceDesignId: body.sourceDesignId,
+      sourceTemplateId: body.sourceTemplateId,
+      sourceName: body.sourceName,
     });
   }
 

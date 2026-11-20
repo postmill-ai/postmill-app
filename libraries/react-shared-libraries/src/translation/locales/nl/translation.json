@@ -5055,5 +5055,21 @@
   "templates_panel_custom_category": "Aangepast",
   "templates_panel_ig_post_category": "IG-bericht",
   "templates_panel_preview_template": "Voorbeeld van {{name}}",
-  "template_folder_unfiled": "Geen map"
+  "template_folder_unfiled": "Geen map",
+  "designer_bulk_card_description": "Zet een spreadsheet om in bewerkbare ontwerpvarianten",
+  "designer_bulk_choose_source": "Kies een afbeeldingsontwerp of sjabloon om als bron te gebruiken.",
+  "designer_bulk_from_template": "Bulk Create vanuit dit sjabloon",
+  "designer_bulk_static_only": "Bulk Create is beschikbaar voor afbeeldingsontwerpen.",
+  "designer_bulk_source": "Bron: {{name}}",
+  "designer_bulk_open_batch": "Batch openen",
+  "designer_back_to_batch": "← Terug naar batch",
+  "my_designs_panel_all_designs": "← Alle ontwerpen",
+  "my_designs_panel_batch_failed": "Batch laden mislukt",
+  "my_designs_panel_variation_count_one": "{{count}} variant",
+  "my_designs_panel_variation_count_other": "{{count}} varianten",
+  "my_designs_panel_batches": "Bulk Create-batches",
+  "my_designs_panel_batch_badge": "BATCH",
+  "my_designs_panel_load_more_batches": "Meer batches laden",
+  "my_designs_panel_no_image_designs": "Nog geen afbeeldingsontwerpen.",
+  "designer_bulk_image_target_thumbnail": "Miniatuur van {{name}}"
 }

@@ -32,6 +32,7 @@ import { SaveTemplateModal } from './save-template-modal';
 import { DesignerGalleryToolbar } from './gallery-toolbar';
 import { designerGalleryGridStyle, useDesignerGallerySize } from './gallery-preferences';
 import { GalleryCardActions, GalleryPreviewFallback } from './gallery-card';
+import type { BulkCreateSource } from '../bulk-create-dialog';
 
 export interface DesignTemplate {
   id: string;
@@ -45,6 +46,14 @@ export interface DesignTemplate {
   createdAt?: string;
 }
 
+interface TemplatesPanelProps {
+  store: ReturnType<typeof import('../designer.store').createDesignerStore>;
+  onClose?: () => void;
+  guard?: () => Promise<boolean>;
+  showSaveCurrent?: boolean;
+  onBulkCreate?: (source: BulkCreateSource) => void;
+}
+
 export interface TemplatePage {
   templates: DesignTemplate[];
   total: number;
@@ -56,12 +65,7 @@ export interface TemplatePage {
 
 const PAGE_LIMIT = 24;
 
-export const TemplatesPanel: FC<{
-  store: ReturnType<typeof import('../designer.store').createDesignerStore>;
-  onClose?: () => void;
-  guard?: () => Promise<boolean>;
-  showSaveCurrent?: boolean;
-}> = ({ store, onClose, guard, showSaveCurrent = true }) => {
+export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard, showSaveCurrent = true, onBulkCreate }) => {
   const fetch = useFetch();
   const user = useUser();
   const toaster = useToaster();
@@ -224,6 +228,22 @@ export const TemplatesPanel: FC<{
     await mutate();
     onClose?.();
   }, [activeBrand?.id, store, onClose, fetch, toaster, guard, decision, t, mutate]);
+
+  const bulkCreateFromTemplate = useCallback(async (template: DesignTemplate) => {
+    if (!onBulkCreate) return;
+    const response = await fetch(`/media/design-templates/${template.id}`);
+    if (!response.ok) {
+      toaster.show(t('templates_panel_failed_to_create_from_template', 'Failed to create design from template'), 'warning');
+      return;
+    }
+    const full = await response.json() as DesignTemplate;
+    const doc = {
+      ...full.doc,
+      brandProfileId: full.brandProfileId ?? store.getState().doc.brandProfileId ?? activeBrand?.id ?? null,
+    } as DesignerDoc;
+    onClose?.();
+    onBulkCreate({ kind: 'template', id: full.id, name: full.name, doc });
+  }, [activeBrand?.id, fetch, onBulkCreate, onClose, store, t, toaster]);
 
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
@@ -399,6 +419,7 @@ export const TemplatesPanel: FC<{
                   template={template}
                   onApply={applyTemplate}
                   onPreview={previewTemplate}
+                  onBulkCreate={onBulkCreate ? bulkCreateFromTemplate : undefined}
                   onSystemFileAttempt={systemCantBeFiled}
                   onMenu={openCardMenu}
                 />
@@ -434,9 +455,10 @@ const TemplateCard: FC<{
   template: DesignTemplate;
   onApply: (template: DesignTemplate) => void;
   onPreview: (template: DesignTemplate) => void;
+  onBulkCreate?: (template: DesignTemplate) => void;
   onSystemFileAttempt: () => void;
   onMenu: (event: React.MouseEvent, template: DesignTemplate) => void;
-}> = ({ template, onApply, onPreview, onSystemFileAttempt, onMenu }) => {
+}> = ({ template, onApply, onPreview, onBulkCreate, onSystemFileAttempt, onMenu }) => {
   const t = useT();
   const [dragArmed, setDragArmed] = useState(false);
   const pressPos = useRef<{ x: number; y: number } | null>(null);
@@ -529,6 +551,15 @@ const TemplateCard: FC<{
           {translatedCardCategory(t, templateCategoryKey(template.category, templateModeOf(template)), category)}
           {template.isSystem ? ` · ${t('system', 'System')}` : ''}
         </div>
+        {onBulkCreate && templateModeOf(template) === 'image' && (
+          <button
+            type="button"
+            onClick={() => onBulkCreate(template)}
+            className="mt-2 w-full px-2 py-1 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10"
+          >
+            {t('designer_bulk_from_template', 'Bulk Create from this template')}
+          </button>
+        )}
       </div>
     </div>
   );

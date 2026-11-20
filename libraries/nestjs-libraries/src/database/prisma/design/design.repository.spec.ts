@@ -39,6 +39,13 @@ function makeModel() {
     file: {
       findFirst: vi.fn(),
     },
+    designBatch: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+      deleteMany: vi.fn(),
+    },
   };
 }
 
@@ -304,5 +311,81 @@ describe('DesignRepository — templates pagination', () => {
       expect(sql).toContain(guardedMode);
     }
     expect(model.$queryRawUnsafe.mock.calls[0][0]).toContain(`${guardedMode} AS mode`);
+  });
+});
+
+
+describe('DesignRepository — Bulk Create batches', () => {
+  it('keeps batch lists, counts, and lookups scoped to the organization', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.findMany.mockResolvedValue([]);
+    model.designBatch.findFirst.mockResolvedValue(null);
+    model.designBatch.count.mockResolvedValue(0);
+
+    await repo.findBatchesByOrg('org-1', 2, 25);
+    await repo.countBatchesByOrg('org-1');
+    await repo.findBatchByJobId('org-1', 'job-1');
+
+    const where = { organizationId: 'org-1', designs: { some: { deletedAt: null } } };
+    expect(model.designBatch.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where,
+      skip: 25,
+      take: 25,
+    }));
+    expect(model.designBatch.count).toHaveBeenCalledWith({ where });
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1', jobId: 'job-1' },
+    });
+  });
+
+  it('loads only live member metadata and includes batch identity on a full design', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.findFirst.mockResolvedValue(null);
+    model.design.findFirst.mockResolvedValue(null);
+
+    await repo.findBatchById('org-1', 'batch-1');
+    await repo.findById('org-1', 'design-1');
+
+    expect(model.designBatch.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'batch-1', organizationId: 'org-1' },
+    }));
+    const memberQuery = model.designBatch.findFirst.mock.calls[0][0].include.designs;
+    expect(memberQuery.where).toEqual({ deletedAt: null });
+    expect(memberQuery.select).toEqual({
+      id: true,
+      name: true,
+      updatedAt: true,
+      previewFile: { select: { path: true } },
+    });
+    expect(memberQuery.select).not.toHaveProperty('doc');
+    expect(memberQuery.select).not.toHaveProperty('previewDataUrl');
+    expect(model.design.findFirst).toHaveBeenCalledWith({
+      where: { id: 'design-1', organizationId: 'org-1', deletedAt: null },
+      include: { batch: { select: { id: true, name: true } } },
+    });
+  });
+
+  it('filters batched variations only for the opt-in root listing', async () => {
+    const { repo, model } = makeRepo();
+    model.design.findMany.mockResolvedValue([]);
+    model.design.count.mockResolvedValue(0);
+
+    await repo.findByOrg('org-1', 1, 50, true);
+    await repo.countByOrg('org-1', true);
+
+    const where = { organizationId: 'org-1', deletedAt: null, batchId: null };
+    expect(model.design.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+    expect(model.design.count).toHaveBeenCalledWith({ where });
+  });
+
+  it('deletes failed batch metadata with an org-scoped mutation', async () => {
+    const { repo, model } = makeRepo();
+    model.designBatch.deleteMany.mockResolvedValue({ count: 1 });
+
+    await repo.deleteBatch('org-1', 'batch-1');
+
+    expect(model.designBatch.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'batch-1', organizationId: 'org-1' },
+    });
   });
 });

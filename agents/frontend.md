@@ -939,6 +939,15 @@ after enqueue rolls back every design, imported/generated file, editable archive
 rather than calling a partial batch complete. Never substitute a client-only flattened image for the
 editable result.
 
+Bulk Create is available from Start a design, File, Export, and image-template cards. All entries use the
+same dialog and media-create policy/RBAC checks; choosing a template loads an unsaved template-based draft
+without creating a duplicate source Design. Image assignment targets show their source thumbnail and a
+meaningful layer/location label, never a raw element id. Each enqueue creates an org-scoped `DesignBatch`
+whose id is carried by the job payload and every generated Design; failed batches remove that metadata
+during rollback. Batch list/detail routes are org-scoped media reads. My Designs shows batch cards plus
+unbatched root designs, while `/media/designer?batchId=<id>` opens the sibling variations directly. A
+variation loads its batch identity with the document and exposes Back to batch after save/reload.
+
 ## Forms
 
 - `react-hook-form` + `FormProvider` is the standard; shared form primitives self-register against the

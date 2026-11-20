@@ -45,6 +45,9 @@ describe('DesignService', () => {
     markTemplateOpened: ReturnType<typeof vi.fn>;
     findByOrg: ReturnType<typeof vi.fn>;
     countByOrg: ReturnType<typeof vi.fn>;
+    findBatchesByOrg: ReturnType<typeof vi.fn>;
+    countBatchesByOrg: ReturnType<typeof vi.fn>;
+    findBatchById: ReturnType<typeof vi.fn>;
     findTemplatesByOrg: ReturnType<typeof vi.fn>;
     countTemplatesByOrg: ReturnType<typeof vi.fn>;
     listTemplateCategories: ReturnType<typeof vi.fn>;
@@ -102,6 +105,9 @@ describe('DesignService', () => {
       markTemplateOpened: vi.fn(),
       findByOrg: vi.fn(),
       countByOrg: vi.fn(),
+      findBatchesByOrg: vi.fn(),
+      countBatchesByOrg: vi.fn(),
+      findBatchById: vi.fn(),
       findTemplatesByOrg: vi.fn(),
       countTemplatesByOrg: vi.fn(),
       listTemplateCategories: vi.fn().mockResolvedValue([]),
@@ -162,6 +168,41 @@ describe('DesignService', () => {
       brandsService as any,
       videoThumbnailService as any
     );
+  });
+
+  describe('Bulk Create batches', () => {
+    it('serializes only grid metadata even when the repository row contains full fields', async () => {
+      repository.findBatchById.mockResolvedValue({
+        id: 'batch-1',
+        name: 'Catalog batch',
+        sourceName: 'Catalog',
+        createdAt: '2026-11-19T00:00:00.000Z',
+        updatedAt: '2026-11-19T00:00:00.000Z',
+        designs: [{
+          id: 'design-1',
+          name: 'Variation 1',
+          updatedAt: '2026-11-19T01:00:00.000Z',
+          doc: makeDoc(),
+          previewDataUrl: 'data:image/png;base64,large-preview',
+          previewFile: { path: '/uploads/variation-1.png' },
+        }],
+      });
+
+      expect(await service.getBatch('org-1', 'batch-1')).toEqual({
+        id: 'batch-1',
+        name: 'Catalog batch',
+        sourceName: 'Catalog',
+        createdAt: '2026-11-19T00:00:00.000Z',
+        updatedAt: '2026-11-19T00:00:00.000Z',
+        designs: [{
+          id: 'design-1',
+          name: 'Variation 1',
+          updatedAt: '2026-11-19T01:00:00.000Z',
+          previewUrl: '/uploads/variation-1.png',
+          mode: 'image',
+        }],
+      });
+    });
   });
 
   describe('createDesign', () => {

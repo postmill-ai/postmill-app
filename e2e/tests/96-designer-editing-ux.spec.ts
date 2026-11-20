@@ -186,7 +186,13 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     recentDesignIds: [] as string[],
     recentTemplateIds: [] as string[],
     templateRequests: [] as string[],
+    bulkRequests: [] as any[],
+    batchStarted: false,
+    designCreates: 0,
   };
+  const templateDoc = structuredClone(initialDoc);
+  templateDoc.outputs[0].children[1].name = 'Product hero';
+  templateDoc.outputs[0].children[1].id = 'template-image-internal';
   await page.route('**/*', async (route) => {
     const request = route.request();
     const method = request.method();
@@ -326,6 +332,76 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         state.recentTemplateIds = [body.sourceTemplateId, ...state.recentTemplateIds.filter((id) => id !== body.sourceTemplateId)];
       }
       return json(route, { id: 'gallery-created-design', name: body.name, doc: body.doc }, 201);
+    }
+    if (method === 'GET' && pathname === '/media/designs/batches') {
+      return json(route, {
+        batches: state.batchStarted ? [{
+          id: 'batch-1', name: 'Catalog Template', count: 2,
+          updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+        }] : [],
+        total: state.batchStarted ? 1 : 0,
+      });
+    }
+    if (method === 'GET' && pathname === '/media/designs/batches/batch-1') {
+      return json(route, {
+        id: 'batch-1', name: 'Catalog Template',
+        designs: ['variation-1', 'variation-2'].map((id, index) => ({
+          id, name: `Variation ${index + 1}`, doc: templateDoc, mode: 'image',
+          updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+          batchId: 'batch-1', batch: { id: 'batch-1', name: 'Catalog Template' },
+        })),
+      });
+    }
+    if (method === 'GET' && pathname === '/media/designs') {
+      const group = new URL(request.url()).searchParams.get('group');
+      const variations = state.batchStarted && group !== 'root'
+        ? ['variation-1', 'variation-2'].map((id, index) => ({
+            id, name: `Variation ${index + 1}`, mode: 'image',
+            updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL,
+          }))
+        : [];
+      const designs = [{ id: DESIGN_ID, name: 'Editing UX', doc: state.doc, mode: 'image', updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL }, ...variations];
+      return json(route, { designs, total: designs.length });
+    }
+    if (method === 'GET' && pathname === '/media/design-templates/folders') {
+      return json(route, []);
+    }
+    if (method === 'GET' && pathname === '/media/design-templates') {
+      return json(route, {
+        templates: [{ id: 'template-1', name: 'Catalog Template', doc: { mode: 'image' }, isSystem: true, category: 'Catalog', thumbnail: PNG_DATA_URL }],
+        total: 1, page: 1, limit: 24,
+      });
+    }
+    if (method === 'GET' && pathname === '/media/design-templates/template-1') {
+      return json(route, { id: 'template-1', name: 'Catalog Template', doc: templateDoc, isSystem: true });
+    }
+    if (method === 'POST' && pathname === '/media/designs/bulk-generate') {
+      return json(route, { images: [PNG_DATA_URL] });
+    }
+    if (method === 'POST' && pathname === '/media/designs/bulk-create') {
+      state.bulkRequests.push(request.postDataJSON());
+      state.batchStarted = true;
+      return json(route, { id: 'bulk-job-1', status: 'pending', batchId: 'batch-1' }, 201);
+    }
+    if (method === 'GET' && pathname === '/media/designs/bulk-create/bulk-job-1') {
+      return json(route, {
+        id: 'bulk-job-1', status: 'completed', batchId: 'batch-1', artifactUrl: '/uploads/bulk.zip',
+        results: [1, 2].map((row) => ({ row, designId: `variation-${row}`, fileIds: [`file-${row}`] })),
+      });
+    }
+    if (method === 'GET' && ['/media/designs/variation-1', '/media/designs/variation-2'].includes(pathname)) {
+      const index = pathname.endsWith('1') ? 1 : 2;
+      return json(route, {
+        id: `variation-${index}`, name: `Variation ${index}`, doc: templateDoc,
+        batchId: 'batch-1', batch: { id: 'batch-1', name: 'Catalog Template' },
+      });
+    }
+    if (method === 'PUT' && pathname.startsWith('/media/designs/variation-')) {
+      return json(route, request.postDataJSON());
+    }
+    if (method === 'POST' && pathname === '/media/designs') {
+      state.designCreates++;
+      return json(route, { id: 'unexpected-source-copy', ...request.postDataJSON() }, 201);
     }
     if (method === 'GET' && pathname === `/media/designs/${DESIGN_ID}`) {
       return json(route, { id: DESIGN_ID, name: 'Editing UX', doc: state.doc });
@@ -2511,4 +2587,102 @@ test('Browse Templates filters canonical categories and records Apply for recent
   list = dialog.getByRole('list');
   await dialog.getByRole('combobox', { name: 'Sort by' }).selectOption('recent');
   await expect(list.getByRole('listitem').first()).toContainText('Unloaded launch');
+});
+
+test('Bulk Create entry points preserve source context and batches survive navigation and reload', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Bulk Create', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Bulk Create…', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.goto('/media/designer');
+  await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
+  await page.getByText('Editing UX', { exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Browse templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
+  await expect(dialog).toContainText('Source: Catalog Template');
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'catalog.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('headline,hero\nAda,data:image/png;base64,one\nGrace,data:image/png;base64,two'),
+  });
+  await expect(dialog.getByRole('img', { name: /Product hero thumbnail/ })).toBeVisible();
+  await expect(dialog).toContainText('Product hero');
+  await expect(dialog).not.toContainText('template-image-internal');
+  await dialog.getByRole('combobox', { name: /Hello world \(text\)/ }).selectOption('headline');
+  await dialog.getByRole('combobox', { name: /Product hero \(image\)/ }).selectOption('hero');
+  await dialog.getByRole('button', { name: 'Apply variable assignments' }).click();
+  await dialog.getByRole('button', { name: 'Create 2 variations' }).click();
+  await expect(dialog.getByRole('link', { name: 'Open batch' })).toHaveAttribute('href', '/media/designer?batchId=batch-1');
+  expect(state.bulkRequests).toHaveLength(1);
+  expect(state.bulkRequests[0]).toMatchObject({
+    sourceTemplateId: 'template-1', sourceName: 'Catalog Template',
+    doc: { mode: 'image' },
+  });
+  expect(state.designCreates).toBe(0);
+
+  await dialog.getByRole('link', { name: 'Open editable design' }).first().click();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 1');
+  await expect(page.getByRole('link', { name: '← Back to batch' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 1');
+  await page.getByRole('link', { name: '← Back to batch' }).click();
+
+  await expect(page).toHaveURL(/batchId=batch-1/);
+  await expect(page.getByText('Variation 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Variation 2', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '← All designs' }).click();
+  await expect(page.getByText('Catalog Template', { exact: true })).toBeVisible();
+  await expect(page.getByText('Variation 1', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Variation 2', { exact: true })).toHaveCount(0);
+
+  await page.getByText('Catalog Template', { exact: true }).click();
+  await page.getByText('Variation 2', { exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 2');
+  await expect(page).toHaveURL(/designId=variation-2/);
+  await page.reload();
+  await expect(page.getByRole('link', { name: '← Back to batch' })).toBeVisible();
+});
+
+
+test('Bulk Create from an image template works over an unrelated video canvas', async ({ page }) => {
+  await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'Browse templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Catalog Template');
+  await expect(page.getByText('Bulk Create is available for image designs.')).toHaveCount(0);
+});
+
+
+test('Start dialog Bulk Create keeps the selected template in the editor after close', async ({ page }) => {
+  const state = await installMocks(page);
+  await page.goto('/media/designer');
+
+  await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
+  await expect(dialog).toContainText('Source: Catalog Template');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Catalog Template');
+  await expect(page.getByText('Start a design', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  expect(state.designCreates).toBe(0);
 });

@@ -5056,5 +5056,21 @@
   "templates_panel_custom_category": "Personalizzato",
   "templates_panel_ig_post_category": "Post IG",
   "templates_panel_preview_template": "Anteprima di {{name}}",
-  "template_folder_unfiled": "Nessuna cartella"
+  "template_folder_unfiled": "Nessuna cartella",
+  "designer_bulk_card_description": "Trasforma un foglio di calcolo in varianti di design modificabili",
+  "designer_bulk_choose_source": "Scegli un design di immagine o un modello da usare come origine.",
+  "designer_bulk_from_template": "Creazione in blocco da questo modello",
+  "designer_bulk_static_only": "La creazione in blocco è disponibile per i design di immagini.",
+  "designer_bulk_source": "Origine: {{name}}",
+  "designer_bulk_open_batch": "Apri batch",
+  "designer_back_to_batch": "← Torna al batch",
+  "my_designs_panel_all_designs": "← Tutti i design",
+  "my_designs_panel_batch_failed": "Impossibile caricare il batch",
+  "my_designs_panel_variation_count_one": "{{count}} variante",
+  "my_designs_panel_variation_count_other": "{{count}} varianti",
+  "my_designs_panel_batches": "Batch di creazione in blocco",
+  "my_designs_panel_batch_badge": "BATCH",
+  "my_designs_panel_load_more_batches": "Carica altri batch",
+  "my_designs_panel_no_image_designs": "Ancora nessun design di immagine.",
+  "designer_bulk_image_target_thumbnail": "Miniatura di {{name}}"
 }

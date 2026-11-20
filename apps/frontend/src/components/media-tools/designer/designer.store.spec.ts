@@ -3652,6 +3652,9 @@ describe('motion path recording and document history', () => {
       motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 4000 }] },
     });
     expect(store.getState().doc.outputs[1].tracks[0].clips[0].motionPath).toBeUndefined();
+  });
+});
+
 describe('exact page and output duplication', () => {
   const staticStore = () => {
     const store = createDesignerStore();
@@ -3909,6 +3912,9 @@ describe('motion path versioning and trim contract', () => {
     const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
     expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 2000]);
     expect(clip.keyframes?.map((keyframe) => keyframe.tMs)).toEqual([0, 4000]);
+  });
+});
+
 describe('duplication review regressions', () => {
   it.each(['image', 'video'] as const)('inserts a %s duplicate immediately after a non-last source', (mode) => {
     const store = createDesignerStore();
@@ -4031,5 +4037,26 @@ describe('duplication review regressions', () => {
     expect(store.getState().duplicateOutput(0, { linkContent: false })).toBe(true);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
     expect(store.getState().doc.outputs[1].frozen).toBeUndefined();
+  });
+});
+
+describe('Bulk Create batch identity', () => {
+  it('loads a variation batch and clears it for a new design', () => {
+    const store = createDesignerStore();
+    const doc = store.getState().doc;
+
+    store.getState().loadDesign(doc, 'variation-1', 'Variation 1', null, {
+      id: 'batch-1', name: 'Catalog',
+    });
+    expect(store.getState()).toMatchObject({ batchId: 'batch-1', batchName: 'Catalog' });
+
+    store.getState().loadDesign(doc, 'variation-2', 'Variation 2');
+    expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
+
+    store.getState().loadDesign(doc, 'variation-1', 'Variation 1', null, {
+      id: 'batch-1', name: 'Catalog',
+    });
+    store.getState().reset();
+    expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
   });
 });
