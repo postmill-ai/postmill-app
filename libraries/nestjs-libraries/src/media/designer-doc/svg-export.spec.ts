@@ -152,6 +152,51 @@ describe('outputToSvg', () => {
     expect((svg.match(/<tspan/g) || []).length).toBe(2);
   });
 
+  it('uses the shared width-and-height auto-fit for flat text', () => {
+    const text = el({
+      type: 'text',
+      text: 'internationalization',
+      width: 100,
+      height: 100,
+      fontSize: 20,
+      autoFit: true,
+      autoFitMinFontSize: 1,
+    });
+    const svg = outputToSvg(output([text]), {
+      measure: () => (value, size) => value.length * size * 0.5,
+    });
+    expect(svg).toContain('font-size="10"');
+    expect(wellFormed(svg)).toBe(true);
+  });
+
+  it('keeps explicit-off flat text at its authored size', () => {
+    const svg = outputToSvg(output([el({
+      type: 'text', text: 'internationalization', width: 100, height: 100,
+      fontSize: 20, autoFit: false,
+    })]), {
+      measure: () => (value, size) => value.length * size * 0.5,
+    });
+    expect(svg).toContain('font-size="20"');
+  });
+
+  it('lays out opted-in rich runs from the shared fitter', () => {
+    const svg = outputToSvg(output([el({
+      type: 'text', text: '', width: 150, height: 30, fontSize: 20,
+      autoFit: true,
+      richText: [
+        { text: 'hello ', fill: '#111111' },
+        { text: 'world', fontSize: 40, fontWeight: 700, fill: '#222222' },
+      ],
+    })]), {
+      measureRich: () => (value, run) => value.length * run.fontSize * 0.5,
+    });
+    expect(svg).toContain('font-size="12"');
+    expect(svg).toContain('font-size="24"');
+    expect(svg).toContain('font-weight="700"');
+    expect(svg).toContain('fill="#222222"');
+    expect(wellFormed(svg)).toBe(true);
+  });
+
   it('skips a hidden layer entirely', () => {
     const svg = outputToSvg(output([el({ hidden: true })]));
     expect(svg).not.toContain('#ff0000');

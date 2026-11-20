@@ -3723,6 +3723,8 @@
   "designer_reset_to_original_size": "元のサイズにリセット",
   "designer_text_formatting": "テキスト書式",
   "designer_text_format": "テキスト書式",
+  "designer_auto_fit_text": "テキストを自動で収める",
+  "designer_auto_fit_minimum": "最小フォントサイズ",
   "designer_label_font_family": "フォントファミリー",
   "designer_placeholder_search_fonts": "フォントを検索...",
   "designer_no_fonts_found": "フォントが見つかりません",

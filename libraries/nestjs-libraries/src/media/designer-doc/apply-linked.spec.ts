@@ -69,6 +69,59 @@ describe('applyLinked fontSize propagation', () => {
     expect(affected).toEqual([1]);
   });
 
+  it('scales an auto-fit minimum even when it is the only pixel-valued edit', () => {
+    const { outputs, affected } = applyLinked(
+      makeDoc(),
+      0,
+      new Set(['e1']),
+      { autoFit: true, autoFitMinFontSize: 24 },
+      false
+    );
+    expect((outputs[0] as any).children[0]).toMatchObject({
+      autoFit: true,
+      autoFitMinFontSize: 24,
+    });
+    expect((outputs[1] as any).children[0]).toMatchObject({
+      autoFit: true,
+      autoFitMinFontSize: 20,
+    });
+    expect(affected).toEqual([1]);
+  });
+
+  it('scales a saved pre-enable minimum with linked auto-fit restoration state', () => {
+    const { outputs, affected } = applyLinked(
+      makeDoc(),
+      0,
+      new Set(['e1']),
+      { autoFitPrevious: null, autoFitPreviousMinFontSize: 24 },
+      false
+    );
+    expect((outputs[0] as any).children[0]).toMatchObject({
+      autoFitPrevious: null,
+      autoFitPreviousMinFontSize: 24,
+    });
+    expect((outputs[1] as any).children[0]).toMatchObject({
+      autoFitPrevious: null,
+      autoFitPreviousMinFontSize: 20,
+    });
+    expect(affected).toEqual([1]);
+  });
+
+  it('keeps linked scaling proportional below the new-text default floor', () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 400, height: 400 });
+
+    const { outputs } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { fontSize: 64 },
+      false
+    );
+
+    expect((outputs[1] as any).children[0].fontSize).toBe(24);
+  });
+
   it('never re-imposes short-edge type on a wider linked output', () => {
     const { outputs } = applyLinked(
       makeDoc(),

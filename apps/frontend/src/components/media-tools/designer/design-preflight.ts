@@ -1,6 +1,6 @@
 import { getEnforcedSafeZones } from '@postmill-ai/nestjs-libraries/media/designer-doc/safe-zones';
 import { pageBackground, pageChildren, pageName } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
-import { fitTextToBox, measureLineWidth } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { fitRichTextToBox, fitTextToBox, measureLineWidth } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { layoutVideoText } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-text-layout';
 import type {
   DesignerDoc,
@@ -10,7 +10,7 @@ import type {
   VideoOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { getContrastRatio } from './contrast';
-import { measureForElement } from './measure-text';
+import { measureForElement, measureForRichText } from './measure-text';
 
 export type DesignerPreflightFinding = {
   rule: 'low-contrast' | 'safe-zone' | 'missing-media' | 'text-overflow';
@@ -162,7 +162,43 @@ export const analyzeDesignerPreflight = (
   type TextLayout = { box: Box; overflow: boolean };
 
   const staticTextLayout = (element: DesignerElement): TextLayout | null => {
-    if (element.richText?.length || element.textPath || (element.curve || 0) !== 0 || !element.text?.trim()) return null;
+    if (element.textPath || (element.curve || 0) !== 0) return null;
+    if (element.richText?.length) {
+      if (element.autoFit !== true || !element.richText.some((run) => run.text.trim())) return null;
+      const measure = measureForRichText(element);
+      if (!measure) return null;
+      const fit = fitRichTextToBox({
+        text: element.text ?? '',
+        width: element.width,
+        height: element.height,
+        fontSize: element.fontSize || 16,
+        lineHeight: element.lineHeight,
+        letterSpacing: element.letterSpacing,
+        align: element.align,
+        autoFit: true,
+        minFontSize: element.autoFitMinFontSize,
+      }, element.richText, measure);
+      if (!fit.segments.length) return null;
+      const top = element.verticalAlign === 'middle'
+        ? Math.max(0, (element.height - fit.height) / 2)
+        : element.verticalAlign === 'bottom'
+          ? Math.max(0, element.height - fit.height)
+          : 0;
+      const left = Math.min(...fit.segments.map((seg) => seg.x));
+      const right = Math.max(...fit.segments.map((seg) => seg.x + seg.width));
+      return {
+        box: {
+          x: element.x + left,
+          y: element.y + top,
+          width: right - left,
+          height: fit.height,
+          pivotX: element.x,
+          pivotY: element.y,
+        },
+        overflow: !fit.fits,
+      };
+    }
+    if (!element.text?.trim()) return null;
     const measure = measureForElement(element);
     if (!measure) return null;
     const fontSize = element.fontSize || 16;
@@ -178,6 +214,8 @@ export const analyzeDesignerPreflight = (
       textTransform: element.textTransform,
       paragraphSpacing: element.paragraphSpacing,
       firstLineIndent: element.firstLineIndent,
+      autoFit: element.autoFit,
+      minFontSize: element.autoFitMinFontSize,
     }, measure);
     const widths = fit.lines.map((line) =>
       measureLineWidth(line, fit.fontSize, element.letterSpacing || 0, measure, scaleX));

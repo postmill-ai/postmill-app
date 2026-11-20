@@ -18,7 +18,13 @@ import type {
 import { pointsForShape, cornerRadii } from './shape-geometry';
 import type { DesignerPathNode } from './path-geometry';
 import { buildLayerTree, walkLayerTree, type LayerNode } from './layer-tree';
-import { fitTextToBox, DEFAULT_LINE_HEIGHT, type MeasureText } from './fit-text';
+import {
+  DEFAULT_LINE_HEIGHT,
+  fitRichTextToBox,
+  fitTextToBox,
+  type MeasureRichRun,
+  type MeasureText,
+} from './fit-text';
 import { warpedOutlines } from './warp';
 import { renderableSrc } from './svg-src';
 import { computeCoverCrop } from './media-geometry';
@@ -161,6 +167,7 @@ export interface SvgExportOptions {
    * running off the artboard.
    */
   measure?: (el: DesignerElement) => MeasureText;
+  measureRich?: (el: DesignerElement) => MeasureRichRun;
 }
 
 interface Ctx {
@@ -231,6 +238,48 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
         const authored = el.fontSize || 16;
         const scaleX = el.textScaleX || 1;
         const measure = ctx.options.measure?.(el);
+        const measureRich = ctx.options.measureRich?.(el);
+        if (el.autoFit === true && el.richText?.length && measureRich) {
+          const fitted = fitRichTextToBox(
+            {
+              text: el.text ?? '',
+              width: el.width,
+              height: el.height,
+              fontSize: authored,
+              lineHeight: el.lineHeight,
+              letterSpacing: el.letterSpacing,
+              align: el.align,
+              autoFit: true,
+              minFontSize: el.autoFitMinFontSize,
+            },
+            el.richText,
+            measureRich
+          );
+          const top =
+            el.verticalAlign === 'middle'
+              ? Math.max(0, (el.height - fitted.height) / 2)
+              : el.verticalAlign === 'bottom'
+              ? Math.max(0, el.height - fitted.height)
+              : 0;
+          const tspans = fitted.segments
+            .map((seg) => {
+              const decoration = [
+                seg.run.underline ? 'underline' : '',
+                seg.run.lineThrough ? 'line-through' : '',
+              ].filter(Boolean).join(' ');
+              return (
+                `<tspan x="${num(seg.x)}" y="${num(top + seg.y + seg.run.fontSize / 2)}"` +
+                ` font-family="${esc(seg.run.fontFamily || el.fontFamily || 'sans-serif')}"` +
+                ` font-size="${num(seg.run.fontSize)}" font-weight="${num(seg.run.fontWeight ?? el.fontWeight ?? 400)}"` +
+                `${(seg.run.fontStyle ?? el.fontStyle) === 'italic' ? ' font-style="italic"' : ''}` +
+                `${seg.run.fill ? ` fill="${esc(seg.run.fill)}"` : ''}` +
+                `${decoration ? ` text-decoration="${decoration}"` : ''}>` +
+                `${esc(seg.text)}</tspan>`
+              );
+            })
+            .join('');
+          return `<text${fill}${strokeAttrs(el)} dominant-baseline="middle">${tspans}</text>`;
+        }
         // With a measurement available the block wraps and shrinks exactly as
         // the renderers do; without one, explicit newlines are all we can honour.
         const fitted = measure
@@ -243,6 +292,8 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
                 lineHeight: el.lineHeight,
                 letterSpacing: el.letterSpacing,
                 scaleX,
+                autoFit: el.autoFit,
+                minFontSize: el.autoFitMinFontSize,
               },
               measure
             )

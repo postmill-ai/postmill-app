@@ -3724,6 +3724,8 @@
   "designer_reset_to_original_size": "원래 크기로 재설정",
   "designer_text_formatting": "텍스트 서식",
   "designer_text_format": "텍스트 서식",
+  "designer_auto_fit_text": "텍스트 자동 맞춤",
+  "designer_auto_fit_minimum": "최소 글꼴 크기",
   "designer_label_font_family": "글꼴 종류",
   "designer_placeholder_search_fonts": "글꼴 검색...",
   "designer_no_fonts_found": "글꼴을 찾을 수 없습니다",

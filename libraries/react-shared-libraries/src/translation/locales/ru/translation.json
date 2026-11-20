@@ -3725,6 +3725,8 @@
   "designer_reset_to_original_size": "Сбросить к исходному размеру",
   "designer_text_formatting": "Форматирование текста",
   "designer_text_format": "Формат текста",
+  "designer_auto_fit_text": "Автоматическая подгонка текста",
+  "designer_auto_fit_minimum": "Минимальный размер шрифта",
   "designer_label_font_family": "Шрифт",
   "designer_placeholder_search_fonts": "Поиск шрифтов...",
   "designer_no_fonts_found": "Шрифты не найдены",

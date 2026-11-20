@@ -3723,6 +3723,8 @@
   "designer_reset_to_original_size": "Đặt lại kích thước gốc",
   "designer_text_formatting": "Định dạng văn bản",
   "designer_text_format": "Định dạng văn bản",
+  "designer_auto_fit_text": "Tự động điều chỉnh văn bản",
+  "designer_auto_fit_minimum": "Cỡ chữ tối thiểu",
   "designer_label_font_family": "Họ phông chữ",
   "designer_placeholder_search_fonts": "Tìm phông chữ...",
   "designer_no_fonts_found": "Không tìm thấy phông chữ",

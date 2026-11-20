@@ -3723,6 +3723,8 @@
   "designer_reset_to_original_size": "Orijinal boyuta sıfırla",
   "designer_text_formatting": "Metin biçimlendirme",
   "designer_text_format": "Metin Biçimi",
+  "designer_auto_fit_text": "Metni otomatik sığdır",
+  "designer_auto_fit_minimum": "Minimum yazı tipi boyutu",
   "designer_label_font_family": "Yazı tipi ailesi",
   "designer_placeholder_search_fonts": "Yazı tiplerinde ara...",
   "designer_no_fonts_found": "Yazı tipi bulunamadı",

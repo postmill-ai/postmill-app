@@ -3740,6 +3740,8 @@
   "designer_reset_to_original_size": "Przywróć oryginalny rozmiar",
   "designer_text_formatting": "Formatowanie tekstu",
   "designer_text_format": "Format tekstu",
+  "designer_auto_fit_text": "Automatyczne dopasowanie tekstu",
+  "designer_auto_fit_minimum": "Minimalny rozmiar czcionki",
   "designer_label_font_family": "Rodzina czcionek",
   "designer_placeholder_search_fonts": "Szukaj czcionek...",
   "designer_no_fonts_found": "Nie znaleziono czcionek",

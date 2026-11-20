@@ -734,6 +734,18 @@ export const smartReflow = (
       const floor = roleFontFloorPx(el, target.width, target.height);
       result.fontSize = Math.max(floor, newFontSize);
     }
+    if (el.autoFitMinFontSize) {
+      result.autoFitMinFontSize = Math.max(
+        1,
+        Math.round(el.autoFitMinFontSize * contentScale)
+      );
+    }
+    if (el.autoFitPreviousMinFontSize) {
+      result.autoFitPreviousMinFontSize = Math.max(
+        1,
+        Math.round(el.autoFitPreviousMinFontSize * contentScale)
+      );
+    }
   }
 
   // Cover images and full-bleed shapes keep their fractional position

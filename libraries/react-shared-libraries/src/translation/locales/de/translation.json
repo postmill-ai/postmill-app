@@ -3723,6 +3723,8 @@
   "designer_reset_to_original_size": "Auf Originalgröße zurücksetzen",
   "designer_text_formatting": "Textformatierung",
   "designer_text_format": "Textformat",
+  "designer_auto_fit_text": "Text automatisch einpassen",
+  "designer_auto_fit_minimum": "Minimale Schriftgröße",
   "designer_label_font_family": "Schriftfamilie",
   "designer_placeholder_search_fonts": "Schriftarten suchen...",
   "designer_no_fonts_found": "Keine Schriftarten gefunden",

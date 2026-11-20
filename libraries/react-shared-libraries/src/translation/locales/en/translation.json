@@ -3736,6 +3736,8 @@
   "designer_reset_to_original_size": "Reset to original size",
   "designer_text_formatting": "Text formatting",
   "designer_text_format": "Text Format",
+  "designer_auto_fit_text": "Auto-fit text",
+  "designer_auto_fit_minimum": "Minimum font size",
   "designer_label_font_family": "Font family",
   "designer_placeholder_search_fonts": "Search fonts...",
   "designer_no_fonts_found": "No fonts found",

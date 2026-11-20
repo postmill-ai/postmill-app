@@ -3736,6 +3736,8 @@
   "designer_reset_to_original_size": "Kembalikan ke ukuran asli",
   "designer_text_formatting": "Format teks",
   "designer_text_format": "Format teks",
+  "designer_auto_fit_text": "Penyesuaian teks otomatis",
+  "designer_auto_fit_minimum": "Ukuran font minimum",
   "designer_label_font_family": "Keluarga font",
   "designer_placeholder_search_fonts": "Cari font...",
   "designer_no_fonts_found": "Tidak ada font ditemukan",
