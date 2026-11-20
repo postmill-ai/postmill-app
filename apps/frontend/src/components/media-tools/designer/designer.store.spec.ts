@@ -3536,6 +3536,75 @@ describe('frozen output read-only clipboard actions', () => {
 });
 
 
+describe('motion path recording and document history', () => {
+  const storeWithClip = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 4000, src: '/movie.mp4', x: 10, y: 20,
+    } as never);
+    return { store, trackId };
+  };
+
+  it('starts only for editable visual clips and cancels back to the original path without history', () => {
+    const { store, trackId } = storeWithClip();
+    const historyBefore = store.getState().history.length;
+    expect(store.getState().startMotionPathRecording(0, trackId, 'clip')).toBe(true);
+    const original = store.getState().doc.outputs[0].tracks[0].clips[0].motionPath;
+    store.getState().updateClipSilent(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 1000 }] },
+    });
+    store.getState().cancelMotionPathRecording();
+    expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath).toBe(original);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().motionPathRecording).toBeNull();
+
+    store.getState().setTrackLocked(0, trackId, true);
+    expect(store.getState().startMotionPathRecording(0, trackId, 'clip')).toBe(false);
+    store.getState().setTrackLocked(0, trackId, false);
+    store.getState().setOutputFrozen(0, true);
+    expect(store.getState().startMotionPathRecording(0, trackId, 'clip')).toBe(false);
+  });
+
+  it('rescales path times on duration edits and rebases both sides of a split with one Undo each', () => {
+    const { store, trackId } = storeWithClip();
+    store.getState().updateClip(0, trackId, 'clip', {
+      motionPath: {
+        points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 100, tMs: 2000 }, { x: 200, y: 50, tMs: 4000 }],
+        followRotation: true,
+      },
+    });
+    const historyBefore = store.getState().history.length;
+    store.getState().updateClip(0, trackId, 'clip', { endMs: 2000 });
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 1000, 2000]);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+
+    store.getState().splitClip(0, trackId, 'clip', 1000);
+    const clips = store.getState().doc.outputs[0].tracks[0].clips;
+    expect(clips).toHaveLength(2);
+    expect(clips[0].motionPath?.points.at(-1)).toMatchObject({ x: 100, y: 100, tMs: 1000 });
+    expect(clips[1].motionPath?.points[0]).toMatchObject({ x: 100, y: 100, tMs: 1000 });
+    expect(clips[1].motionPath?.points.at(-1)).toMatchObject({ x: 200, y: 50, tMs: 2000 });
+    expect(clips[1].motionPath).toMatchObject({
+      timeOffsetMs: 1000,
+      timeDurationMs: 2000,
+      followRotation: true,
+    });
+    expect(store.getState().history).toHaveLength(historyBefore + 2);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].tracks[0].clips).toHaveLength(1);
+  });
+
+  it('keeps motion paths local to linked video variants', () => {
+    const { store, trackId } = storeWithClip();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    store.getState().setCurrentOutput(0);
+    store.getState().updateClip(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 4000 }] },
+    });
+    expect(store.getState().doc.outputs[1].tracks[0].clips[0].motionPath).toBeUndefined();
 describe('exact page and output duplication', () => {
   const staticStore = () => {
     const store = createDesignerStore();
@@ -3761,6 +3830,38 @@ describe('exact page and output duplication', () => {
 });
 
 
+describe('motion path versioning and trim contract', () => {
+  it('stamps a real v14 document when a path is written through updateClipSilent', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 1000, src: '/movie.mp4',
+    } as never);
+    store.getState().replaceDocTrusted({ ...store.getState().doc, version: 14 });
+    expect(store.getState().doc.version).toBe(14);
+
+    expect(store.getState().updateClipSilent(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 1000 }] },
+    })).toBe(true);
+    expect(store.getState().doc.version).toBe(15);
+  });
+
+  it('rescales path times on trim while preserving ordinary keyframe timestamps', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 4000, src: '/movie.mp4',
+      keyframes: [{ tMs: 0, props: { opacity: 1 } }, { tMs: 4000, props: { opacity: 0.5 } }],
+      motionPath: { points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 4000 }] },
+    } as never);
+
+    store.getState().updateClip(0, trackId, 'clip', { endMs: 2000 });
+
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 2000]);
+    expect(clip.keyframes?.map((keyframe) => keyframe.tMs)).toEqual([0, 4000]);
 describe('duplication review regressions', () => {
   it.each(['image', 'video'] as const)('inserts a %s duplicate immediately after a non-last source', (mode) => {
     const store = createDesignerStore();

@@ -352,3 +352,51 @@ describe('collaboration Yjs contract', () => {
     expect(onRemoteDoc).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe('motion path collaboration', () => {
+  const motionPath = {
+    points: [{ x: 10, y: 20, tMs: 0 }, { x: 200, y: 300, tMs: 1000 }],
+    ease: 'easeInOut' as const,
+    followRotation: true,
+  };
+
+  it('round-trips paths and keeps them when a peer edits another clip', () => {
+    const author = new Y.Doc();
+    const peer = new Y.Doc();
+    const doc = makeVideoDoc();
+    (doc.outputs[0] as VideoOutput).tracks[0].clips[0].motionPath = motionPath;
+    const lastAuthor: { current: DesignerDoc | null } = { current: null };
+    Y.applyUpdate(peer, sendUpdate(author, doc, lastAuthor));
+
+    const peerDoc = rebuildDocFromY(peer.getMap(Y_DOC))!;
+    expect((peerDoc.outputs[0] as VideoOutput).tracks[0].clips[0].motionPath).toEqual(motionPath);
+    (peerDoc.outputs[0] as VideoOutput).tracks[0].clips[1].opacity = 0.35;
+    const lastPeer: { current: DesignerDoc | null } = {
+      current: rebuildDocFromY(peer.getMap(Y_DOC)),
+    };
+    Y.applyUpdate(author, sendUpdate(peer, peerDoc, lastPeer));
+    const merged = rebuildDocFromY(author.getMap(Y_DOC))!;
+    const clips = (merged.outputs[0] as VideoOutput).tracks[0].clips;
+    expect(clips[0].motionPath).toEqual(motionPath);
+    expect(clips[1].opacity).toBe(0.35);
+  });
+
+  it('preserves an in-progress local path during a remote update', () => {
+    const store = createDesignerStore();
+    store.getState().loadDesign(makeVideoDoc(), 'motion-gesture', 'Motion gesture');
+    const before = store.getState().doc;
+    store.getState().setSelectedClips([{ trackId: 'track-1', clipId: 'clip-a' }]);
+    store.getState().beginGesture();
+    store.getState().updateClipSilent(0, 'track-1', 'clip-a', { motionPath });
+    const remote = deepClone(before);
+    (remote.outputs[0] as VideoOutput).tracks[0].clips[1].opacity = 0.25;
+
+    applyRemoteDoc(store, remote);
+
+    const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks[0].clips;
+    expect(clips[0].motionPath).toEqual(motionPath);
+    expect(clips[1].opacity).toBe(0.25);
+    store.getState().endGesture();
+  });
+});

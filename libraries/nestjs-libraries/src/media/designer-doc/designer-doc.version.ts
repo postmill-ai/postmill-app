@@ -2,6 +2,27 @@ import type { DesignerDoc } from './designer-doc.schema';
 import { DESIGNER_DOC_VERSION } from './designer-doc.limits';
 
 export const TEXT_STROKE_DOC_VERSION = 14;
+export const MOTION_PATH_DOC_VERSION = 15;
+
+const carriesMotionPath = (value: unknown, seen = new Set<object>()): boolean => {
+  if (!value || typeof value !== 'object') return false;
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if (Array.isArray(value)) return value.some((entry) => carriesMotionPath(entry, seen));
+  if (Object.prototype.hasOwnProperty.call(value, 'motionPath')) return true;
+  return Object.values(value).some((entry) => carriesMotionPath(entry, seen));
+};
+
+export const withMotionPathVersion = <T extends DesignerDoc>(doc: T, update?: unknown): T => {
+  if (
+    doc.mode !== 'video' ||
+    doc.version >= MOTION_PATH_DOC_VERSION ||
+    !carriesMotionPath(update ?? doc.outputs)
+  ) {
+    return doc;
+  }
+  return { ...doc, version: MOTION_PATH_DOC_VERSION };
+};
 
 const carriesTextStroke = (value: unknown, seen = new Set<object>()): boolean => {
   if (!value || typeof value !== 'object') return false;

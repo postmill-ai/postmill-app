@@ -625,4 +625,63 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       if (result) encoder.cleanup(path.dirname(result.videoPath));
     }
   }, 120000);
+
+  it('exports a multi-point motion path at matching times and resolutions', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const encoder = new FfmpegVideoEncoderService(capture);
+    const fs = await import('fs');
+    const { execFileSync } = await import('child_process');
+    const output = {
+      ...redVideo(1000),
+      width: 200,
+      height: 200,
+      fps: 4,
+      background: '#ffffff',
+      tracks: [{
+        id: 'motion-track',
+        type: 'shape',
+        clips: [{
+          id: 'moving-shape', type: 'shape', shape: 'rect', fill: '#ff0000',
+          startMs: 0, endMs: 1000, x: 20, y: 20, width: 20, height: 20,
+          motionPath: {
+            points: [
+              { x: 20, y: 20, tMs: 0 },
+              { x: 100, y: 20, tMs: 500 },
+              { x: 100, y: 100, tMs: 1000 },
+            ],
+          },
+        }],
+      }],
+    } as any;
+    const expectedCenters = [[30, 30], [60, 30], [110, 30], [110, 70]];
+
+    for (const scale of [1, 2]) {
+      const result = await encoder.encode(output, {
+        fps: 4,
+        scale,
+        bitrateKbps: 500,
+        format: 'mp4',
+      });
+      try {
+        for (let index = 0; index < expectedCenters.length; index++) {
+          const framePath = path.join(path.dirname(result.videoPath), `motion-${scale}-${index}.png`);
+          execFileSync('ffmpeg', [
+            '-y', '-ss', String(index * 0.25), '-i', result.videoPath,
+            '-frames:v', '1', framePath,
+          ], { stdio: 'ignore' });
+          const { data, info } = await sharp(framePath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+          const [x, y] = expectedCenters[index];
+          const pixelX = Math.round(x * scale);
+          const pixelY = Math.round(y * scale);
+          const offset = (pixelY * info.width + pixelX) * info.channels;
+          const actual = [...data.subarray(offset, offset + 4)];
+          for (const [channel, expected] of [255, 0, 0, 255].entries()) {
+            expect(Math.abs(actual[channel] - expected)).toBeLessThanOrEqual(12);
+          }
+        }
+      } finally {
+        encoder.cleanup(path.dirname(result.videoPath));
+      }
+    }
+  }, 120000);
 });

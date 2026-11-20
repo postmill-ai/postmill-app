@@ -62,6 +62,7 @@ import { CornerRadiusControl } from './corner-radius-control';
 import { TextStyleControl } from './text-style-control';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { ClipTimingControls } from './clip-timing-controls';
+import { MotionPathControls } from './motion-path-controls';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { applyClipMagicGrab, prepareClipMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
@@ -1016,6 +1017,16 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         onCommit={commitClip}
         disabled={!!parentTrack?.locked}
       />
+      {clipTrackType !== 'audio' && (
+        <MotionPathControls
+          store={store}
+          outputIndex={outputIndex}
+          trackId={trackId}
+          clipId={clipId}
+          clip={clip}
+          disabled={!!parentTrack?.locked || vo.frozen === true}
+        />
+      )}
 
       <div>
         <div className="text-[11px] text-textColor/50 mb-1">

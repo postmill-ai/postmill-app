@@ -34,6 +34,7 @@ import type {
   VideoOutput,
   VideoTrack,
 } from './designer-doc.schema';
+import { interpolateClipWithMotionPath } from './motion-path';
 
 type TrackType = VideoTrack['type'];
 
@@ -68,18 +69,19 @@ const baseElement = (
   type: DesignerElement['type'],
   output: VideoOutput
 ): DesignerElement => {
+  const props = interpolateClipWithMotionPath(clip, 0);
   const atZero = propsAtZero(clip);
   return {
     id: clip.id,
     originId: clip.originId,
     type,
-    x: Math.round(atZero.x ?? clip.x ?? 0),
-    y: Math.round(atZero.y ?? clip.y ?? 0),
+    x: Math.round(props.x),
+    y: Math.round(props.y),
     // A box-less clip renders fullscreen — the frame renderer's own default.
     width: Math.round(atZero.width ?? clip.width ?? output.width),
     height: Math.round(atZero.height ?? clip.height ?? output.height),
-    rotation: clip.rotation ?? 0,
-    opacity: atZero.opacity ?? clip.opacity ?? 1,
+    rotation: props.rotation,
+    opacity: props.opacity,
     locked: false,
     hidden: false,
   } as DesignerElement;

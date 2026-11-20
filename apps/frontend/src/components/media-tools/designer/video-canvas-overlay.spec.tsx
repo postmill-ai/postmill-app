@@ -894,3 +894,159 @@ describe('paintable media frames', () => {
     expect(hasPaintableFrame({ width: 640 })).toBe(true);
   });
 });
+
+
+describe('motion path recording and editing', () => {
+  it('records a multi-point path and edits it with atomic history entries', async () => {
+    const store = videoStore();
+    let now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} interactive />
+          </Layer>
+        </Stage>
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    expect(store.getState().startMotionPathRecording(0, trackId, 'c1')).toBe(true);
+    const historyBefore = store.getState().history.length;
+    const node = stage.findOne('#c1')!;
+
+    await act(async () => node.fire('dragstart'));
+    await act(async () => {
+      now += 500;
+      node.position({ x: 100, y: 100 });
+      node.fire('dragmove');
+    });
+    await act(async () => {
+      now += 500;
+      node.position({ x: 200, y: 50 });
+      node.fire('dragmove');
+    });
+    await act(async () => node.fire('dragend'));
+
+    let clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points).toEqual([
+      { x: 0, y: 0, tMs: 0 },
+      { x: 100, y: 100, tMs: 500 },
+      { x: 200, y: 50, tMs: 1000 },
+    ]);
+    expect(clip).toMatchObject({ x: 0, y: 0, width: 400, height: 300 });
+    expect(store.getState().doc.version).toBe(15);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    expect(store.getState().motionPathRecording).toBeNull();
+    expect(store.getState().gestureDepth).toBe(0);
+    expect(stage.find('Ellipse').length).toBe(3);
+
+    const point = stage.find('Ellipse')[1];
+    await act(async () => point.fire('dragstart'));
+    await act(async () => {
+      point.position({ x: 120, y: 140 });
+      point.fire('dragmove');
+    });
+    await act(async () => point.fire('dragend'));
+    clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points[1]).toMatchObject({ x: 120, y: 140 });
+    expect(store.getState().history).toHaveLength(historyBefore + 2);
+
+    const segment = stage.find('Line').find((node) => node.name() === 'motion-path-segment')!;
+    await act(async () => segment.fire('click', { evt: new MouseEvent('click') }));
+    clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points).toHaveLength(4);
+    expect(store.getState().history).toHaveLength(historyBefore + 3);
+
+    const points = stage.find('Ellipse');
+    await act(async () => points[0].fire('contextmenu', { evt: new MouseEvent('contextmenu') }));
+    clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points).toHaveLength(3);
+    expect(store.getState().history).toHaveLength(historyBefore + 4);
+
+    await act(async () => store.getState().undo());
+    expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points).toHaveLength(4);
+  });
+
+  it('selects a path point on tap for Inspector editing', async () => {
+    const store = videoStore({
+      motionPath: {
+        points: [
+          { x: 0, y: 0, tMs: 0 },
+          { x: 100, y: 100, tMs: 1000 },
+          { x: 200, y: 50, tMs: 2000 },
+        ],
+      },
+    });
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'c1' });
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} interactive />
+          </Layer>
+        </Stage>
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const point = stage.find('Ellipse').find((node) => node.name() === 'motion-path-point')!;
+
+    expect(store.getState().motionPathPointIndex).toBeNull();
+    await act(async () => point.fire('tap'));
+    expect(store.getState().motionPathPointIndex).toBe(0);
+  });
+});
+
+
+describe('motion path recording clock', () => {
+  it('starts elapsed time at dragstart rather than the Inspector click', async () => {
+    const store = videoStore();
+    let now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={1080} height={1080}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={1080} height={1080} interactive />
+          </Layer>
+        </Stage>
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    expect(store.getState().startMotionPathRecording(0, trackId, 'c1')).toBe(true);
+    now += 1500;
+    const node = stage.findOne('#c1')!;
+    await act(async () => node.fire('dragstart'));
+    await act(async () => {
+      now += 500;
+      node.position({ x: 100, y: 100 });
+      node.fire('dragmove');
+    });
+    await act(async () => node.fire('dragend'));
+
+    expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath?.points)
+      .toEqual([{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 500 }]);
+    expect(store.getState().motionPathRecording).toBeNull();
+  });
+});

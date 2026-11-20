@@ -15,7 +15,9 @@ import {
   MAX_INLINE_SRC_LEN,
   MAX_SRC_LEN,
   MAX_VIDEO_DURATION_MS,
+  MAX_MOTION_PATH_POINTS,
 } from './designer-doc.limits';
+import { withMotionPathVersion } from './designer-doc.version';
 
 const imageDocFixture = {
   version: 2,
@@ -796,5 +798,63 @@ describe('optional output freeze flag', () => {
     const parsed = DesignerDocStrictSchema.parse(imageDocFixture);
     expect(parsed.version).toBe(2);
     expect(parsed.outputs[0].frozen).toBeUndefined();
+  });
+});
+
+
+describe('motion path document contract', () => {
+  const motionPath = {
+    points: [{ x: 10, y: 20, tMs: 0 }, { x: 200, y: 300, tMs: 15000 }],
+    ease: 'easeInOut',
+    followRotation: true,
+    timeOffsetMs: 0,
+    timeDurationMs: 15000,
+    startDx: 0,
+    startDy: 0,
+    startRotation: 0,
+    startAngle: 0,
+  };
+
+  it('accepts optional v15 motion paths in strict and lenient parsers', () => {
+    for (const schema of [DesignerDocStrictSchema, DesignerDocLenientSchema]) {
+      const parsed = schema.parse({
+        ...videoDocFixture,
+        version: 15,
+        outputs: [{
+          ...videoDocFixture.outputs[0],
+          tracks: [{
+            ...videoDocFixture.outputs[0].tracks[0],
+            clips: [{ ...videoDocFixture.outputs[0].tracks[0].clips[0], motionPath }],
+          }],
+        }],
+      });
+      expect(parsed.outputs[0].tracks[0].clips[0].motionPath).toEqual(motionPath);
+    }
+  });
+
+  it('rejects invalid, excessive, and out-of-range path data', () => {
+    const withPath = (points: unknown) => ({
+      ...videoDocFixture,
+      version: 15,
+      outputs: [{
+        ...videoDocFixture.outputs[0],
+        tracks: [{
+          ...videoDocFixture.outputs[0].tracks[0],
+          clips: [{ ...videoDocFixture.outputs[0].tracks[0].clips[0], motionPath: { points } }],
+        }],
+      }],
+    });
+    expect(DesignerDocStrictSchema.safeParse(withPath([{ x: 0, y: 0, tMs: 0 }, { x: 1, y: 1, tMs: 1000 }])).success).toBe(true);
+    expect(DesignerDocStrictSchema.safeParse(withPath(Array.from({ length: MAX_MOTION_PATH_POINTS + 1 }, () => ({ x: 0, y: 0, tMs: 0 })))).success).toBe(false);
+    expect(DesignerDocStrictSchema.safeParse(withPath([{ x: Number.NaN, y: 0, tMs: 0 }])).success).toBe(false);
+    expect(DesignerDocStrictSchema.safeParse(withPath([{ x: 0, y: 0, tMs: MAX_VIDEO_DURATION_MS + 1 }])).success).toBe(false);
+  });
+
+  it('stamps v15 only when motion-path data is written', () => {
+    const oldDoc = migrateDoc(videoDocFixture);
+    expect(withMotionPathVersion(oldDoc)).toBe(oldDoc);
+    const updated = withMotionPathVersion(oldDoc, { motionPath });
+    expect(updated.version).toBe(15);
+    expect(oldDoc.version).toBe(2);
   });
 });

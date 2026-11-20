@@ -68,6 +68,8 @@ const preserveGestureGeometry = <T extends DesignerElement | VideoClip>(local: T
   }
   if ('keyframes' in local) next.keyframes = local.keyframes;
   else if ('keyframes' in remote) next.keyframes = undefined;
+  if ('motionPath' in local) next.motionPath = (local as VideoClip).motionPath;
+  else if ('motionPath' in remote) next.motionPath = undefined;
   return next as T;
 };
 
@@ -336,7 +338,7 @@ function syncClipMap(
     deleteIfPresent(m, 'transitionOut');
   }
 
-  for (const key of ['fillGradient', 'textStroke'] as const) {
+  for (const key of ['fillGradient', 'textStroke', 'motionPath'] as const) {
     if (clip[key]) {
       setIfChanged(m, key, JSON.stringify(clip[key]));
     } else {
@@ -487,7 +489,7 @@ function yToVideoClip(m: Y.Map<any>): VideoClip {
     clip.transitionOut = JSON.parse(m.get('transitionOut'));
   }
 
-  for (const key of ['fillGradient', 'textStroke'] as const) {
+  for (const key of ['fillGradient', 'textStroke', 'motionPath'] as const) {
     if (m.has(key)) {
       try {
         (clip as any)[key] = JSON.parse(m.get(key));

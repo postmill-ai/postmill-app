@@ -1,9 +1,9 @@
 import type { VideoClip, VideoOutput, VideoTrack } from './designer.store';
 import {
-  interpolateClipKeyframes,
   volumeAtClipTime,
   type EasePreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
+import { interpolateClipWithMotionPath } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
 import {
   averageSpeedForClip,
   hasSpeedCurve,
@@ -77,7 +77,7 @@ export function fadeGainAt(clip: VideoClip, localMs: number): number {
  * the preview and an exported mp4 cannot ease differently.
  */
 export type EaseType = EasePreset;
-export const interpolateKeyframes = interpolateClipKeyframes;
+export const interpolateKeyframes = interpolateClipWithMotionPath;
 
 function getEffectiveClipEnd(clip: VideoClip): number {
   return clip.endMs + (clip.freezeAtMs || 0);

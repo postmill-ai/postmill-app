@@ -23,6 +23,7 @@ export function escapeForScriptTag(value: unknown): string {
 
 import { shapeGeometrySource } from '../designer-doc/shape-geometry';
 import { keyframesSource } from '../designer-doc/keyframes';
+import { motionPathSource } from '../designer-doc/motion-path';
 import { speedCurveSource } from '../designer-doc/speed-curve';
 import { motionBlurSource } from '../designer-doc/motion-blur';
 import { captionStylesSource } from '../designer-doc/caption-styles';
@@ -53,6 +54,7 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
 ${stripExportsNamespace(shapeGeometrySource())}
 ${stripExportsNamespace(keyframesSource())}
+${stripExportsNamespace(motionPathSource())}
 ${stripExportsNamespace(speedCurveSource())}
 ${stripExportsNamespace(motionBlurSource())}
 ${stripExportsNamespace(captionStylesSource())}
@@ -274,7 +276,7 @@ ${stripExportsNamespace(mediaGeometrySource())}
 
   // Keyframe interpolation and easing come from the shared module as source
   // (see keyframesSource), so the preview and an exported mp4 ease identically.
-  const interpolateKeyframes = interpolateClipKeyframes;
+  const interpolateKeyframes = interpolateClipWithMotionPath;
 
   function getClipDuration(clip) { return clip.endMs - clip.startMs; }
   function getEffectiveEnd(clip) { return clip.endMs + (clip.freezeAtMs || 0); }

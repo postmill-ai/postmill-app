@@ -1625,6 +1625,19 @@ describe('DesignerDocService clip ops (video outputs)', () => {
     expect(clip.id).toBe('clip-1');
   });
 
+  it('applies a validated motion-path patch and stamps doc v15', () => {
+    const motionPath = {
+      points: [{ x: 10, y: 20, tMs: 0 }, { x: 200, y: 300, tMs: 4000 }],
+      ease: 'easeOut' as const,
+      followRotation: true,
+    };
+    const result = makeService().applyOps(videoDoc(), [
+      { op: 'updateClip', outputIndex: 0, clipId: 'clip-1', patch: { motionPath } },
+    ]);
+    expect(result.version).toBe(15);
+    expect(result.outputs[0].tracks[0].clips[0].motionPath).toEqual(motionPath);
+  });
+
   it('applies updateClip timing within the output duration', () => {
     const result = makeService().applyOps(videoDoc(), [
       {

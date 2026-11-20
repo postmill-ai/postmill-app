@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { escapeForScriptTag, FRAME_RENDERER_SCRIPT, stripExportsNamespace } from './frame-renderer-script';
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
+import { interpolateClipWithMotionPath } from '../designer-doc/motion-path';
 import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
 import { transitionAdjustment } from '../designer-doc/transitions';
 import { planClipArrangement } from '../designer-doc/clip-arrangement';
@@ -1487,6 +1488,53 @@ describe('FRAME_RENDERER_SCRIPT — media draw geometry', () => {
     for (const testCase of cases) {
       const clip = filtered ? { ...testCase.clip, filters: ['grayscale'] } : testCase.clip;
       expect(await drawArguments(clip)).toEqual(testCase.expected);
+    }
+  });
+});
+
+
+describe('motion path frame rendering', () => {
+  it('matches shared evaluation at several timestamps without renderScale changing geometry', async () => {
+    const translations: [number, number][] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      translate: (x: number, y: number) => translations.push([x, y]),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const clip = {
+      id: 'moving-shape', startMs: 0, endMs: 1000, shape: 'rect', fill: '#ff0000',
+      x: 0, y: 0, width: 50, height: 50,
+      motionPath: {
+        points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 0, tMs: 500 }, { x: 100, y: 100, tMs: 1000 }],
+      },
+    };
+    for (const renderScale of [1, 2]) {
+      const canvas = { width: 0, height: 0, getContext: () => context };
+      const win: Record<string, unknown> = {
+        __DATA: {
+          output: {
+            id: 'motion-output', width: 200, height: 200, fps: 30, durationMs: 1000,
+            background: '#000000', renderScale,
+            tracks: [{ id: 'shape-track', type: 'shape', clips: [clip] }],
+          },
+        },
+      };
+      const doc = {
+        getElementById: () => canvas,
+        createElement: () => ({ width: 0, height: 0, getContext: () => context }),
+      };
+      const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+      fn(win, doc, class {});
+      const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+      for (const time of [250, 750, 1000]) {
+        translations.length = 0;
+        await api.renderFrame(time);
+        const expected = interpolateClipWithMotionPath(clip as never, time);
+        expect(translations[0]).toEqual([expected.x + 25, expected.y + 25]);
+      }
     }
   });
 });
