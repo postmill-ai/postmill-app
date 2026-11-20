@@ -737,3 +737,27 @@ describe('OutputTabs menu guards', () => {
     expect(screen.getByRole('button', { name: 'Duplicate independently' })).toHaveProperty('disabled', true);
   });
 });
+
+describe('OutputTabs More formats list', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('anchors a right-clicked row menu to the More formats button, which stays mounted', async () => {
+    const store = createDesignerStore();
+    ['A', 'B', 'C', 'D', 'E', 'F'].forEach((name, index) =>
+      store.getState().addOutput({ formatId: `custom-${index}`, name, width: 1000 + index, height: 1000 }));
+    render(<OutputTabs store={store} />);
+
+    const more = screen.getByRole('button', { name: 'More formats' });
+    more.getBoundingClientRect = () => ({
+      left: 500, right: 532, top: 600, bottom: 680, width: 32, height: 80, x: 500, y: 600, toJSON: () => ({}),
+    });
+    fireEvent.click(more);
+    const row = screen.getAllByRole('button', { name: 'Format actions for C' }).at(-1)!.parentElement!;
+    fireEvent.contextMenu(row);
+
+    const menu = screen.getByRole('button', { name: 'Duplicate linked' }).closest<HTMLElement>('[style]')!;
+    await waitFor(() => expect(menu.style.left).toBe('500px'));
+  });
+});

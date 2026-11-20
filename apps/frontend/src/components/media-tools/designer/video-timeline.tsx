@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VideoClip, VideoTrack, VideoOutput, DesignerElement, ClipTransition } from './designer.store';
 import { MAX_TRACKS } from './designer.store';
 import { VideoPreviewEngine } from './video-preview';
@@ -30,7 +30,7 @@ import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
 import { getSourceDurationMs } from './clip-source-duration';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
-import { getContextMenuPlacement, type MenuPlacement } from './context-menu-position';
+import { useBoundedMenuPlacement } from './use-bounded-menu-placement';
 import { expandClipRefs } from './video-selection';
 import {
   moveClipPreservingDuration,
@@ -1569,20 +1569,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const [clipTransformPrompt, setClipTransformPrompt] = useState('');
   const [clipTransformMode, setClipTransformMode] = useState<'upscale' | 'remove-bg' | 'video-to-video' | null>(null);
   const clipMenuRef = useRef<HTMLDivElement>(null);
-  const [clipMenuPlacement, setClipMenuPlacement] = useState<MenuPlacement | null>(null);
-  useLayoutEffect(() => {
-    const menu = clipMenuRef.current;
-    if (!clipMenu || !menu) {
-      setClipMenuPlacement(null);
-      return;
-    }
-    const rect = menu.getBoundingClientRect();
-    setClipMenuPlacement(getContextMenuPlacement(
-      { x: clipMenu.x, y: clipMenu.y + 8 },
-      { width: rect.width, height: menu.scrollHeight },
-      { width: window.innerWidth, height: window.innerHeight },
-    ));
-  }, [clipMenu, clipTransformMode]);
+  const clipMenuPoint = useMemo(
+    () => (clipMenu ? { x: clipMenu.x, y: clipMenu.y + 8 } : null),
+    [clipMenu],
+  );
+  const clipMenuPlacement = useBoundedMenuPlacement(clipMenuRef, clipMenuPoint, clipTransformMode ?? 'main');
   const [trackSettings, setTrackSettings] = useState<{
     trackId: string;
     x: number;

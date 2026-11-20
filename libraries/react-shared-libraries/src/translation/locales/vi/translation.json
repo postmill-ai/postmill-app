@@ -5027,6 +5027,7 @@
   "brand_kit_section_templates": "Mẫu",
   "brand_kit_more_sections": "Thêm phần Bộ nhận diện thương hiệu",
   "brand_kit_sections": "Phần Bộ nhận diện thương hiệu",
+  "brand_kit_save_status": "Trạng thái lưu Bộ nhận diện thương hiệu",
   "brand_color_roles_hint": "Tùy chọn cho AI Designer biết cách dùng từng màu. Nhiều màu có thể chia sẻ một vai trò như các lựa chọn theo thứ tự; màu chưa gán vai trò vẫn nằm trong bảng màu.",
   "brand_logo_roles_hint": "Gắn nhãn biểu trưng chính, biểu tượng và phiên bản tối. Các biểu trưng khác vẫn khả dụng khi chưa gán vai trò.",
   "brand_logo_clear_role": "Xóa vai trò",

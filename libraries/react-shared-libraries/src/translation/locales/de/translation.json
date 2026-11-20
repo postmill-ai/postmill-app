@@ -5027,6 +5027,7 @@
   "brand_kit_section_templates": "Vorlagen",
   "brand_kit_more_sections": "Weitere Brand-Kit-Bereiche",
   "brand_kit_sections": "Brand-Kit-Bereiche",
+  "brand_kit_save_status": "Speicherstatus des Brand-Kits",
   "brand_color_roles_hint": "Lege optional fest, wie AI Designer jede Farbe verwenden soll. Farben können eine Rolle als geordnete Auswahl teilen; Farben ohne Rolle bleiben in der Palette.",
   "brand_logo_roles_hint": "Kennzeichne Hauptlogo, Symbol und dunkle Version. Weitere Logos bleiben ohne Rolle verfügbar.",
   "brand_logo_clear_role": "Rolle entfernen",

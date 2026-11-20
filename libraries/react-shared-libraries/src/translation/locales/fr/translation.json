@@ -5027,6 +5027,7 @@
   "brand_kit_section_templates": "Modèles",
   "brand_kit_more_sections": "Plus de sections du kit de marque",
   "brand_kit_sections": "Sections du kit de marque",
+  "brand_kit_save_status": "État d'enregistrement du kit de marque",
   "brand_color_roles_hint": "Indiquez éventuellement à AI Designer comment utiliser chaque couleur. Plusieurs couleurs peuvent partager un rôle comme choix ordonnés ; les couleurs sans rôle restent dans la palette.",
   "brand_logo_roles_hint": "Identifiez les logos principal, icône et version sombre. Les autres restent disponibles sans rôle.",
   "brand_logo_clear_role": "Effacer le rôle",

@@ -2271,7 +2271,7 @@ test('inspector task tabs keep image AI drafts mounted and persist across reload
   // The tab switch hides the AI section but never unmounts it.
   await page.getByRole('tab', { name: 'Layout', exact: true }).click();
   await expect(prompt).toBeHidden();
-  await expect(page.getByLabel('Focal X', { exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Focal point preview', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
   await expect(prompt).toHaveValue('remove the background crowd');
 
@@ -2698,6 +2698,7 @@ test('inpaint masks are internal while ordinary image replacements stay visible 
   await openDesigner(page);
   await selectEditingLayer(page, 'drop-target');
 
+  await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
   await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
   await page.getByPlaceholder('Inpaint prompt...').fill('Replace the selected area');
   await page.getByRole('button', { name: 'Draw mask…', exact: true }).click();
@@ -2707,7 +2708,7 @@ test('inpaint masks are internal while ordinary image replacements stay visible 
 
   const mask = state.uploadRecords.find((file) => file.name.startsWith('mask-'))!;
   expect(mask.internal).toBe('design-asset');
-  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
+  await page.getByRole('button', { name: 'Generate', exact: true }).click();
   await expect.poll(() => state.inpaintCalls.length).toBe(1);
   expect(state.inpaintCalls[0].maskUrl).toBe(mask.path);
 

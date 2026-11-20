@@ -5027,6 +5027,7 @@
   "brand_kit_section_templates": "Şablonlar",
   "brand_kit_more_sections": "Daha fazla Marka Kiti bölümü",
   "brand_kit_sections": "Marka Kiti bölümleri",
+  "brand_kit_save_status": "Marka Kiti kaydetme durumu",
   "brand_color_roles_hint": "AI Designer'ın her rengi nasıl kullanacağını isteğe bağlı belirtin. Renkler sıralı seçenekler olarak bir rolü paylaşabilir; rolü olmayan renkler palette kalır.",
   "brand_logo_roles_hint": "Ana logo, simge ve koyu sürümü etiketleyin. Diğer logolar rol atanmadan kullanılabilir.",
   "brand_logo_clear_role": "Rolü temizle",

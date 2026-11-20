@@ -124,3 +124,20 @@ export function getSubmenuPlacement(
     scrollable: submenu.height > maxHeight,
   };
 }
+
+/**
+ * Border-box size a menu needs to show all of its content. `max-width` and
+ * `max-height` apply to the border box while `scroll*` excludes the border, so
+ * the border is added back. Keeping the larger of `previous` and the new
+ * measurement means a menu never shrinks because it was measured under its
+ * own earlier cap.
+ */
+export function measureMenuSize(element: HTMLElement, previous?: Size | null): Size {
+  const rect = element.getBoundingClientRect();
+  const borderWidth = Math.max(0, rect.width - element.clientWidth);
+  const borderHeight = Math.max(0, rect.height - element.clientHeight);
+  return {
+    width: Math.max(previous?.width ?? 0, element.scrollWidth + borderWidth),
+    height: Math.max(previous?.height ?? 0, element.scrollHeight + borderHeight),
+  };
+}

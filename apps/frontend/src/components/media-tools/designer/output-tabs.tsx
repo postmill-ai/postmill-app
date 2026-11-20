@@ -635,7 +635,11 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
                     key={output.id}
                     onContextMenu={(event) => {
                       event.preventDefault();
-                      openPopover('formatActions', event.currentTarget, { outputIndex: i });
+                      // Opening the format menu closes this list and unmounts the row, so
+                      // anchor to the More formats button, which stays mounted (as ⋮ does).
+                      if (overflowBtnRef.current) {
+                        openPopover('formatActions', overflowBtnRef.current, { outputIndex: i });
+                      }
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 hover:bg-studioBorder/10 group/item"
                   >
