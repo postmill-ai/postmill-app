@@ -82,6 +82,12 @@ import type {
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 import { mergeKeyframes } from './keyframe-props';
 import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
+import {
+  planClipArrangement,
+  expandClipArrangementRefs,
+  type ClipArrangementDirection,
+  type ClipArrangementFailure,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/clip-arrangement';
 import type { DesignerAssistantSuggestionEntry } from './panels/designer-assistant-cache';
 
 export type {
@@ -397,6 +403,11 @@ export interface DesignerActions {
     moves: { trackId: string; clipId: string; toTrackId: string | null; startMs: number; endMs: number }[],
     opts?: { newTrackType?: VideoTrack['type'] }
   ) => boolean;
+  arrangeVideoClips: (
+    outputIndex: number,
+    refs: { trackId: string; clipId: string }[],
+    direction: ClipArrangementDirection
+  ) => ClipArrangementFailure | 'ok';
   updateClip: (outputIndex: number, trackId: string, clipId: string, updates: Partial<VideoClip>) => void;
   // Same as updateClip but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead, the
@@ -2253,6 +2264,51 @@ export const createDesignerStore = (
         });
         get().pushHistory('Move clip');
         return true;
+      },
+
+      arrangeVideoClips: (outputIndex, refs, direction) => {
+        const { doc, selectedClip } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return 'unknown-clip';
+        if (isOutputFrozen(vo)) return 'frozen';
+
+        // Groups and transition pairs can pull each other in, so expand both until stable.
+        let expanded = expandClipRefs(vo, refs);
+        for (;;) {
+          const next = expandClipRefs(vo, expandClipArrangementRefs(vo, expanded));
+          if (next.length === expanded.length) break;
+          expanded = next;
+        }
+        const planned = planClipArrangement(vo, expanded, direction, genId);
+        if (planned.status !== 'ok') return planned.status;
+
+        const destinations = new Map(
+          planned.moves.map((move) => [`${move.trackId}:${move.clipId}`, move.toTrackId] as const)
+        );
+        const retarget = (ref: { trackId: string; clipId: string }) => ({
+          ...ref,
+          trackId: destinations.get(`${ref.trackId}:${ref.clipId}`) ?? ref.trackId,
+        });
+        const outputs = [...doc.outputs];
+        outputs[outputIndex] = { ...vo, tracks: planned.tracks };
+        const accepted = mutate({
+          doc: { ...doc, outputs },
+          isDirty: true,
+          selectedClips: expanded.map(retarget),
+          selectedClip: selectedClip && selectedClip.outputIndex === outputIndex
+            ? { ...selectedClip, ...retarget(selectedClip) }
+            : selectedClip,
+        });
+        if (!accepted) return 'frozen';
+
+        const labels: Record<ClipArrangementDirection, string> = {
+          front: 'Bring clip to front',
+          forward: 'Bring clip forward',
+          backward: 'Send clip backward',
+          back: 'Send clip to back',
+        };
+        get().pushHistory(labels[direction]);
+        return 'ok';
       },
 
       removeClips: (outputIndex, refs) => {

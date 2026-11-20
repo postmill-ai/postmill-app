@@ -76,6 +76,13 @@ import { TimelineTransportControls } from './timeline-transport-controls';
 import { canSplitClipAt } from './timeline-split';
 import { ClipTimingControls } from './panels/clip-timing-controls';
 import { CLIP_TOP_PX, transitionPairs, transitionBadgeGeometry } from './timeline-transitions';
+import {
+  CLIP_ARRANGEMENT_MENU_COMMANDS,
+  clipArrangementFailureText,
+  clipArrangementRefsForTarget,
+  clipArrangementSelectionFailure,
+  runClipArrangement,
+} from './clip-arrangement-actions';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -4329,6 +4336,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               const track = vo.tracks.find((t) => t.id === clipMenu.trackId);
               const clip = track?.clips.find((c) => c.id === clipMenu.clipId);
               const clipSrc = clip?.src;
+              const arrangementRefs = clipArrangementRefsForTarget(
+                store.getState().selectedClips,
+                { trackId: clipMenu.trackId, clipId: clipMenu.clipId }
+              );
+              const arrangementFailure = clipArrangementSelectionFailure(vo, arrangementRefs);
               if (!clip) return null;
               if (clipSrc && clipTransformMode === 'upscale') {
                 return (
@@ -4418,6 +4430,29 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   >
                     {translate('duplicate_clip', 'Duplicate')}
                   </button>
+                  {CLIP_ARRANGEMENT_MENU_COMMANDS.map((command) => (
+                    <button
+                      key={command.direction}
+                      onClick={() => {
+                        runClipArrangement(
+                          store,
+                          clipMenu.outputIndex,
+                          arrangementRefs,
+                          command.direction,
+                          toaster,
+                          translate
+                        );
+                        setClipMenu(null);
+                      }}
+                      disabled={!!arrangementFailure}
+                      title={arrangementFailure
+                        ? clipArrangementFailureText(arrangementFailure, translate)
+                        : undefined}
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {translate(command.key, command.label)}
+                    </button>
+                  ))}
                   <button
                     onClick={handleCopyClips}
                     className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"

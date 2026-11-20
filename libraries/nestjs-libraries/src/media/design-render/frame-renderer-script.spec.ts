@@ -3,6 +3,8 @@ import { escapeForScriptTag, FRAME_RENDERER_SCRIPT, stripExportsNamespace } from
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
 import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
 import { transitionAdjustment } from '../designer-doc/transitions';
+import { planClipArrangement } from '../designer-doc/clip-arrangement';
+import type { VideoOutput } from '../designer-doc/designer-doc.schema';
 
 describe('escapeForScriptTag (0.2 </script> breakout)', () => {
   it('neutralizes a </script> breakout in a user-controlled composition value', () => {
@@ -159,6 +161,42 @@ describe('FRAME_RENDERER_SCRIPT', () => {
   it('renders a frame without throwing', async () => {
     const api = run(output);
     await expect(api.renderFrame(500)).resolves.toBeUndefined();
+  });
+
+  it('paints arranged same-time clips in document track order', async () => {
+    const shared = {
+      ...output,
+      tracks: [
+        {
+          id: 'source', type: 'shape',
+          clips: [
+            { id: 'selected', startMs: 0, endMs: 1000, shape: 'rect', fill: '#ff0000', x: 0, y: 0, width: 100, height: 100 },
+            { id: 'resident', startMs: 2000, endMs: 3000, shape: 'rect', fill: '#00ff00', x: 0, y: 0, width: 100, height: 100 },
+          ],
+        },
+        {
+          id: 'target', type: 'shape',
+          clips: [{ id: 'target-clip', startMs: 0, endMs: 1000, shape: 'rect', fill: '#0000ff', x: 0, y: 0, width: 100, height: 100 }],
+        },
+      ],
+    } as VideoOutput;
+    const planned = planClipArrangement(shared, [
+      { trackId: 'source', clipId: 'selected' },
+    ], 'forward', () => 'arranged');
+    expect(planned.status).toBe('ok');
+    if (planned.status !== 'ok') return;
+
+    const fills: string[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      fill: () => fills.push(String(state.fillStyle)),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    await run({ ...shared, tracks: planned.tracks }, context as never).renderFrame(0);
+    expect(fills).toEqual(['#0000ff', '#ff0000']);
   });
 
   it('uses shared Konva-style wrapping, centered baselines and keyframed font size', async () => {

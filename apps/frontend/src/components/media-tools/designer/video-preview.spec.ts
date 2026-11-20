@@ -3,6 +3,7 @@ import { composeClipsAtPlayhead, fadeGainAt, findTransitionWindows, sourceTimeFo
 import { sourceTimeForPlayhead as sharedSourceTimeForPlayhead } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import { createDesignerStore } from './designer.store';
 import type { VideoClip, VideoOutput, VideoTrack } from './designer.store';
+import { planClipArrangement } from '@postmill-ai/nestjs-libraries/media/designer-doc/clip-arrangement';
 
 beforeAll(() => {
   for (const method of ['pause', 'load']) {
@@ -54,6 +55,36 @@ describe('composeClipsAtPlayhead boundary inclusivity', () => {
     const b = clip({ id: 'b', startMs: 4000, endMs: 8000 });
     const composed = composeClipsAtPlayhead(voWith([a, b]), 4000);
     expect(composed.map((c) => c.clip.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('composeClipsAtPlayhead arranged track order', () => {
+  it('uses the arranged document order for same-time clips and shared-track residents', () => {
+    const out = voWith([]) as VideoOutput;
+    out.tracks = [
+      {
+        id: 'source', type: 'shape',
+        clips: [
+          clip({ id: 'selected', startMs: 0, endMs: 1000 }),
+          clip({ id: 'resident', startMs: 2000, endMs: 3000 }),
+        ],
+      },
+      {
+        id: 'target', type: 'shape',
+        clips: [clip({ id: 'target-clip', startMs: 0, endMs: 1000 })],
+      },
+    ];
+    const planned = planClipArrangement(out, [
+      { trackId: 'source', clipId: 'selected' },
+    ], 'forward', () => 'arranged');
+    expect(planned.status).toBe('ok');
+    if (planned.status !== 'ok') return;
+    out.tracks = planned.tracks;
+
+    expect(composeClipsAtPlayhead(out, 0).map((item) => item.clip.id))
+      .toEqual(['target-clip', 'selected']);
+    expect(composeClipsAtPlayhead(out, 2500).map((item) => item.clip.id))
+      .toEqual(['resident']);
   });
 });
 
