@@ -156,6 +156,61 @@ describe('interpolateClipKeyframes', () => {
     expect(interpolateClipKeyframes(eased, 250).x).toBeLessThan(50);
   });
 
+  it('composes tagged categories without changing untagged volume semantics', () => {
+    const combined = {
+      x: 100, y: 200, width: 200, height: 100, rotation: 0,
+      opacity: 1, fontSize: 20, volume: 0.4,
+      keyframes: [
+        { tMs: 0, props: { volume: 0.2 } },
+        {
+          tMs: 0,
+          props: { x: 40, rotation: -10, width: 100, opacity: 0.5, fontSize: 10 },
+          animationPreset: { name: 'Entrance', category: 'entrance' as const },
+        },
+        {
+          tMs: 0,
+          props: { x: 110, rotation: 6, width: 220, opacity: 0.8, fontSize: 30 },
+          animationPreset: { name: 'Emphasis', category: 'emphasis' as const },
+        },
+      ],
+    };
+
+    expect(interpolateClipKeyframes(combined, 0)).toEqual({
+      x: 50,
+      y: 200,
+      width: 110,
+      height: 100,
+      rotation: -4,
+      opacity: 0.4,
+      fontSize: 15,
+      volume: 0.2,
+    });
+  });
+
+  it('uses a preset base snapshot after the clip base changes', () => {
+    const base = { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 20 };
+    const combined = {
+      x: 110, y: 205, width: 220, height: 110, rotation: 5,
+      opacity: 1, fontSize: 22, volume: 1,
+      keyframes: [{
+        tMs: 0,
+        props: { x: 40, y: 220, width: 100, height: 50, rotation: -10, fontSize: 10 },
+        animationPreset: { name: 'Entrance', category: 'entrance' as const, base },
+      }],
+    };
+
+    expect(interpolateClipKeyframes(combined, 0)).toEqual({
+      x: 50,
+      y: 225,
+      width: 110,
+      height: 55,
+      rotation: -5,
+      opacity: 1,
+      fontSize: 11,
+      volume: 1,
+    });
+  });
+
   it('handles two keyframes at the same time without dividing by zero', () => {
     const degenerate = {
       ...clip,
@@ -267,5 +322,42 @@ describe('keyframesSource', () => {
       cubicBezierEase(0.3, [0.9, 0.1], [0.1, 0.9]),
       6
     );
+  });
+
+  it('injects the same category composition used by the preview', () => {
+    const fn = new Function(
+      `${keyframesSource()}
+      return { interpolateClipKeyframes };`
+    ) as () => { interpolateClipKeyframes: typeof interpolateClipKeyframes };
+    const base = { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 20 };
+    const clip = {
+      x: 100, y: 200, width: 200, height: 100, rotation: 0,
+      opacity: 1, fontSize: 20, volume: 0.4,
+      keyframes: [
+        { tMs: 0, props: { volume: 0.2 } },
+        {
+          tMs: 0, props: { x: 40, width: 100, opacity: 0 },
+          ease: 'easeOut' as const,
+          animationPreset: { name: 'Entrance', category: 'entrance' as const, base },
+        },
+        {
+          tMs: 500, props: { x: 100, width: 200, opacity: 1 },
+          ease: 'easeOut' as const,
+          animationPreset: { name: 'Entrance', category: 'entrance' as const, base },
+        },
+        {
+          tMs: 100, props: { x: 110, width: 220, opacity: 0.8 },
+          animationPreset: { name: 'Emphasis', category: 'emphasis' as const, base },
+        },
+      ],
+    };
+    const injected = fn();
+    for (const tMs of [0, 50, 100, 250, 500]) {
+      const expected = interpolateClipKeyframes(clip, tMs);
+      const actual = injected.interpolateClipKeyframes(clip, tMs);
+      for (const prop of Object.keys(expected) as (keyof typeof expected)[]) {
+        expect(actual[prop]).toBeCloseTo(expected[prop], 6);
+      }
+    }
   });
 });

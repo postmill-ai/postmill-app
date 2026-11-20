@@ -140,7 +140,10 @@ via headless Chromium + FFmpeg.
   **Animations** presets apply to text, shape, image, and sticker clips and are grouped into
   **Entrance** (such as Pop, Fade Up, Slide In Left, Zoom In), **Emphasis** (Pulse, Shake, Swing), and
   **Exit** (such as Fade Out, Slide Out Left, Spin Out) presets; text clips also get a **Typewriter**
-  reveal. Audio clips can detect beats.
+  reveal. You can combine one preset from each category on the same clip. Click a selected preset again
+  to remove only that category, leaving the others intact. When animations overlap, movement and rotation
+  offsets add together, while scale and opacity factors multiply. Manual keyframes keep their existing
+  behavior and take precedence over preset contributions to the same property. Audio clips can detect beats.
 - **Animation clipboard** — **Copy Animation** captures visual position, size, rotation, opacity, and
   font-size keyframes with their easing, plus motion paths and text reveal. It does not copy content,
   assets or file references, IDs, base geometry, crop/focal state, clip placement or duration, speed,

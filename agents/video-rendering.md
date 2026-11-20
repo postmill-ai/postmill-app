@@ -139,10 +139,20 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      (`applyTextReveal` / `textRevealProgress`); the preview overlay imports it and
      the frame page is handed it as source (`textRevealSource()`, injected like
      `keyframesSource`). The Typewriter preset (`text-animation-presets.ts`) writes
-     it at ~80 ms/char; a reveal preset clears the keyframe lanes and vice versa. Presets are grouped
-     into entrance, emphasis and exit. Exits are timed relative to the clip end; zoom presets scale
-     width/height from the clip base and motion presets offset x/y/rotation. All visual track types
-     share the same keyframe evaluator, while reveal stays text-only.
+     it at ~80 ms/char and replaces only the current entrance, leaving emphasis/exit keyframes intact.
+     Presets are grouped into entrance, emphasis and exit, with one independently replaceable preset
+     per category. Generated keyframes carry optional `animationPreset` metadata; untagged-only clips
+     keep legacy interpolation, while tagged groups interpolate per property and compose x/y/rotation
+     offsets additively, scale factors multiplicatively, and shared opacity multiplicatively. Untagged
+     manual frames retain legacy whole-frame interpolation and override composed values for their animated
+     properties. All edit paths match timestamp plus preset identity; canvas gestures convert category-local
+     values back through the current-base/preset-base relationship before writing, never storing the
+     composited absolute transform. `animationPreset.base` preserves the transform at
+     preset application, so later base edits translate/scale the complete result exactly once. Base resize
+     uses the rendered after/before ratio so preset factors do not multiply the gesture. The preview
+     and injected frame renderer share that evaluator. Exits are timed relative to the clip
+     end; zoom presets scale width/height from the clip base and motion presets offset x/y/rotation.
+     All visual track types share the same keyframe evaluator, while reveal stays text-only.
    - Copy/Paste Animation writes only the existing keyframe, KAN-16 `motionPath`, and text-reveal
      channels through `designer-doc/animation-clipboard.ts`; there is no separate renderer or preset
      model. Pasted keyframe/reveal/path times are normalized from source to target duration. Position

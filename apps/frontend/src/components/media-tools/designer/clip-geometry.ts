@@ -2,6 +2,7 @@ import type { VideoClip, VideoTrack } from './designer.store';
 import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { MIN_FIT_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { translateMotionPath } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
+import { interpolateClipKeyframes } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 
 /**
  * Writing a canvas drag or resize back onto a video clip.
@@ -327,15 +328,63 @@ export const clipGeometryUpdate = (
 
   const relativeMs = Math.max(0, playheadMs - clip.startMs);
   const keyframes = clip.keyframes || [];
-  const index = keyframes.findIndex(
-    (kf) => Math.abs(kf.tMs - relativeMs) <= KEYFRAME_EPSILON
+  let index = keyframes.findIndex(
+    (kf) => !kf.animationPreset && Math.abs(kf.tMs - relativeMs) <= KEYFRAME_EPSILON
   );
+  if (index < 0) {
+    index = keyframes.findIndex((kf) => Math.abs(kf.tMs - relativeMs) <= KEYFRAME_EPSILON);
+  }
 
   if (index >= 0) {
-    // Edit the keyframe the user is looking at. Props absent from it inherit the
-    // base value, so seed from the rendered box before applying the delta.
     const kf = keyframes[index];
     const next = [...keyframes];
+    if (kf.animationPreset) {
+      const category = kf.animationPreset.category;
+      const local = interpolateClipKeyframes({
+        ...clip,
+        keyframes: keyframes.filter((frame) => frame.animationPreset?.category === category),
+      }, relativeMs);
+      const currentBase = {
+        x: clip.x ?? 0,
+        y: clip.y ?? 0,
+        width: clip.width ?? 1,
+        height: clip.height ?? 1,
+        rotation: clip.rotation ?? 0,
+        fontSize: clip.fontSize ?? 16,
+      };
+      const presetBase = { ...currentBase, ...kf.animationPreset.base };
+      const stored = {
+        x: local.x - currentBase.x + presetBase.x,
+        y: local.y - currentBase.y + presetBase.y,
+        width: local.width * presetBase.width / Math.max(0.0001, currentBase.width),
+        height: local.height * presetBase.height / Math.max(0.0001, currentBase.height),
+        rotation: local.rotation - currentBase.rotation + presetBase.rotation,
+        fontSize: local.fontSize * presetBase.fontSize / Math.max(0.0001, currentBase.fontSize),
+      };
+      next[index] = {
+        ...kf,
+        props: {
+          ...kf.props,
+          x: stored.x + dx,
+          y: stored.y + dy,
+          width: stored.width * after.width / Math.max(0.0001, before.width),
+          height: stored.height * after.height / Math.max(0.0001, before.height),
+          rotation: stored.rotation + dr,
+          ...(scaleFont
+            ? {
+                fontSize: Math.min(
+                  MAX_FONT_SIZE,
+                  Math.max(MIN_FIT_FONT_SIZE, Math.round(stored.fontSize * fontScale))
+                ),
+              }
+            : {}),
+        },
+      };
+      return { keyframes: next };
+    }
+
+    // Manual frames override composed values, so the rendered box is already
+    // the local value this edit needs.
     next[index] = {
       ...kf,
       props: {
@@ -354,8 +403,14 @@ export const clipGeometryUpdate = (
   return {
     x: (clip.x ?? 0) + dx,
     y: (clip.y ?? 0) + dy,
-    width: Math.max(1, (clip.width ?? before.width) + dw),
-    height: Math.max(1, (clip.height ?? before.height) + dh),
+    width: Math.max(
+      1,
+      (clip.width ?? before.width) * after.width / Math.max(0.0001, before.width)
+    ),
+    height: Math.max(
+      1,
+      (clip.height ?? before.height) * after.height / Math.max(0.0001, before.height)
+    ),
     rotation: (clip.rotation ?? 0) + dr,
     ...(clip.motionPath ? { motionPath: translateMotionPath(clip.motionPath, dx, dy) } : {}),
     ...(scaleFont

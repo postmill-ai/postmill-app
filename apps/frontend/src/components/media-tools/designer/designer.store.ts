@@ -2461,7 +2461,8 @@ export const createDesignerStore = (
               clip.height ?? 1,
               previousDuration,
               clip.fontSize ?? 16,
-              textClip
+              textClip,
+              'exit'
             );
             const preset = TEXT_ANIMATION_PRESETS.find(
               (candidate) => candidate.name === presetName && candidate.category === 'exit'
@@ -2472,7 +2473,8 @@ export const createDesignerStore = (
                 keyframes: buildTextAnimationUpdate(
                   preset,
                   { ...clip, startMs: nextStart, endMs: nextEnd },
-                  textClip
+                  textClip,
+                  previousDuration
                 ).keyframes,
               };
             }

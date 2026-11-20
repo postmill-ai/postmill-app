@@ -442,6 +442,8 @@ test('Edit as Video preserves the source and opens a timed editable design throu
   expect(state.videoDoc.outputs).toHaveLength(3);
   expect(state.doc).toEqual(originalSource);
   expect(state.saveDocs).toHaveLength(0);
+});
+
 test('canvas-aware text defaults and auto-fit survive variants, reload, and export', async ({ page }) => {
   const doc = structuredClone(initialDoc) as any;
   doc.outputs[0].name = 'Small';
@@ -1697,6 +1699,8 @@ test('records, edits, and reloads a custom motion path with easing and Undo', as
   expect(persisted.ease).toBe('easeInOut');
   expect(persisted.followRotation).toBe(true);
   expect(persisted.points.length).toBeGreaterThanOrEqual(3);
+});
+
 test('inspector task tabs keep image AI drafts mounted and persist across reload', async ({ page }) => {
   await installMocks(page);
   await page.route('**/media/tools/status', (route) =>
@@ -1769,6 +1773,7 @@ test('mobile inspector sheet shares the task tabs and remembers them', async ({ 
   await editText(page);
   if (await inspectorButton.isVisible()) await inspectorButton.click();
   await expect(page.getByText('Text Styles', { exact: true })).toBeVisible();
+});
 
 test('page and format duplication reopen Pages and preserve exact linked content with Undo', async ({ page }) => {
   const doc = structuredClone(initialDoc) as any;
@@ -1969,4 +1974,46 @@ test('frozen and selected formats stay visually distinct without covering dimens
     dimensionsBox!.y + dimensionsBox!.height <= labelBox!.y
   );
   expect(overlaps).toBe(false);
+});
+
+test('entrance, emphasis, and exit animations remain independent through save and reopen', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+  const selectStillClip = async () => {
+    await fitContextMenuCanvas(page);
+    const point = await contextMenuCanvasPoint(page, 120, 260);
+    await page.mouse.click(point.x, point.y);
+    await expect(page.getByText('Animations', { exact: true })).toBeVisible();
+  };
+  const expectSelected = async () => {
+    for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    }
+  };
+
+  await selectStillClip();
+  for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+    await page.getByRole('button', { name, exact: true }).click();
+  }
+  await expectSelected();
+  await page.getByRole('button', { name: 'Fade Out', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Fade Out', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Fade Up', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Pulse', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Fade Out', exact: true }).click();
+  await expectSelected();
+
+  const savesBefore = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
+  const savedClip = (state.saveDocs.at(-1) as any).outputs[0].tracks[1].clips[0];
+  expect(savedClip.id).toBe('still-clip');
+  expect(savedClip.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 0, 300, 500, 600, 4500, 5000]);
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await selectStillClip();
+  await expectSelected();
+  expect(state.doc.outputs[0].tracks[1].clips[0].keyframes).toEqual(savedClip.keyframes);
 });

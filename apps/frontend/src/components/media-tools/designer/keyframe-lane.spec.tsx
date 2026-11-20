@@ -39,6 +39,27 @@ const storeWithClip = () => {
   return { store, trackId };
 };
 
+const combinedStoreWithClip = () => {
+  const result = storeWithClip();
+  result.store.getState().updateClipSilent(0, result.trackId, 'c1', {
+    keyframes: [
+      {
+        tMs: 1000,
+        props: { x: 10 },
+        ease: 'easeOut',
+        animationPreset: { name: 'Slide In Left', category: 'entrance' },
+      },
+      {
+        tMs: 1000,
+        props: { x: 20 },
+        ease: 'easeInOut',
+        animationPreset: { name: 'Shake', category: 'emphasis' },
+      },
+    ],
+  });
+  return result;
+};
+
 const clipOf = (store: ReturnType<typeof createDesignerStore>) =>
   (store.getState().doc.outputs[0] as VideoOutput).tracks[0].clips.find((c) => c.id === 'c1')!;
 
@@ -135,6 +156,55 @@ describe('KeyframeLane', () => {
     ]);
     expect(screen.queryByTestId('kf-lane-row-x')).toBeNull();
     expect(store.getState().history.length).toBe(depth + 1);
+  });
+
+  it('drags only the tagged frame selected at a shared timestamp', () => {
+    const { store } = combinedStoreWithClip();
+    renderLane(store);
+    fireEvent.mouseDown(screen.getByTestId('kf-diamond-x-1000-emphasis'), { button: 0, clientX: 500 });
+    fireEvent.mouseMove(window, { clientX: 700 });
+    fireEvent.mouseUp(window);
+
+    const frames = clipOf(store).keyframes!;
+    expect(frames.find((frame) => frame.animationPreset?.category === 'emphasis')?.tMs).toBe(1400);
+    expect(frames.find((frame) => frame.animationPreset?.category === 'entrance')?.tMs).toBe(1000);
+  });
+
+  it('keyboard-retimes only the tagged frame selected at a shared timestamp', () => {
+    const { store } = combinedStoreWithClip();
+    renderLane(store);
+    fireEvent.keyDown(screen.getByTestId('kf-diamond-x-1000-emphasis'), { key: 'ArrowRight' });
+
+    const frames = clipOf(store).keyframes!;
+    expect(frames.find((frame) => frame.animationPreset?.category === 'emphasis')?.tMs).toBe(1040);
+    expect(frames.find((frame) => frame.animationPreset?.category === 'entrance')?.tMs).toBe(1000);
+  });
+
+  it('re-eases only the tagged frame selected at a shared timestamp', () => {
+    const { store } = combinedStoreWithClip();
+    renderLane(store);
+    fireEvent.contextMenu(screen.getByTestId('kf-diamond-x-1000-emphasis'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ease In' }));
+
+    const frames = clipOf(store).keyframes!;
+    expect(frames.find((frame) => frame.animationPreset?.category === 'emphasis')?.ease).toBe('easeIn');
+    expect(frames.find((frame) => frame.animationPreset?.category === 'entrance')?.ease).toBe('easeOut');
+  });
+
+  it('deletes only the tagged frame property selected at a shared timestamp', () => {
+    const { store } = combinedStoreWithClip();
+    renderLane(store);
+    const diamond = screen.getByTestId('kf-diamond-x-1000-emphasis');
+    fireEvent.click(diamond);
+    fireEvent.keyDown(diamond, { key: 'Delete' });
+
+    const frames = clipOf(store).keyframes!;
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      tMs: 1000,
+      props: { x: 10 },
+      animationPreset: { name: 'Slide In Left', category: 'entrance' },
+    });
   });
 
   it('shows the hint when no clip is selected', () => {

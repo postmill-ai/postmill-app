@@ -364,6 +364,28 @@ describe('DesignerDoc schema', () => {
     expect(keyframes[1].props).toEqual({ opacity: 1 });
   });
 
+  it('preserves optional keyframe preset identity in strict and lenient modes', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].keyframes = [{
+      tMs: 0,
+      props: { opacity: 0 },
+      animationPreset: {
+        name: 'Fade Up',
+        category: 'entrance',
+        base: { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 24 },
+      },
+    }];
+
+    for (const schema of [DesignerDocStrictSchema, DesignerDocLenientSchema]) {
+      const parsed = schema.parse(migrateDoc(JSON.parse(JSON.stringify(doc))));
+      expect(parsed.outputs[0].tracks[0].clips[0].keyframes?.[0].animationPreset).toEqual({
+        name: 'Fade Up',
+        category: 'entrance',
+        base: { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 24 },
+      });
+    }
+  });
+
   it('parses a valid image doc strictly', () => {
     const parsed = DesignerDocStrictSchema.parse(migrateDoc(imageDocFixture));
     expect(parsed.mode).toBe('image');
