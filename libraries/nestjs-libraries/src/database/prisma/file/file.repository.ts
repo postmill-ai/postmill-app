@@ -86,6 +86,15 @@ function typeFilterClause(type: string) {
   };
 }
 
+function libraryVisibilityClauses(includeAiDesigner = false) {
+  return [
+    ...(!includeAiDesigner
+      ? [{ NOT: { metadata: { path: ['aiDesigner'], not: Prisma.AnyNull } } }]
+      : []),
+    { NOT: { metadata: { path: ['internal'], not: Prisma.AnyNull } } },
+  ];
+}
+
 @Injectable()
 export class FileRepository {
   private readonly _logger = new Logger(FileRepository.name);
@@ -430,20 +439,7 @@ export class FileRepository {
       deletedAt: null as null,
     };
 
-    const and: any[] = [];
-    if (!includeAiDesigner) {
-      // "metadata->>'aiDesigner' is unset" — AnyNull covers both a missing key
-      // and a JSON null value at the path.
-      and.push({
-        NOT: { metadata: { path: ['aiDesigner'], not: Prisma.AnyNull } },
-      });
-    }
-    // Preview thumbnails and composed design assets live as File rows but are
-    // system artifacts, not library content — always hidden, no opt-in, with
-    // the same "direct access unaffected" contract as the aiDesigner stamp.
-    and.push({
-      NOT: { metadata: { path: ['internal'], not: Prisma.AnyNull } },
-    });
+    const and: any[] = libraryVisibilityClauses(includeAiDesigner);
 
     if (trimmedSearch) {
       where.OR = [
@@ -736,6 +732,7 @@ export class FileRepository {
     const where: any = {
       organizationId: org,
       deletedAt: null as null,
+      AND: libraryVisibilityClauses(),
       OR: [
         { name: { contains: query, mode: 'insensitive' } },
         { originalName: { contains: query, mode: 'insensitive' } },
@@ -775,6 +772,7 @@ export class FileRepository {
     const where = {
       organizationId: org,
       deletedAt: null as null,
+      AND: libraryVisibilityClauses(),
       folderId,
     };
 

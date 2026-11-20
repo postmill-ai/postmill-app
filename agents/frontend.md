@@ -532,6 +532,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   replaces/inserts adjacent layers; still-video Apply uses adjacent tracks. Both commit once, select
   only the subject, and delete the temporary inpaint-mask File. It does not claim moving-subject
   extraction from video footage.
+  Every Designer-created working raster (paint, pixel/smart-filter output, layer/cutout/inpaint masks,
+  Magic Grab reconstruction files, and materialized inline rasters) carries `internal: 'design-asset'`.
+  `commitCanvas` applies the stamp on both size-switched upload endpoints. Ordinary list, search, and
+  folder queries hide internal and AI Designer working rows, while org-scoped direct ID/path reads keep
+  saved documents, history, versions, templates, and renderers working. Never stamp user imports or
+  exported deliverables, and do not reclassify legacy rows whose ownership cannot be established.
   Outpainting (`outpaint.ts`) uses one prepare/review/Apply candidate flow for selected images and
   whole pages. The dialog owns pending/error state and blocks duplicate requests. Directional input
   is the exact cropped/cover display frame, restored from the same bitmap; canonical mode geometry

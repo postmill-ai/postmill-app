@@ -45,6 +45,13 @@ describe('materializeDesignerInlineAssets', () => {
     expect(result.createdFileIds).toEqual(['file-1']);
     expect(adapter.writeBuffer).toHaveBeenCalledTimes(1);
     expect(fileService.saveGeneratedMedia).toHaveBeenCalledTimes(1);
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledWith('org-1', expect.objectContaining({
+      metadata: expect.objectContaining({
+        internal: 'design-asset',
+        source: 'designer-inline',
+        designerInlineSha256: expect.any(String),
+      }),
+    }));
     expect(result.doc).toMatchObject({
       outputs: [{
         children: [{ id: 'one', src: '/uploads/org-1/inline.png', fileId: 'file-1' }],

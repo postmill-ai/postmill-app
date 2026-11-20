@@ -292,6 +292,7 @@ class DesignerMocks {
   readonly generatePosts: string[] = [];
   readonly backgroundRemovalPosts: string[] = [];
   readonly maskUploads = new Map<string, Buffer>();
+  readonly maskUploadInternal = new Map<string, string | null>();
   readonly assistantCopyPosts: string[] = [];
   readonly assistantSuggestionPosts: string[] = [];
   readonly unexpectedProviderPosts: string[] = [];
@@ -891,7 +892,13 @@ class DesignerMocks {
           const end = raw.lastIndexOf(Buffer.from('\r\n--'));
           const fileId = `mask-file-${this.maskUploads.size + 1}`;
           const path = `/mock-masks/${fileId}.png`;
+          const internal = multipart.match(/name="internal"\r\n\r\n([^\r]+)/)?.[1] || null;
+          this.maskUploadInternal.set(path, internal);
           this.maskUploads.set(path, raw.subarray(start, end));
+          if (internal !== 'design-asset') {
+            await json(route, { message: 'Designer working masks must be internal' }, 400);
+            return;
+          }
           await json(route, { id: fileId, path });
           return;
         }
@@ -3836,6 +3843,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.savedClips()[0].maskSrc).toContain('/mock-masks/');
+    expect([...mocks.maskUploadInternal.values()]).toEqual(['design-asset']);
     expect(mocks.savedClips()[0]).toMatchObject({
       src: CUTOUT_SOURCE_URL,
       fileId: 'source-file',
@@ -3869,6 +3877,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
     await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 150)).toEqual([0, 0, 255, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 150, 150)).toEqual([255, 0, 0, 255]);
     await expect.poll(() => renderedFrameRgba(page, mocks, 250, 150)).toEqual([0, 0, 255, 255]);
+    expect([...mocks.maskUploadInternal.values()]).toEqual(['design-asset', 'design-asset']);
     mocks.expectClean();
   });
 });

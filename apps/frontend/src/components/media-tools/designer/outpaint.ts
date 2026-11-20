@@ -244,7 +244,7 @@ export const prepareAiOutpaint = async ({
       fitMode: 'fill',
     },
   });
-  const uploaded = await commitCanvas(canvas, `${before.id}:outpaint`, fetch, { internal: 'design-asset' });
+  const uploaded = await commitCanvas(canvas, `${before.id}:outpaint`, fetch);
   if (!uploaded) throw new Error('The expanded image could not be saved.');
   const candidate: OutpaintCandidate = {
     kind: 'image',
@@ -423,7 +423,7 @@ export const prepareWholePageOutpaint = async ({
     targetNatural: { width: targetWidth, height: targetHeight },
     originalPage: { x: offsetX, y: offsetY, width: output.width, height: output.height },
   });
-  const uploaded = await commitCanvas(extensionCanvas, `${before.id}:outpaint-page`, fetch, { internal: 'design-asset' });
+  const uploaded = await commitCanvas(extensionCanvas, `${before.id}:outpaint-page`, fetch);
   if (!uploaded) throw new Error('The expanded page could not be saved.');
   const candidate: OutpaintCandidate = {
     kind: 'page',

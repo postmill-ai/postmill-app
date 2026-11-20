@@ -74,6 +74,7 @@ export const materializeDesignerInlineAssets = async (
         type: 'image',
         fileSize: parsed.buffer.length,
         metadata: {
+          internal: 'design-asset',
           source: 'designer-inline',
           designerInlineSha256: hash,
           mime: parsed.mime,

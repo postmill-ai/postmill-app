@@ -118,7 +118,7 @@ describe('image expansion', () => {
     expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toMatchObject({
       imageUrl: 'data:image/png;base64,AAAA', mode: 'left', prompt: 'more field',
     });
-    expect(commitCanvas).toHaveBeenCalledWith({}, 'image-1:outpaint', fetch, { internal: 'design-asset' });
+    expect(commitCanvas).toHaveBeenCalledWith({}, 'image-1:outpaint', fetch);
   });
 
   it('preserves the production crop, aspect ratio, Undo, and serialized reopen despite provider dimensions', async () => {
@@ -303,7 +303,7 @@ describe('whole-page expansion', () => {
       targetNatural: { width: 1500, height: 750 },
       originalPage: { x: 250, y: 125, width: 1000, height: 500 },
     });
-    expect(commitCanvas).toHaveBeenCalledWith({}, 'image-1:outpaint-page', fetch, { internal: 'design-asset' });
+    expect(commitCanvas).toHaveBeenCalledWith({}, 'image-1:outpaint-page', fetch);
 
     expect(applyWholePageOutpaint({ store, candidate })).toBe(true);
     const output = store.getState().doc.outputs[0] as any;

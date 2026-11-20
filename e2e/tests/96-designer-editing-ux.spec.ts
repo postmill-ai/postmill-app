@@ -152,6 +152,10 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     uploads: 0,
     deletedFiles: [] as string[],
     uploadPath: PNG_DATA_URL,
+    uploadRecords: [] as Array<{ id: string; name: string; internal: string | null; path: string }>,
+    libraryFiles: [] as Array<Record<string, unknown>>,
+    mediaOperations: {} as Record<string, { available: boolean }>,
+    inpaintCalls: [] as Array<Record<string, unknown>>,
   };
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -180,7 +184,19 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       return json(route, {});
     }
     if (method === 'GET' && pathname === '/media/tools/status') {
-      return json(route, { operations: {}, tools: { 'text-to-image': { available: true } } });
+      return json(route, { operations: state.mediaOperations, tools: { 'text-to-image': { available: true } } });
+    }
+    // Navigating to the Files page is a document request for the same path.
+    if (method === 'GET' && pathname === '/files' && request.resourceType() !== 'document') {
+      const search = url.searchParams.get('search')?.toLowerCase() || '';
+      const results = state.libraryFiles.filter((file) =>
+        !search || String(file.originalName || file.name).toLowerCase().includes(search));
+      return json(route, { pages: 1, results });
+    }
+    if (method === 'GET' && pathname === '/files/search') {
+      const search = String(url.searchParams.get('q') || '').toLowerCase();
+      return json(route, state.libraryFiles.filter((file) =>
+        String(file.originalName || file.name).toLowerCase().includes(search)));
     }
     if (method === 'GET' && pathname === '/files') {
       return json(route, {
@@ -273,12 +289,29 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg==', 'base64'),
       });
     }
-    if (method === 'POST' && pathname === '/files/upload-simple') {
-      if (request.postDataBuffer()?.includes(Buffer.from('design-preview'))) {
+    if (method === 'POST' && ['/files/upload-simple', '/files/upload-server'].includes(pathname)) {
+      const multipart = request.postDataBuffer()?.toString('latin1') || '';
+      const internal = multipart.match(/name="internal"\r\n\r\n([^\r]+)/)?.[1] || null;
+      const name = multipart.match(/name="file"; filename="([^"]+)"/)?.[1] || `upload-${state.uploads + 1}`;
+      if (internal === 'design-preview') {
+        state.uploadRecords.push({ id: 'design-preview-file', name, internal, path: PNG_DATA_URL });
         return json(route, { id: 'design-preview-file', path: PNG_DATA_URL }, 201);
       }
       state.uploads++;
-      return json(route, { id: `dropped-file-${state.uploads}`, path: state.uploadPath });
+      const id = `dropped-file-${state.uploads}`;
+      state.uploadRecords.push({ id, name, internal, path: state.uploadPath });
+      if (!internal) {
+        state.libraryFiles.push({
+          id, name, originalName: name, path: state.uploadPath, type: 'image',
+          fileSize: 128, createdAt: '2026-11-18T00:00:00.000Z', folderId: null,
+        });
+      }
+      return json(route, { id, path: state.uploadPath });
+    }
+    if (method === 'POST' && pathname === '/media/inpaint') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      state.inpaintCalls.push(body);
+      return json(route, { url: PNG_DATA_URL });
     }
     if (method === 'POST' && pathname === '/media/generate-image-with-prompt') {
       state.generationCalls++;
@@ -2170,4 +2203,113 @@ test('video canvas background color survives undo, reload, and Add Format', asyn
   await page.keyboard.press('Control+s');
   await expect.poll(() => state.saveDocs.length).toBeGreaterThan(saves);
   expect((state.saveDocs.at(-1) as any).outputs[1].bg).toEqual({ type: 'color', color: '#B61A32' });
+});
+
+async function editingCanvasPoint(page: Page, x: number, y: number) {
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  return {
+    x: box.x + (box.width - 400 * scale) / 2 + x * scale,
+    y: box.y + (box.height - 400 * scale) / 2 + y * scale,
+  };
+}
+
+async function selectEditingLayer(page: Page, id: string) {
+  await page.getByRole('tab', { name: 'Layers', exact: true }).click();
+  await page.locator(`[data-element-id="${id}"]`).click();
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+}
+
+test('paint working files retain references but stay out of Files while exports remain visible', async ({ page }) => {
+  const doc: any = structuredClone(initialDoc);
+  doc.outputs[0].children.push({
+    id: 'empty-paint', type: 'raster', name: 'Paint layer', x: 0, y: 0,
+    width: 400, height: 400, rotation: 0, opacity: 1, locked: false, hidden: false,
+  });
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+  await selectEditingLayer(page, 'empty-paint');
+
+  const canvas = page.getByRole('application', { name: 'Design canvas' });
+  await canvas.press('b');
+  const from = await editingCanvasPoint(page, 100, 100);
+  const to = await editingCanvasPoint(page, 180, 140);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 4 });
+  await page.mouse.up();
+
+  await expect.poll(() => state.uploadRecords.some((file) => file.name === 'paint-empty-paint.png')).toBe(true);
+  const paint = state.uploadRecords.find((file) => file.name === 'paint-empty-paint.png')!;
+  expect(paint.internal).toBe('design-asset');
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint')?.fileId)
+    .toBe(paint.id);
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint')?.fileId)
+    .toBeUndefined();
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint')?.fileId)
+    .toBe(paint.id);
+
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.locator('.konva-stage').first()).toBeVisible({ timeout: 60_000 });
+  expect(state.doc.outputs[0].children.find((child: any) => child.id === 'empty-paint').fileId).toBe(paint.id);
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save to Files' }).click();
+  await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
+  await page.getByRole('button', { name: 'Next: Export 1 file' }).click();
+  await page.getByRole('button', { name: 'Export 1 file', exact: true }).click();
+  await expect(page.getByRole('link', { name: /\.png$/ })).toBeVisible();
+  expect(JSON.stringify(state.renderDocs.at(-1))).toContain(paint.id);
+  const exported = state.libraryFiles.at(-1)!;
+  expect(state.uploadRecords.find((file) => file.id === exported.id)?.internal).toBeNull();
+  expect(state.libraryFiles.some((file) => file.id === paint.id)).toBe(false);
+
+  await page.goto('/files');
+  await expect(page.getByText(String(exported.originalName), { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(paint.name, { exact: true })).toHaveCount(0);
+});
+
+test('inpaint masks are internal while ordinary image replacements stay visible through reload', async ({ page }) => {
+  const state = await installMocks(page);
+  state.mediaOperations = { inpaint: { available: true } };
+  await openDesigner(page);
+  await selectEditingLayer(page, 'drop-target');
+
+  await page.getByPlaceholder('Inpaint prompt...').fill('Replace the selected area');
+  await page.getByRole('button', { name: 'Draw mask…', exact: true }).click();
+  await expect(page.locator('[data-workspace-panel="inspector"] canvas')).toBeVisible();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByText('Mask ready', { exact: true })).toBeVisible();
+
+  const mask = state.uploadRecords.find((file) => file.name.startsWith('mask-'))!;
+  expect(mask.internal).toBe('design-asset');
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
+  await expect.poll(() => state.inpaintCalls.length).toBe(1);
+  expect(state.inpaintCalls[0].maskUrl).toBe(mask.path);
+
+  await dropPng(page, 120, 260, true);
+  await expect.poll(() => state.uploadRecords.some((file) => file.name === 'replacement')).toBe(true);
+  const replacement = state.uploadRecords.find((file) => file.name === 'replacement')!;
+  await expect.poll(() => state.doc.outputs[0].children.find((child: any) => child.id === 'drop-target')?.fileId)
+    .toBe(replacement.id);
+  expect(replacement.internal).toBeNull();
+  expect(state.libraryFiles.map((file) => file.id)).toEqual([replacement.id]);
+
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.locator('.konva-stage').first()).toBeVisible({ timeout: 60_000 });
+  expect(state.doc.outputs[0].children.find((child: any) => child.id === 'drop-target').fileId)
+    .toBe(replacement.id);
+
+  await page.goto('/files');
+  await expect(page.getByText(replacement.name, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(mask.name, { exact: true })).toHaveCount(0);
 });
