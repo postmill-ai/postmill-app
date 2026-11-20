@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NotFoundException } from '@nestjs/common';
 import { StorageProviderType } from '@prisma/client';
 
 const adapterMock = {
@@ -120,6 +121,25 @@ describe('StorageService — credential sanitization (#54)', () => {
 
     expect(result[0]).not.toHaveProperty('credentials');
     expect(result[0]).toHaveProperty('id', 'local-1');
+  });
+});
+
+describe('StorageService — organization-scoped configuration lookup', () => {
+  it.each([
+    ['missing', undefined],
+    ['another organization\'s', { ...localConfig, organizationId: 'org-2' }],
+  ])('returns 404 for a %s configuration without mutating it', async (_case, config) => {
+    const repo = makeRepo({ findById: vi.fn().mockResolvedValue(config) });
+    const service = makeStorageService(repo);
+
+    const error = await service
+      .unmount('local-1', 'org-1')
+      .catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect(error).toMatchObject({ status: 404 });
+    expect(repo.removeOrDetachMountFolders).not.toHaveBeenCalled();
+    expect(repo.update).not.toHaveBeenCalled();
   });
 });
 

@@ -25,6 +25,7 @@ export const initializeSentryBasic = (
         : 0.25;
 
   const ignorePatterns = [
+    /^signal is aborted without reason$/i,
     /^Failed to fetch$/,
     /^Failed to fetch .*/i,
     /^Load failed$/i,

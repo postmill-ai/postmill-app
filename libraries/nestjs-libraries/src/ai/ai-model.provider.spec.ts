@@ -526,6 +526,56 @@ describe('AIModelProvider', () => {
       );
     });
 
+    it('normalizes an upstream failure from the fallback image provider', async () => {
+      const upstreamError: any = new Error('No credits');
+      upstreamError[Symbol.for('vercel.ai.error.AI_APICallError')] = true;
+      upstreamError.statusCode = 429;
+      upstreamError.responseBody = '{"error":{"message":"You have no credits remaining."}}';
+      upstreamError.isRetryable = false;
+      const createFallbackImageModel = vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockRejectedValue(upstreamError),
+      });
+      const primaryAdapter = {
+        identifier: 'anthropic',
+        name: 'Anthropic',
+        credentialFields: [{ key: 'apiKey' }],
+        createLanguageModel: vi.fn(),
+        createLangchainModel: vi.fn(),
+      };
+      const fallbackAdapter = {
+        identifier: 'openai',
+        name: 'OpenAI',
+        credentialFields: [{ key: 'apiKey' }],
+        createImageModel: createFallbackImageModel,
+      };
+      (resolution.resolveAI as any).mockImplementation((id: string) =>
+        id === 'anthropic' ? primaryAdapter : id === 'openai' ? fallbackAdapter : undefined
+      );
+      (settingsManager.getSettings as any).mockResolvedValue({
+        ...mockSettings,
+        fallbackImageProvider: 'openai',
+      });
+      mockGetActiveProvider.mockResolvedValue({
+        identifier: 'anthropic',
+        defaultModel: 'claude-sonnet-4-20260514',
+        credentials: { apiKey: 'sk-anthropic' },
+      });
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-openai-own' },
+        defaultModel: 'gpt-4o',
+      });
+
+      const model = await provider.imageModel('utility', 'org-123');
+      const caught = await model.generate('test prompt').catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(ProviderUpstreamError);
+      expect(caught).toMatchObject({
+        kind: 'quota',
+        upstreamStatus: 429,
+        ctx: { domain: 'ai', providerId: 'openai', providerName: 'OpenAI' },
+      });
+    });
+
     it('uses the org-resolved text-to-image media default when it belongs to the active provider', async () => {
       const createGatewayImageModel = vi.fn().mockReturnValue({
         doGenerate: vi.fn().mockResolvedValue({ images: ['hub-image'] }),
@@ -639,6 +689,31 @@ describe('AIModelProvider', () => {
         .catch((e) => (caught = e));
       expect(caught).toBeInstanceOf(ProviderUpstreamError);
       expect(caught.kind).toBe('quota');
+    });
+
+    it('imageModel generate: a 429 credit error becomes an attributed quota error', async () => {
+      const doGenerate = vi.fn().mockRejectedValue(
+        apiCallError(429, '{"error":{"message":"You have no credits remaining."}}')
+      );
+      (resolution.resolveAI as any).mockReturnValue({
+        identifier: 'openai',
+        name: 'OpenAI',
+        credentialFields: [{ key: 'apiKey', required: true }],
+        createImageModel: vi.fn().mockReturnValue({ doGenerate }),
+      });
+
+      const model = await provider.imageModel('utility', 'org-123');
+      const caught = await model.generate('test prompt').catch((error: unknown) => error);
+
+      expect(caught).toBeInstanceOf(ProviderUpstreamError);
+      expect(caught).toMatchObject({
+        kind: 'quota',
+        upstreamStatus: 429,
+        ctx: { domain: 'ai', providerId: 'openai', providerName: 'OpenAI' },
+      });
+      expect(caught.message).toBe(
+        "OpenAI reports the account's quota or billing limit was reached (HTTP 429): You have no credits remaining."
+      );
     });
 
     it('generateTextWithModel / generateObjectWithModel: convert too and record the health error', async () => {
