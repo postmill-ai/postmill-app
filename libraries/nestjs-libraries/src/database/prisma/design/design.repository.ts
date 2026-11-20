@@ -1,6 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
+const templateSearchWhere = (query?: string) => {
+  const search = query?.trim();
+  if (!search) return {};
+  return {
+    AND: [{
+      OR: [
+        { name: { contains: search, mode: 'insensitive' as const } },
+        { category: { contains: search, mode: 'insensitive' as const } },
+      ],
+    }],
+  };
+};
+
 @Injectable()
 export class DesignRepository {
   constructor(
@@ -147,20 +160,24 @@ export class DesignRepository {
   // No page/limit = the historical full list (callers that group/bucket the
   // whole gallery in memory). Both present = one page plus a count via
   // countTemplatesByOrg.
-  async findTemplatesByOrg(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org') {
+  async findTemplatesByOrg(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org', query?: string) {
+    const search = query?.trim();
     if (brandProfileId) {
       const paginated = page !== undefined && limit !== undefined;
+      const searchParameter = paginated ? 5 : 3;
       const ordered = await (this._designTemplate.model as any).$queryRawUnsafe(
         `SELECT "id"
          FROM "DesignTemplate"
          WHERE "deletedAt" IS NULL
            AND ${scope === 'org' ? '"organizationId" = $1' : '("organizationId" = $1 OR "isSystem" = true)'}
+           ${search ? `AND (POSITION(LOWER($${searchParameter}) IN LOWER("name")) > 0 OR POSITION(LOWER($${searchParameter}) IN LOWER(COALESCE("category", ''))) > 0)` : ''}
          ORDER BY CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END,
                   "isSystem" DESC, "name" ASC, "id" ASC
          ${paginated ? 'LIMIT $3 OFFSET $4' : ''}`,
         orgId,
         brandProfileId,
         ...(paginated ? [limit, (page - 1) * limit] : []),
+        ...(search ? [search] : []),
       ) as Array<{ id: string }>;
       if (!ordered.length) return [];
       const templates = await this._designTemplate.model.designTemplate.findMany({
@@ -176,6 +193,7 @@ export class DesignRepository {
         ...(scope === 'org'
           ? { organizationId: orgId }
           : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
+        ...templateSearchWhere(search),
       },
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
       ...(page !== undefined && limit !== undefined
@@ -185,13 +203,14 @@ export class DesignRepository {
     });
   }
 
-  countTemplatesByOrg(orgId: string, scope?: 'org') {
+  countTemplatesByOrg(orgId: string, scope?: 'org', query?: string) {
     return this._designTemplate.model.designTemplate.count({
       where: {
         deletedAt: null,
         ...(scope === 'org'
           ? { organizationId: orgId }
           : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
+        ...templateSearchWhere(query),
       },
     });
   }

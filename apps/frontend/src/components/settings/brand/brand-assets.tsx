@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
@@ -15,20 +15,12 @@ import {
   useUploadCustomFont,
 } from '@postmill-ai/frontend/components/media-tools/designer/panels/use-brand-fonts';
 import type { Brand, BrandAsset } from './use-brands';
+import { BrandTemplates } from './brand-templates';
 
 interface FileItem {
   id: string;
   path: string;
   name: string;
-}
-
-interface BrandTemplate {
-  id: string;
-  name: string;
-  category?: string | null;
-  isSystem: boolean;
-  brandProfileId?: string | null;
-  thumbnail?: string | null;
 }
 
 export const BrandAssets = ({
@@ -79,56 +71,6 @@ export const BrandAssets = ({
     () => new Map((files?.results || []).map((file) => [file.id, file])),
     [files],
   );
-  const { data: templateData, mutate: mutateTemplates } = useSWR(
-    `brand-studio-templates-${brandId}`,
-    async () => {
-      const res = await fetch(`/media/design-templates?page=1&limit=24&scope=org&brandId=${encodeURIComponent(brandId)}`);
-      if (!res.ok) throw new Error('Failed to load brand templates');
-      return res.json() as Promise<{ templates: BrandTemplate[]; total: number }>;
-    },
-    { revalidateOnFocus: false },
-  );
-  const [extraTemplates, setExtraTemplates] = useState<BrandTemplate[]>([]);
-  const [templatePage, setTemplatePage] = useState(1);
-  const [loadingMoreTemplates, setLoadingMoreTemplates] = useState(false);
-  useEffect(() => {
-    setExtraTemplates([]);
-    setTemplatePage(1);
-  }, [brandId]);
-  const orgTemplates = useMemo(
-    () => [...(templateData?.templates || []), ...extraTemplates].filter((template) => !template.isSystem),
-    [templateData, extraTemplates],
-  );
-  const hasMoreTemplates = orgTemplates.length < (templateData?.total || 0);
-  const loadMoreTemplates = useCallback(async () => {
-    setLoadingMoreTemplates(true);
-    try {
-      const next = templatePage + 1;
-      const res = await fetch(`/media/design-templates?page=${next}&limit=24&scope=org&brandId=${encodeURIComponent(brandId)}`);
-      if (!res.ok) return;
-      const body = await res.json() as { templates: BrandTemplate[] };
-      setExtraTemplates((current) => [...current, ...(body.templates || [])]);
-      setTemplatePage(next);
-    } finally {
-      setLoadingMoreTemplates(false);
-    }
-  }, [brandId, fetch, templatePage]);
-  const assignTemplate = useCallback(async (template: BrandTemplate, assign: boolean) => {
-    if (!canEdit) return;
-    const res = await fetch(`/media/design-templates/${template.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ brandProfileId: assign ? brandId : null }),
-    });
-    if (!res.ok) {
-      toaster.show(t('brand_template_assignment_failed', 'Failed to update brand template'), 'warning');
-      return;
-    }
-    setExtraTemplates([]);
-    setTemplatePage(1);
-    await mutateTemplates();
-    toaster.show(t('brand_template_updated', 'Brand template updated'), 'success');
-  }, [brandId, canEdit, fetch, mutateTemplates, toaster, t]);
-
   const addColor = useCallback(() => {
     const color = newColor.trim().toLowerCase();
     if (/^#[0-9a-f]{6}$/.test(color) && !palette.includes(color)) {
@@ -344,45 +286,7 @@ export const BrandAssets = ({
         </div>
       </section>
 
-      <section className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
-        <div>
-          <div className="text-[13px]">{t('brand_templates', 'Brand templates')}</div>
-          <div className="text-[12px] text-newTableText">{t('brand_templates_hint', 'Templates assigned to this brand appear first in Brand Mode. Shared templates stay available in General Mode.')}</div>
-        </div>
-        <div className="flex flex-col gap-[8px]">
-          {orgTemplates.filter((template) => template.brandProfileId === brandId).map((template) => (
-            <div key={template.id} className="flex items-center justify-between border border-newTableBorder rounded-[8px] px-[12px] py-[8px]">
-              <div>
-                <div className="text-[13px]">{template.name}</div>
-                <div className="text-[11px] text-newTableText">{template.category}</div>
-              </div>
-              {canEdit && <button onClick={() => assignTemplate(template, false)} className="text-[12px] text-dangerText">{t('unassign', 'Unassign')}</button>}
-            </div>
-          ))}
-          {!orgTemplates.some((template) => template.brandProfileId === brandId) && (
-            <div className="text-[12px] text-newTableText">{t('no_brand_templates', 'No templates assigned to this brand yet.')}</div>
-          )}
-        </div>
-        {canEdit && orgTemplates.some((template) => template.brandProfileId !== brandId) && (
-          <div className="flex flex-wrap gap-[8px]">
-            {orgTemplates.filter((template) => template.brandProfileId !== brandId).map((template) => (
-              <button key={template.id} onClick={() => assignTemplate(template, true)} className="border border-newTableBorder rounded-[6px] px-[8px] py-[5px] text-[12px] hover:bg-boxHover">
-                {t('assign_template', 'Assign {{name}}', { name: template.name })}
-              </button>
-            ))}
-          </div>
-        )}
-        {hasMoreTemplates && (
-          <button
-            type="button"
-            onClick={loadMoreTemplates}
-            disabled={loadingMoreTemplates}
-            className="self-start border border-newTableBorder rounded-[6px] px-[10px] py-[6px] text-[12px] hover:bg-boxHover disabled:opacity-60"
-          >
-            {loadingMoreTemplates ? t('loading', 'Loading...') : t('templates_panel_load_more', 'Load more')}
-          </button>
-        )}
-      </section>
+      <BrandTemplates brandId={brandId} canEdit={canEdit} />
 
       <section className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
         <div className="text-[13px]">{t('brand_fonts', 'Brand fonts')}</div>

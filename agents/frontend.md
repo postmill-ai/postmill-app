@@ -772,7 +772,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   modal manager renders outside the Designer's React subtree, so context from the caller is not retained.
   Selected-brand template priority is applied in the repository before pagination, not by sorting
   the loaded page. Brand Studio fetches only referenced file IDs and loads org-scoped template pages
-  on demand (`scope=org`), never the whole library on open.
+  on demand (`scope=org`), never the whole library on open. Template name/category search uses the
+  same bounded server-side pages; loaded pages are reconciled by template id before assignment
+  sections are derived.
 - **Custom font batches are sequential and brand-scoped.** Both the Brand panel and shared family picker accept
   multiple TTF/OTF/WOFF2 files through `useUploadCustomFont(brandId).uploadMany`: validate and post each
   file through the existing single-file endpoint, continue after individual failures, expose

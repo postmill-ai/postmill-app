@@ -143,6 +143,12 @@ not run it against another origin. The workflow runs PRs and `main` pushes only;
 it must never become a required check. Add later Designer specs to this config only after making them
 equally self-contained. Never run this config, its `webServer`, or `next start` on a production host.
 
+`playwright.brand-studio-ci.config.ts` and the `production-brand-studio` job in that workflow provide
+the same GitHub-hosted production-build path for `98-brand-studio.spec.ts`. Its storage state contains
+only a mock loopback auth cookie; the spec stubs identity, org-scoped paged templates, assignments,
+and provider traffic. The config refuses to load outside GitHub Actions. Never run it, its `webServer`,
+or Playwright on the production host.
+
 `96-designer-editing-ux.spec.ts` also has `playwright.designer-editing.config.ts` for its
 network-mocked canvas interaction cases. Only with `E2E_SKIP_AUTH_SETUP=1` does the spec install a
 mock-only auth cookie; real-session configs keep their saved session. It mocks identity, organization,

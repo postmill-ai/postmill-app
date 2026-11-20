@@ -690,11 +690,12 @@ export class DesignTemplateController {
     @Query('limit') limit?: string,
     @Query('brandId') brandId?: string,
     @Query('scope') scope?: 'org',
+    @Query('query') query?: string,
   ) {
     // No params = the historical plain-array response (older clients and other
     // callers depend on the shape). Either param present = one bounded page.
     if (page === undefined && limit === undefined) {
-      return this._designService.listTemplates(org.id, undefined, undefined, brandId, scope);
+      return this._designService.listTemplates(org.id, undefined, undefined, brandId, scope, query);
     }
     const pageNum = Number(page);
     const limitNum = Number(limit);
@@ -703,7 +704,7 @@ export class DesignTemplateController {
       Number.isFinite(limitNum) && limitNum >= 1
         ? Math.min(100, Math.floor(limitNum))
         : 24;
-    return this._designService.listTemplates(org.id, safePage, safeLimit, brandId, scope);
+    return this._designService.listTemplates(org.id, safePage, safeLimit, brandId, scope, query);
   }
 
   @Get('/:id')

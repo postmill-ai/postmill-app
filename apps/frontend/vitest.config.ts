@@ -48,6 +48,7 @@ export default defineConfig({
       'src/components/shared/**/*.spec.{ts,tsx}',
       'src/components/ai/**/*.spec.{ts,tsx}',
       'src/components/settings/shortlinks/**/*.spec.{ts,tsx}',
+      'src/components/settings/brand/**/*.spec.{ts,tsx}',
       'src/components/settings/comms/**/*.spec.{ts,tsx}',
       'src/components/settings/ai/**/*.spec.{ts,tsx}',
       'src/components/settings/shared/kit/*.spec.{ts,tsx}',
