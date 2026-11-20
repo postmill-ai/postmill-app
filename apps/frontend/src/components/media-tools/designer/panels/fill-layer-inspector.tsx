@@ -10,6 +10,7 @@ import type {
   DesignerGradient,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 /**
  * The settings of a fill layer.
@@ -23,7 +24,8 @@ export const FillLayerInspector: FC<{
   element: DesignerElement;
   ids: string[];
   store: any;
-}> = ({ element, ids, store }) => {
+  tab?: InspectorTabKey;
+}> = ({ element, ids, store, tab }) => {
   const t = useT();
   const brandColors = useBrandColors();
   const brandEnforcement = store((s: any) => s.brandEnforcement);
@@ -34,11 +36,7 @@ export const FillLayerInspector: FC<{
     updateElements(ids, { fillStyle: { ...style, ...next } } as Partial<DesignerElement>);
 
   return (
-    <div className="space-y-3">
-      <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-        {t('designer_fill_heading', 'Fill')}
-      </div>
-
+    <InspectorTabGroup for="style" active={tab}>
       <SegmentedControl
         value={style.type}
         options={[
@@ -64,6 +62,6 @@ export const FillLayerInspector: FC<{
           brandEnforcement={brandEnforcement}
         />
       )}
-    </div>
+    </InspectorTabGroup>
   );
 };

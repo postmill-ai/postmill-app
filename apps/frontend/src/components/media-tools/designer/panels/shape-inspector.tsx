@@ -14,11 +14,13 @@ import { ShadowSection, BackdropSection } from './shadow-section';
 import { FillSection } from './fill-section';
 import { CornerRadiusControl } from './corner-radius-control';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 interface ShapeInspectorProps {
   element: DesignerElement;
   ids: string[];
   store: any;
+  tab?: InspectorTabKey;
 }
 
 /** The three dash patterns worth a one-click preset; the rest is Illustrator. */
@@ -41,6 +43,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
   element,
   ids,
   store,
+  tab,
 }) => {
   const t = useT();
   const updateElements = store((s: any) => s.updateElements);
@@ -65,10 +68,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-        {isPath ? t('designer_path_heading', 'Path') : t('designer_shape_heading', 'Shape')}
-      </div>
-
+      <InspectorTabGroup for="style" active={tab}>
       {canFill && (
         <FillSection
           element={element}
@@ -233,6 +233,9 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
         )}
       </div>
 
+      </InspectorTabGroup>
+
+      <InspectorTabGroup for="layout" active={tab}>
       {/* Star points and polygon sides were set once from the tool options bar
           at creation and appeared in NO inspector — draw a five-point star and
           you could never make it six. */}
@@ -265,7 +268,9 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
           onChange={(n) => set({ sides: n })}
         />
       )}
+      </InspectorTabGroup>
 
+      <InspectorTabGroup for="style" active={tab}>
       {/* borderRadius is a Rect prop — neither renderer reads it for a path. */}
       {!isPath && (
         <CornerRadiusControl
@@ -284,6 +289,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
         brandColors={brandColors}
         brandEnforcement={brandEnforcement}
       />
+      </InspectorTabGroup>
     </div>
   );
 };
