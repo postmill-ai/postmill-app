@@ -1054,15 +1054,19 @@ export const createDesignerStore = (
       requestRename: (id) => mutate({ renamingId: id }),
 
       setOutputBackground: (bg, commit = true) => {
-        if (isVideoMode() || isOutputFrozen(activeImage())) return;
         const { doc, currentOutput } = get();
         const outs = [...doc.outputs];
-        const out = outs[currentOutput] as DesignerOutput;
-        outs[currentOutput] = {
-          ...out,
-          background: bg.type === 'color' && bg.color ? bg.color : out.background,
-          bg,
-        };
+        const out = outs[currentOutput];
+        if (!out || isOutputFrozen(out)) return;
+        outs[currentOutput] = doc.mode === 'video'
+          ? { ...(out as VideoOutput), bg }
+          : {
+              ...(out as DesignerOutput),
+              background: bg.type === 'color' && bg.color
+                ? bg.color
+                : (out as DesignerOutput).background,
+              bg,
+            };
         mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
         if (commit) get().pushHistory();
       },

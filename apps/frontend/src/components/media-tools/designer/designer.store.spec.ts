@@ -341,6 +341,42 @@ describe('rename requests', () => {
   });
 });
 
+describe('video canvas backgrounds', () => {
+  it('updates only bg and supports undo/redo', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const historyDepth = store.getState().history.length;
+
+    store.getState().setOutputBackground({ type: 'color', color: '#123456' });
+
+    let output = store.getState().doc.outputs[0];
+    expect(output.bg).toEqual({ type: 'color', color: '#123456' });
+    expect('background' in output).toBe(false);
+    expect(store.getState().isDirty).toBe(true);
+    expect(store.getState().history).toHaveLength(historyDepth + 1);
+
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].bg).toBeUndefined();
+    store.getState().redo();
+    output = store.getState().doc.outputs[0];
+    expect(output.bg).toEqual({ type: 'color', color: '#123456' });
+  });
+
+  it('rejects background edits on a frozen video output', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().setOutputBackground({ type: 'color', color: '#123456' });
+    store.getState().setOutputFrozen(0, true);
+    const before = store.getState().doc;
+    const historyDepth = store.getState().history.length;
+
+    store.getState().setOutputBackground({ type: 'color', color: '#654321' });
+
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyDepth);
+  });
+});
+
 describe('migrateDoc', () => {
   it('leaves a new outputs-based doc unchanged', () => {
     const newDoc = {

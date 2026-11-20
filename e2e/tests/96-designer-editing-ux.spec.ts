@@ -301,6 +301,59 @@ test('selected words retain independent colors through autosave and reopen', asy
   await expect(page.locator('[data-text-editor-id="body-copy"]')).toContainText('Hello world');
 });
 
+test('video canvas background color survives undo, reload, and Add Format', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+
+  await expect(page.getByText('Background', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Blue', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#2B5CD3', exact: true })).toBeVisible();
+
+  const stage = page.locator('.konva-stage').first();
+  const box = await stage.boundingBox();
+  if (!box) throw new Error('Canvas has no bounding box');
+  const scale = Math.min(box.width / 400, box.height / 400) * 0.85;
+  const sample = {
+    x: (box.width - 400 * scale) / 2 + 200 * scale,
+    y: (box.height - 400 * scale) / 2 + 100 * scale,
+  };
+  await expect.poll(() => stage.locator('canvas').first().evaluate((canvas: HTMLCanvasElement, point) => {
+    const ratio = canvas.width / canvas.getBoundingClientRect().width;
+    return Array.from(canvas.getContext('2d')!.getImageData(
+      Math.round(point.x * ratio), Math.round(point.y * ratio), 1, 1,
+    ).data);
+  }, sample)).toEqual([43, 92, 211, 255]);
+
+  await page.getByRole('button', { name: '#2B5CD3', exact: true }).click();
+  const hex = page.getByRole('textbox', { name: 'Hex color' });
+  await hex.fill('#B61A32');
+  await hex.press('Enter');
+  await expect(page.getByRole('button', { name: '#B61A32', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#2B5CD3', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Redo (Ctrl+Shift+Z)', exact: true }).click();
+  await expect(page.getByRole('button', { name: '#B61A32', exact: true })).toBeVisible();
+
+  let saves = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(saves);
+  expect((state.saveDocs.at(-1) as any).outputs[0].bg).toEqual({ type: 'color', color: '#B61A32' });
+  expect((state.saveDocs.at(-1) as any).outputs[0]).not.toHaveProperty('background');
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.getByRole('button', { name: '#B61A32', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  await page.getByRole('checkbox', { name: /Instagram Reel \(Video\)/ }).check();
+  await page.getByRole('button', { name: 'Add 1 format', exact: true }).click();
+  saves = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(saves);
+  expect((state.saveDocs.at(-1) as any).outputs[1].bg).toEqual({ type: 'color', color: '#B61A32' });
+});
+
 test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
   const independentDoc = structuredClone(initialDoc) as any;
   Object.assign(independentDoc.outputs[0], {

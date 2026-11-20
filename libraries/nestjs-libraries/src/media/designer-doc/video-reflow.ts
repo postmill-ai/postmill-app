@@ -372,6 +372,7 @@ export const seedVideoOutput = (
       height: target.height,
       fps: source.fps,
       durationMs: source.durationMs,
+      bg: source.bg,
       tracks,
       markers: source.markers?.map((m) => ({ ...m, id: idGen() })),
     },
