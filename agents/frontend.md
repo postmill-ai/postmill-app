@@ -234,9 +234,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   IS page 1; `output.pages[0..n]` are the extra pages (`{ id, name?, background?, children[] }` — no
   size: pages inherit their output's canvas, capped at `MAX_PAGES_PER_OUTPUT`). This is one document
   model, not a separate carousel doc type. **View → Pages / Carousel** opens the side-by-side strip;
-  Carousel can insert after any slide and delete slide 1 by promoting the next slide (`allowFirst`),
-  while ordinary Pages keeps the base-slot deletion restriction. Selection/reorder/duplicate/delete/
-  insert each commit one Undo. Shared accessors live in `designer-doc/designer-doc.pages.ts`
+  adding or duplicating page content also reopens it after a saved hide override by clearing that
+  override, not by saving an always-on preference. Every page has
+  right-click and always-visible three-dot actions. Carousel can insert after any slide and delete
+  slide 1 by promoting the next slide (`allowFirst`), while ordinary Pages keeps the base-slot
+  deletion restriction. Selection/reorder/duplicate/delete/insert each commit one Undo. Page
+  duplication fresh-mints element/origin ids and consistently remaps `parentId`/`groupId`. Shared
+  accessors live in `designer-doc/designer-doc.pages.ts`
   (`pageChildren`/`withPageChildren`/`pageBackground`/`appendPage`/`removePageAt`) — never read
   `output.children` directly in an editing surface. Headless `addPage` accepts `afterPageNumber`, and
   `removePage` accepts `allowFirst`. Linked-edit (`originId`) propagation across outputs is a
@@ -277,7 +281,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Formats can be linked or independent.** Add Formats defaults to linked content; independent
-  copies use fresh ids without shared `originId`s for static pages/elements and video clips. The
+  copies use fresh ids without shared `originId`s for static pages/elements and video clips. Format
+  right-click/three-dot menus also expose explicit linked and independent duplication through the
+  store's `duplicateOutput`; unlike Add Format, duplication preserves dimensions and geometry exactly,
+  including every static page or video track/clip, while fresh-minting local ids and remapping groups.
+  Linked static duplication shares page-one origins only; independent duplication removes origins and
+  receives a fresh `contentLinkGroup`. Each copy inserts after its source with one Undo. The
   store and headless `addOutput` op both accept `linkContent: false`; omitting it preserves linked
   behavior, and Undo adds/removes the whole format. The store seeds from the ACTIVE output (including
   its pages); a frozen source is allowed unless linked copying would need to backfill its missing
@@ -309,7 +318,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `renderLibraryPreview`, which retains the original full-size stage before scaling the final JPEG.
 - **Output freeze is distinct from layer/track lock.** Optional-additive `output.frozen` is valid on
   v13 without a version bump (and remains additive when a later version lands). Snowflakes switch
-  the flag through `setOutputFrozen` (store and headless op); switching output, exporting, and
+  the flag through `setOutputFrozen` (store and headless op), and frozen tabs carry a visible Frozen
+  label/tint. Duplication creates an editable unfrozen copy; linked duplication still cannot backfill
+  a frozen source's missing origins. Switching output, exporting, and
   read-only clip/keyframe clipboard copies remain available. `output-freeze.ts` performs
   reference-fast, key-order-insensitive checks (including referenced symbol definitions) for the
   store's boolean-returning guarded actions and `DesignerDocService.applyOps`. Frozen
