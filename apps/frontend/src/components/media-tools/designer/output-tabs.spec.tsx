@@ -247,10 +247,22 @@ describe('OutputTabs format workflows', () => {
     const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
     fireEvent.click(freeze);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(screen.getByText('Frozen').className).toContain('bg-studioBorder/20');
     expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
+
+    // Frozen must never borrow the selected accent: only the current format is highlighted.
+    act(() => store.getState().setCurrentOutput(1));
+    const frozenCard = document.querySelector('[data-output-index="0"]')!;
+    const selectedCard = document.querySelector('[data-output-index="1"]')!;
+    expect(frozenCard.className).not.toContain('border-designerAccent');
+    expect(frozenCard.querySelector(':scope > button')!.className).not.toContain('bg-designerAccent/10');
+    expect(selectedCard.className).toContain('border-designerAccent');
+    expect(selectedCard.querySelector(':scope > button')!.className).toContain('bg-designerAccent/10');
+    act(() => store.getState().setCurrentOutput(0));
 
     fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
+    expect(screen.queryByText('Frozen')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /X 1200×675/ }));
     expect(store.getState().currentOutput).toBe(1);
   });
@@ -325,6 +337,89 @@ describe('OutputTabs format workflows', () => {
     expect(store.getState().editFormatOnly).toBe(false);
     expect(screen.queryByRole('button', { name: 'Resume linked editing' })).toBeNull();
     expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
+  });
+});
+
+describe('OutputTabs duplication actions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('duplicates a page-bearing format from its actions menu and reopens Pages', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', text: 'Linked', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addPage();
+    const onPagesContentAdded = vi.fn();
+    const historyLength = store.getState().history.length;
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate linked' }));
+
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().doc.outputs[1].children[0].originId)
+      .toBe(store.getState().doc.outputs[0].children[0].originId);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect(onPagesContentAdded).toHaveBeenCalledTimes(1);
+    act(() => store.getState().undo());
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('duplicates a video format independently from right-click without reflow', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const track = store.getState().doc.outputs[0].tracks[0];
+    store.getState().addClip(0, track.id, {
+      id: 'clip', startMs: 100, endMs: 2000, src: '/movie.mp4', x: 12, y: 24, width: 320, height: 180,
+    } as never);
+    const historyLength = store.getState().history.length;
+    render(<OutputTabs store={store} />);
+
+    fireEvent.contextMenu(document.querySelector('[data-output-index="0"]')!, {
+      clientX: 30, clientY: 40,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate independently' }));
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(2);
+    const sourceClip = outputs[0].tracks[0].clips[0];
+    const copyClip = outputs[1].tracks[0].clips[0];
+    expect(copyClip).toMatchObject({ x: 12, y: 24, width: 320, height: 180, startMs: 100, endMs: 2000 });
+    expect(copyClip.id).not.toBe(sourceClip.id);
+    expect(copyClip.originId).toBeUndefined();
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+  });
+
+  it('warns when duplication is refused for a frozen source', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Unlinked',
+    });
+    store.getState().updateElement('headline', { originId: undefined });
+    store.getState().setOutputFrozen(0, true);
+    toasterShow.mockClear();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate linked' }));
+
+    expect(toasterShow).toHaveBeenCalledWith('This format is frozen. Unfreeze it to edit.', 'warning');
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('opens the existing resize popover from the format action menu', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resize / change format' }));
+
+    expect(screen.getByText('Resize Format')).toBeTruthy();
   });
 });
 

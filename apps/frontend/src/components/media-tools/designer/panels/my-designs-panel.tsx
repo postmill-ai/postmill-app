@@ -252,7 +252,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose, initi
           {t('gallery_refresh_failed', 'Some results could not be refreshed. Try again.')}
         </div>
       )}
-      {batches.length > 0 && (
+      {batches.length > 0 && !query && (
         <section className="mb-5">
           <h3 className="mb-2 text-[11px] font-[600] uppercase tracking-wide text-newTextColor/60">
             {t('my_designs_panel_batches', 'Bulk Create batches')}

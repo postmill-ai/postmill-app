@@ -1807,14 +1807,18 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
       src: STOCK_STICKER_URL,
       startMs: 0,
       endMs: 4000,
-      y: -140,
       width: 720,
       height: 1280,
       naturalWidth: 720,
       naturalHeight: 1280,
     });
+    // The sticker is centred on document point (400, 500). Drag events report
+    // whole client pixels, and at the fitted ~0.2 zoom one screen pixel spans
+    // ~5 document pixels, so both axes allow one screen pixel of truncation.
     expect(mocks.savedClips()[0].x).toBeGreaterThanOrEqual(35);
     expect(mocks.savedClips()[0].x).toBeLessThanOrEqual(45);
+    expect(mocks.savedClips()[0].y).toBeGreaterThanOrEqual(-145);
+    expect(mocks.savedClips()[0].y).toBeLessThanOrEqual(-135);
     expect(mocks.doc.outputs[0].tracks.some((track) => track.type === 'image')).toBe(false);
 
     await expectRealPlayback(page);
@@ -3788,6 +3792,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
 
     await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
     await page.getByRole('radio', { name: 'Preserve frame', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
@@ -3867,6 +3872,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
 
     await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
     expect(mocks.doc.outputs[0].children![0]).toMatchObject({

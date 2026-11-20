@@ -18,6 +18,8 @@ describe('DesignShareRepository (integration)', () => {
       new PrismaRepository<'designTemplateFolder'>(prisma as unknown as PrismaService),
       new PrismaRepository<'designVersion'>(prisma as unknown as PrismaService),
       new PrismaRepository<'file'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designerRecentOpen'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designBatch'>(prisma as unknown as PrismaService),
       new PrismaRepository<'designShare'>(prisma as unknown as PrismaService),
       new PrismaTransaction(prisma as unknown as PrismaService),
     );

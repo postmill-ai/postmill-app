@@ -566,7 +566,7 @@ export const BrandAssets = ({
 
       {canEdit && (
         <div className="flex items-center justify-end gap-[12px]">
-          <span role="status" className="text-[12px] text-newTableText">
+          <span role="status" aria-label={t('brand_kit_save_status', 'Brand Kit save status')} className="text-[12px] text-newTableText">
             {isDirty ? t('brand_kit_unsaved_changes', 'Unsaved changes') : t('brand_kit_all_changes_saved', 'All changes saved')}
           </span>
           <button disabled={saving} className="bg-btnPrimary text-white rounded-[8px] px-[16px] py-[8px] text-[14px] hover:opacity-90 disabled:opacity-50" onClick={save}>

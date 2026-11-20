@@ -116,14 +116,17 @@ describe('BrandAssets', () => {
     expect(screen.getByText('Preferred formats')).toBeTruthy();
     expect(screen.getByText('Legacy Sans')).toBeTruthy();
     expect(screen.getByText('Uploaded Sans')).toBeTruthy();
+    for (const section of ['colors', 'fonts', 'logos', 'images', 'formats', 'templates']) {
+      expect(document.getElementById(section)).not.toBeNull();
+    }
 
     const colorRole = screen.getByRole('combobox', { name: 'Colour role for #111111' });
     fireEvent.change(colorRole, { target: { value: 'primary' } });
-    expect(screen.getByText('Unsaved changes').textContent).toBe('Unsaved changes');
+    expect(screen.getByRole('status', { name: 'Brand Kit save status' }).textContent).toBe('Unsaved changes');
     fireEvent.click(screen.getByRole('button', { name: 'Fonts' }));
 
     expect((colorRole as HTMLSelectElement).value).toBe('primary');
-    expect(screen.getByText('Unsaved changes').textContent).toBe('Unsaved changes');
+    expect(screen.getByRole('status', { name: 'Brand Kit save status' }).textContent).toBe('Unsaved changes');
     expect(scrollIntoView).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -136,7 +139,7 @@ describe('BrandAssets', () => {
     ]);
     expect(body.logoFileIds).toEqual(['legacy-logo', { fileId: 'main-logo', role: 'main' }]);
     expect(body.fontFamilies).toEqual(['Legacy Sans']);
-    expect(screen.getByText('All changes saved').textContent).toBe('All changes saved');
+    expect(screen.getByRole('status', { name: 'Brand Kit save status' }).textContent).toBe('All changes saved');
   });
 
   it('opens the initial hash and adds each catalog family only once', () => {

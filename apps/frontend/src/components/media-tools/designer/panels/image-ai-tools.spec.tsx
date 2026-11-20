@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageAiTools } from './image-ai-tools';
 import type { DesignerElement } from '../designer.store';
 
@@ -67,6 +67,8 @@ beforeEach(() => {
   mocks.aiInpaint.mockReset();
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 describe('ImageAiTools', () => {
   it('groups each description, prompt, and Generate action in an accessible expandable card', async () => {
     mocks.aiImageToImage.mockResolvedValue(true);
@@ -117,5 +119,24 @@ describe('ImageAiTools', () => {
     expect(generate.disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Draw mask…', exact: true })).toBeTruthy();
     expect(mocks.aiInpaint).not.toHaveBeenCalled();
+  });
+
+  it('uploads inpaint masks as internal design assets', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+      callback(new Blob(['mask'], { type: 'image/png' }));
+    });
+    mocks.fetch.mockResolvedValue({ ok: true, json: async () => ({ path: '/uploads/mask.png' }) });
+    render(<ImageAiTools element={element()} store={store} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Inpaint', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw mask…', exact: true }));
+    fireEvent.load(document.querySelector('img')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Done', exact: true }));
+
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledWith('/files/upload-simple', {
+      method: 'POST', body: expect.any(FormData),
+    }));
+    const body = mocks.fetch.mock.calls[0][1].body as FormData;
+    expect(body.get('file')).toBeInstanceOf(Blob);
+    expect(body.get('internal')).toBe('design-asset');
   });
 });

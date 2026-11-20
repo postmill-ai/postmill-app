@@ -46,7 +46,7 @@ export const BrandTemplates: FC<{ brandId: string; canEdit: boolean }> = ({ bran
   const normalizedQuery = query.trim();
 
   return (
-    <section className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
+    <section id="templates" className="scroll-mt-[80px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[16px]">
       <div>
         <div className="text-[13px]">{t('brand_templates', 'Brand templates')}</div>
         <div className="text-[12px] text-newTableText">{t('brand_templates_hint', 'Templates assigned to this brand appear first in Brand Mode. Shared templates stay available in General Mode.')}</div>

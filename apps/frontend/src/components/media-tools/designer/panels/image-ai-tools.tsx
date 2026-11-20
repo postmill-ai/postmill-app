@@ -261,6 +261,7 @@ export const ImageAiTools: FC<ImageAiToolsProps> = ({ element, store }) => {
       if (!blob) throw new Error('Mask empty');
       const formData = new FormData();
       formData.append('file', blob, `mask-${Date.now()}.png`);
+      formData.append('internal', 'design-asset');
       const res = await fetch('/files/upload-simple', { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Upload failed');
       const data = await res.json();

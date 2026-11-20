@@ -10,6 +10,7 @@ import {
   type ChannelPreset,
 } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { pageChildren, pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { FormatThumbnail } from './format-thumbnail';
 
 interface OutputTabsProps {
@@ -342,6 +343,23 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
     }
   };
 
+  const duplicateFormat = (index: number, linked: boolean) => {
+    if (store.getState().duplicateOutput(index, { linkContent: linked })) {
+      notifyPagesContentAdded();
+      closePopover();
+      return;
+    }
+    const state = store.getState();
+    toaster.show(
+      state.doc.outputs.length >= MAX_OUTPUTS
+        ? t('designer_format_limit', 'Format limit reached')
+        : state.doc.outputs[index]?.frozen
+          ? t('designer_frozen_read_only', 'This format is frozen. Unfreeze it to edit.')
+          : t('something_went_wrong', 'Something went wrong'),
+      'warning'
+    );
+  };
+
   const handleAddFormats = () => {
     const s = store.getState();
     const applied: string[] = [];
@@ -467,10 +485,13 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
           <div
             key={output.id}
             data-format-card={output.id}
+            data-output-index={i}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              openPopover('formatActions', event.currentTarget, { outputIndex: i });
+            }}
             className={`relative group shrink-0 rounded-md border-2 transition-colors ${
-              i === currentOutput
-                ? 'border-designerAccent bg-designerAccent/10'
-                : 'border-studioBorder'
+              i === currentOutput ? 'border-designerAccent' : 'border-studioBorder'
             }`}
             style={{ minWidth: THUMB_MIN_W, height: THUMB_H }}
           >
@@ -479,7 +500,9 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
               data-format-select={output.id}
               onClick={() => store.getState().setCurrentOutput(i)}
               aria-current={i === currentOutput}
-              className="absolute inset-0 flex flex-col items-center justify-start text-center px-2 pb-1 pt-8 gap-0 rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+              className={`absolute inset-0 flex flex-col items-center justify-start text-center px-2 pb-1 pt-8 gap-0 rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
+                i === currentOutput ? 'bg-designerAccent/10' : ''
+              }`}
             >
               {i !== currentOutput && Array.isArray(output.children) && output.children.some((c: any) => c?.originId && activeOriginIds.has(c.originId)) && (
                 <div className="absolute top-9 end-1 w-2 h-2 rounded-full bg-designerAccent" title={t('designer_has_linked_elements', 'Has linked elements')} />
@@ -503,17 +526,26 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
               <span className="text-[11px] font-medium text-textColor leading-tight truncate max-w-[94px]">
                 {output.name}
               </span>
-              <span className="text-[9px] text-textColor/50 leading-none">
-                {output.width}×{output.height}
-              </span>
-              {mode === 'image' && pageCount(output) > 1 && (
-                <span
-                  className="absolute bottom-1 end-1 rounded-sm bg-designerAccent/15 text-btnPrimaryAccent text-[8px] leading-none px-1 py-0.5"
-                  title={t('designer_pages_count', '{{count}} pages', { count: pageCount(output) })}
-                >
-                  {pageCount(output)}p
+              {/* Frozen and page-count badges wrap beside the dimensions so neither
+                  covers them, and Frozen stays neutral so it never reads as selected. */}
+              <div className="flex max-w-[94px] flex-wrap items-center justify-center gap-0.5 leading-none">
+                <span className="text-[9px] text-textColor/50">
+                  {output.width}×{output.height}
                 </span>
-              )}
+                {output.frozen && (
+                  <span className="rounded-sm bg-studioBorder/20 px-1 py-0.5 text-[8px] font-medium text-textColor/60">
+                    {t('designer_frozen_label', 'Frozen')}
+                  </span>
+                )}
+                {mode === 'image' && pageCount(output) > 1 && (
+                  <span
+                    className="rounded-sm bg-designerAccent/15 px-1 py-0.5 text-[8px] text-btnPrimaryAccent"
+                    title={t('designer_pages_count', '{{count}} pages', { count: pageCount(output) })}
+                  >
+                    {pageCount(output)}p
+                  </span>
+                )}
+              </div>
             </button>
             <div className="absolute top-1 inset-x-1 z-20 flex items-center justify-between pointer-events-none">
               <button
@@ -601,6 +633,10 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
                 {outputs.map((output: any, i: number) => (
                   <div
                     key={output.id}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      openPopover('formatActions', event.currentTarget, { outputIndex: i });
+                    }}
                     className="flex items-center gap-2 px-3 py-1.5 hover:bg-studioBorder/10 group/item"
                   >
                     <button
@@ -618,6 +654,11 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
                       <span className="text-[10px] text-textColor/50 ml-1">
                         {output.width}×{output.height}
                       </span>
+                      {output.frozen && (
+                        <span className="ms-1 rounded-sm bg-studioBorder/20 px-1 py-0.5 text-[9px] text-textColor/60">
+                          {t('designer_frozen_label', 'Frozen')}
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -701,7 +742,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
           open={showAddFormats}
           onClose={closePopover}
           align="right"
-          className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-72 p-3"
+          className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-72 max-w-[calc(100vw-1rem)] p-3"
         >
           <div className="text-[12px] font-medium text-textColor mb-2">
             {mode === 'video'
@@ -793,7 +834,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
             <div className="text-[10px] font-semibold text-textColor/30 uppercase tracking-wider px-1 mb-1">
               {t('designer_custom_size_heading', 'Custom Size')}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <input
                 type="number"
                 value={cW}
@@ -813,7 +854,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
               />
               <button
                 onClick={handleAddCustom}
-                className="h-7 px-2 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 shrink-0"
+                className="h-7 w-full px-2 rounded-sm text-[11px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 shrink-0"
               >
                 {t('designer_add_custom_size', 'Add custom size')}
               </button>
@@ -866,6 +907,22 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
             </button>
             <button
               type="button"
+              disabled={outputs.length >= MAX_OUTPUTS}
+              onClick={() => duplicateFormat(formatActionsIndex, true)}
+              className="w-full min-h-9 rounded-sm px-2 py-1.5 text-start text-[12px] text-textColor hover:bg-studioBorder/10 disabled:opacity-30"
+            >
+              {t('designer_duplicate_linked', 'Duplicate linked')}
+            </button>
+            <button
+              type="button"
+              disabled={outputs.length >= MAX_OUTPUTS}
+              onClick={() => duplicateFormat(formatActionsIndex, false)}
+              className="w-full min-h-9 rounded-sm px-2 py-1.5 text-start text-[12px] text-textColor hover:bg-studioBorder/10 disabled:opacity-30"
+            >
+              {t('designer_duplicate_independent', 'Duplicate independently')}
+            </button>
+            <button
+              type="button"
               aria-pressed={editFormatOnly}
               onClick={() => handleToggleFormatLink(formatActionsIndex)}
               className="w-full rounded-sm px-2 py-1.5 text-start hover:bg-studioBorder/10"
@@ -889,7 +946,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
         anchorEl={showResize ? popoverAnchor : null}
         open={showResize}
         onClose={closePopover}
-        className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-64 p-3"
+        className="bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl overflow-hidden w-64 max-w-[calc(100vw-1rem)] p-3"
       >
         <div className="text-[12px] font-medium text-textColor mb-2">
           {t('designer_resize_format_heading', 'Resize Format')}
@@ -915,7 +972,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
           )}
         </div>
         <div className="border-t border-studioBorder mt-2 pt-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <input
               type="number"
               value={cW}
@@ -937,7 +994,7 @@ export const OutputTabs = React.memo(function OutputTabs({ store, onPagesContent
               onClick={() =>
                 handleResizeCustom(resizeIndex!)
               }
-              className="h-7 px-2 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80 shrink-0"
+              className="h-7 w-full px-2 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80 shrink-0"
             >
               {t('apply', 'Apply')}
             </button>

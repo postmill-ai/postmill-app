@@ -225,6 +225,18 @@ describe('MyDesignsPanel batches', () => {
     expect(screen.queryByText('1 variations')).toBeNull();
   });
 
+  it('hides unfiltered batches while searching designs', async () => {
+    renderBatchPanel();
+    expect(await screen.findByText('Catalog batch')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search designs' }), {
+      target: { value: 'Standalone' },
+    });
+
+    await waitFor(() => expect(screen.queryByText('Catalog batch')).toBeNull());
+    expect(screen.getByText('Standalone')).toBeTruthy();
+  });
+
   it('filters video designs out of the image-only source picker', async () => {
     renderBatchPanel(undefined, true);
 
