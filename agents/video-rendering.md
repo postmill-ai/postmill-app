@@ -129,8 +129,9 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      (`applyTextReveal` / `textRevealProgress`); the preview overlay imports it and
      the frame page is handed it as source (`textRevealSource()`, injected like
      `keyframesSource`). The Typewriter preset (`text-animation-presets.ts`) writes
-     it at ~80 ms/char; a reveal preset clears the keyframe lanes and vice versa. Presets are grouped
-     into entrance, emphasis and exit. Exits are timed relative to the clip end; zoom presets scale
+     it at ~80 ms/char and replaces only the current entrance, leaving emphasis/exit keyframes intact.
+     Presets are grouped into entrance, emphasis and exit, with one independently replaceable preset
+     per category. Exits are timed relative to the clip end; zoom presets scale
      width/height from the clip base and motion presets offset x/y/rotation. All visual track types
      share the same keyframe evaluator, while reveal stays text-only.
    - Text extrusion (`clip.textExtrusion`, optional-additive doc v12) draws bounded far-to-near

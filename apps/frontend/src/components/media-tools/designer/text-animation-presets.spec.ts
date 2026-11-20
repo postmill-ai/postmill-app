@@ -4,6 +4,7 @@ import {
   TYPEWRITER_MS_PER_CHAR,
   buildTextAnimationUpdate,
   matchTextAnimationPreset,
+  matchTextAnimationPresets,
 } from './text-animation-presets';
 import { createDesignerStore } from './designer.store';
 
@@ -52,16 +53,16 @@ describe('matchTextAnimationPreset', () => {
     ).toBeNull(); // the pre-reveal Typewriter ramp matches no preset anymore
   });
 
-  it('a reveal with keyframes still present does not match (half-applied state)', () => {
+  it('matches Typewriter independently of keyframes from other categories', () => {
     expect(
       matchTextAnimationPreset(
-        [{ tMs: 0, props: { opacity: 0 } }],
+        [{ tMs: 300, props: { width: 108 } }],
         0,
         0,
         0,
         { mode: 'chars' }
       )
-    ).toBeNull();
+    ).toBe('Typewriter');
   });
 
   it('returns null for unmatched or empty keyframes', () => {
@@ -118,7 +119,7 @@ describe('buildTextAnimationUpdate', () => {
     expect(update.textReveal).toBeUndefined();
   });
 
-  it('Typewriter writes a per-char paced reveal and clears the keyframe lanes', () => {
+  it('Typewriter writes a per-char paced reveal', () => {
     const update = buildTextAnimationUpdate(presetByName('Typewriter'), {
       x: 0,
       y: 0,
@@ -232,5 +233,117 @@ describe('buildTextAnimationUpdate', () => {
     );
     expect(presetByName('Pulse').category).toBe('emphasis');
     expect(presetByName('Spin Out').category).toBe('exit');
+  });
+
+  it('composes and matches independent entrance, emphasis, and exit presets', () => {
+    const base = {
+      x: 100, y: 200, width: 200, height: 100, rotation: 0,
+      text: 'Combined', startMs: 0, endMs: 5000, keyframes: [],
+    };
+    const combined = ['Fade Up', 'Pulse', 'Fade Out'].reduce(
+      (clip, name) => ({ ...clip, ...buildTextAnimationUpdate(presetByName(name), clip) }),
+      base
+    );
+
+    expect(matchTextAnimationPresets(combined)).toEqual({
+      entrance: 'Fade Up',
+      emphasis: 'Pulse',
+      exit: 'Fade Out',
+    });
+    expect(combined.keyframes.map((frame) => frame.tMs)).toEqual([0, 300, 500, 600, 4500, 5000]);
+  });
+
+  it('replaces only the selected category', () => {
+    const base = { x: 100, y: 200, width: 200, height: 100, startMs: 0, endMs: 5000, keyframes: [] };
+    const original = ['Fade Up', 'Pulse', 'Fade Out'].reduce(
+      (clip, name) => ({ ...clip, ...buildTextAnimationUpdate(presetByName(name), clip) }),
+      base
+    );
+    const replaced = {
+      ...original,
+      ...buildTextAnimationUpdate(presetByName('Slide In Right'), original),
+    };
+
+    expect(matchTextAnimationPresets(replaced)).toEqual({
+      entrance: 'Slide In Right',
+      emphasis: 'Pulse',
+      exit: 'Fade Out',
+    });
+    expect(replaced.keyframes.find((frame) => frame.tMs === 0)?.props.y).toBeUndefined();
+    expect(replaced.keyframes.find((frame) => frame.tMs === 500)?.props.y).toBeUndefined();
+    expect(replaced.keyframes.find((frame) => frame.tMs === 300)?.props.width).toBe(216);
+    expect(replaced.keyframes.find((frame) => frame.tMs === 5000)?.props.opacity).toBe(0);
+  });
+
+  it('keeps emphasis and exit when switching between Typewriter and a keyframe entrance', () => {
+    const base = { x: 0, y: 0, width: 100, height: 50, text: 'Hello', startMs: 0, endMs: 5000, keyframes: [] };
+    const withOtherCategories = ['Pulse', 'Fade Out'].reduce(
+      (clip, name) => ({ ...clip, ...buildTextAnimationUpdate(presetByName(name), clip) }),
+      base
+    );
+    const revealed = {
+      ...withOtherCategories,
+      ...buildTextAnimationUpdate(presetByName('Typewriter'), withOtherCategories),
+    };
+
+    expect(matchTextAnimationPresets(revealed)).toEqual({
+      entrance: 'Typewriter',
+      emphasis: 'Pulse',
+      exit: 'Fade Out',
+    });
+    expect(revealed.keyframes).toHaveLength(5);
+
+    const popped = {
+      ...revealed,
+      ...buildTextAnimationUpdate(presetByName('Pop'), revealed),
+    };
+    expect(popped.textReveal).toBeUndefined();
+    expect(matchTextAnimationPresets(popped)).toEqual({
+      entrance: 'Pop',
+      emphasis: 'Pulse',
+      exit: 'Fade Out',
+    });
+  });
+
+  it('preserves unrelated manual keyframes while applying and replacing presets', () => {
+    const base = {
+      x: 0, y: 0, width: 100, height: 50, startMs: 0, endMs: 5000,
+      keyframes: [{ tMs: 1200, props: { x: 999 } }],
+    };
+    const entrance = { ...base, ...buildTextAnimationUpdate(presetByName('Fade Up'), base) };
+    const replaced = { ...entrance, ...buildTextAnimationUpdate(presetByName('Pop'), entrance) };
+
+    expect(replaced.keyframes).toContainEqual({ tMs: 1200, props: { x: 999 } });
+    expect(matchTextAnimationPresets(replaced).entrance).toBe('Pop');
+  });
+
+  it('re-anchors only the exit when a combined clip duration changes', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'text');
+    const track = (store.getState().doc.outputs[0] as any).tracks.find((item: any) => item.type === 'text');
+    const clip = {
+      id: 'clip-combined', startMs: 0, endMs: 5000, text: 'Combined', x: 0, y: 0,
+      width: 200, height: 100, fontSize: 24, keyframes: [],
+    };
+    store.getState().addClip(0, track.id, clip);
+    for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+      const current = (store.getState().doc.outputs[0] as any).tracks
+        .find((item: any) => item.id === track.id).clips[0];
+      store.getState().updateClipSilent(0, track.id, clip.id,
+        buildTextAnimationUpdate(presetByName(name), current, true)
+      );
+    }
+
+    store.getState().updateClipSilent(0, track.id, clip.id, { endMs: 7000 });
+
+    const updated = (store.getState().doc.outputs[0] as any).tracks
+      .find((item: any) => item.id === track.id).clips[0];
+    expect(matchTextAnimationPresets(updated, true)).toEqual({
+      entrance: 'Fade Up',
+      emphasis: 'Pulse',
+      exit: 'Fade Out',
+    });
+    expect(updated.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 300, 500, 600, 6500, 7000]);
   });
 });

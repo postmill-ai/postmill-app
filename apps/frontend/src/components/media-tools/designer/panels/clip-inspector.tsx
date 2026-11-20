@@ -11,7 +11,7 @@ import {
   AlignRightIcon,
 } from '@postmill-ai/frontend/components/ui/icons';
 import type { VideoClip } from '../designer.store';
-import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, matchTextAnimationPreset } from '../text-animation-presets';
+import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, matchTextAnimationPresets } from '../text-animation-presets';
 import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
 import { PROP_DOT_COLORS } from '../keyframe-props';
 import { SmartFilterList } from './smart-filter-list';
@@ -724,8 +724,6 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     // Reveal presets animate the text CONTENT — meaningless on a clip with
     // none (the section already hides them there; this is the belt-and-braces).
     if (preset.textReveal && clipTrackType !== 'text') return;
-    // One animation at a time: the builder clears the other channel (reveal ⇄
-    // keyframes) as part of the patch.
     const update = buildTextAnimationUpdate(
       preset,
       clip,
@@ -750,23 +748,14 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     );
   }, [clip, clipTrackType, updateClip, store]);
 
-  // Which preset the clip's current keyframes match (drives the highlight).
-  const activeTextAnimation = useMemo(
+  const activeTextAnimations = useMemo(
     () =>
       clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
-        ? matchTextAnimationPreset(
-            clip.keyframes,
-            clip.x ?? 0,
-            clip.y ?? 0,
-            clip.rotation ?? 0,
-            clip.textReveal,
-            clip.width ?? 1,
-            clip.height ?? 1,
-            clip.endMs - clip.startMs,
-            clip.fontSize ?? 16,
+        ? matchTextAnimationPresets(
+            clip,
             clipTrackType === 'text' || clipTrackType === 'caption'
           )
-        : null,
+        : {},
     [clip, clipTrackType]
   );
 
@@ -1703,7 +1692,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                   (preset) => preset.category === category &&
                     (!preset.textReveal || clipTrackType === 'text')
                 ).map((preset) => {
-                  const active = activeTextAnimation === preset.name;
+                  const active = activeTextAnimations[category] === preset.name;
                   return (
                     <button
                       key={preset.name}

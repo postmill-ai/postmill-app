@@ -1381,3 +1381,39 @@ test('clip context menu duplicates the intended clip without changing another tr
   expect(state.doc.outputs[0].tracks[0].clips).toHaveLength(1);
   expect(state.doc.outputs[0].tracks[0].clips[0]).toMatchObject({ id: 'video-clip', src: '/video.mp4' });
 });
+
+test('entrance, emphasis, and exit animations remain independent through save and reopen', async ({ page }) => {
+  const state = await installMocks(page, initialVideoDoc);
+  await openDesigner(page);
+  const selectStillClip = async () => {
+    await fitContextMenuCanvas(page);
+    const point = await contextMenuCanvasPoint(page, 120, 260);
+    await page.mouse.click(point.x, point.y);
+    await expect(page.getByText('Animations', { exact: true })).toBeVisible();
+  };
+  const expectSelected = async () => {
+    for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    }
+  };
+
+  await selectStillClip();
+  for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+    await page.getByRole('button', { name, exact: true }).click();
+  }
+  await expectSelected();
+
+  const savesBefore = state.saveDocs.length;
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
+  const savedClip = (state.saveDocs.at(-1) as any).outputs[0].tracks[1].clips[0];
+  expect(savedClip.id).toBe('still-clip');
+  expect(savedClip.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 300, 500, 600, 4500, 5000]);
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
+  await expect(page.locator('.konva-stage').first()).toBeVisible();
+  await selectStillClip();
+  await expectSelected();
+  expect(state.doc.outputs[0].tracks[1].clips[0].keyframes).toEqual(savedClip.keyframes);
+});

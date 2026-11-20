@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ClipInspector } from './clip-inspector';
 import { createDesignerStore } from '../designer.store';
+import { matchTextAnimationPresets } from '../text-animation-presets';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
@@ -22,8 +23,9 @@ vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
 vi.mock('../../use-media-picker', () => ({
   useMediaPicker: () => ({ open: vi.fn(), close: vi.fn(), element: null }),
 }));
+vi.mock('./font-family-picker', () => ({ FontFamilyPicker: () => null }));
 
-const makeStore = (trackType: 'video' | 'audio' = 'video') => {
+const makeStore = (trackType: 'video' | 'audio' | 'text' = 'video') => {
   const store = createDesignerStore();
   store.setState({
     doc: {
@@ -42,6 +44,8 @@ const makeStore = (trackType: 'video' | 'audio' = 'video') => {
             startMs: 0,
             endMs: 5000,
             src: '/video.mp4',
+            text: trackType === 'text' ? 'Animated text' : undefined,
+            x: 100, y: 200, width: 200, height: 100, fontSize: 24,
             volume: 0.4,
             reverse: false,
           }, {
@@ -108,5 +112,26 @@ describe('ClipInspector playback controls', () => {
     expect(screen.queryByRole('switch', { name: 'Original audio' })).toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'Reverse' }));
     expect(store.getState().doc.outputs[0].tracks[0].clips[0].reverse).toBe(true);
+  });
+
+  it('keeps entrance, emphasis, and exit presets independently selected', () => {
+    const store = makeStore('text');
+    render(<ClipInspector store={store} outputIndex={0} trackId="track-1" clipId="clip-1" />);
+    const initialHistory = store.getState().history.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fade Up', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fade Out', exact: true }));
+
+    for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+      expect(screen.getByRole('button', { name, exact: true }).getAttribute('aria-pressed')).toBe('true');
+    }
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(matchTextAnimationPresets(clip, true)).toEqual({
+      entrance: 'Fade Up',
+      emphasis: 'Pulse',
+      exit: 'Fade Out',
+    });
+    expect(store.getState().history.length).toBe(initialHistory + 3);
   });
 });
