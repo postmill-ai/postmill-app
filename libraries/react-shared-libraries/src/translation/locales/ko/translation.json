@@ -3647,6 +3647,7 @@
   "designer_image_to_image_failed": "이미지-투-이미지 실패",
   "designer_mask_upload_failed": "마스크 업로드 실패",
   "designer_replace_image": "이미지 교체…",
+  "designer_drop_to_replace": "교체하려면 놓으세요",
   "designer_label_fit_mode": "맞춤 모드",
   "designer_fit_option_fit": "맞춤",
   "designer_fit_option_cover": "채우기",

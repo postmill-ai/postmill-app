@@ -42,7 +42,15 @@ import { CropOverlay } from './crop-overlay';
 import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
-import { imageDropTargetById, replaceUploadedImageAtDropTarget, uploadDroppedImage, imageDropErrorMessage, type ImageDropTarget } from './image-drop';
+import {
+  imageDropErrorMessage,
+  isReplaceableImageMime,
+  replaceMediaImageAtDropTarget,
+  replaceUploadedImageAtDropTarget,
+  resolveImageDropTarget,
+  uploadDroppedImage,
+  type ImageDropResolution,
+} from './image-drop';
 import { textureFillProps } from './textures';
 import { svgToPathElements } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-import';
 import {
@@ -92,7 +100,7 @@ import {
   movingNodesForSnap,
 } from './canvas-snap';
 import { selectionLeafIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
-import { readStockMediaDrag } from './stock-media-drag';
+import { hasStillImageDrag, isStillImageMedia, readStockMediaDrag } from './stock-media-drag';
 import type { InsertDesignerMedia } from './use-designer-media-insertion';
 
 /**
@@ -223,7 +231,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas' | 'clip'; elementId?: string; canvasPoint?: { x: number; y: number } } | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [dragReplace, setDragReplace] = useState(false);
+  const [dragReplacement, setDragReplacement] = useState<ImageDropResolution | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [uploadingFile, setUploadingFile] = useState(false);
   const rafIdRef = useRef<number | null>(null);
@@ -1810,26 +1818,21 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     [pageOutput, doc, effectiveTool, paint, store]
   );
 
-  const findImageDropTarget = useCallback((clientX: number, clientY: number, rect: DOMRect) => {
-    let node = stageRef.current?.getIntersection({
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    }) as Konva.Node | null | undefined;
-    let target: ImageDropTarget | null = null;
-    while (node && !target) {
-      const id = node.id();
-      if (id) target = imageDropTargetById(store, id);
-      node = node.getParent();
-    }
-    return target;
-  }, [store]);
+  const findImageDropTarget = useCallback((clientX: number, clientY: number, rect: DOMRect) =>
+    resolveImageDropTarget({
+      stage: stageRef.current,
+      store,
+      clientX,
+      clientY,
+      containerRect: rect,
+    }), [store]);
 
   // Drop from panels (designer elements) and OS file drops.
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
-      setDragReplace(false);
+      setDragReplacement(null);
       containerRef.current?.classList.remove('designer-drop-active');
       if (outputFrozen) return;
 
@@ -1841,6 +1844,25 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       const stock = readStockMediaDrag(e.dataTransfer);
       if (stock) {
+        const replacement = !e.shiftKey && isStillImageMedia(stock.kind, stock.item)
+          ? findImageDropTarget(e.clientX, e.clientY, rect)
+          : null;
+        if (replacement) {
+          void replaceMediaImageAtDropTarget({
+            store,
+            target: replacement.target,
+            item: stock.item,
+          })
+            .then((replaced) => {
+              if (!replaced) {
+                toaster.show(t('designer_image_replace_failed', 'That image replacement could not be applied'), 'warning');
+              }
+            })
+            .catch((error) => {
+              toaster.show(imageDropErrorMessage(error, t), 'warning');
+            });
+          return;
+        }
         void onInsertMedia?.(stock.kind, stock.item, { x: px, y: py });
         return;
       }
@@ -1878,14 +1900,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const file = files[0];
       if (!file.type.startsWith('image/')) return;
 
-      const replacementTarget = e.altKey && file.type !== 'image/svg+xml'
+      const replacementTarget = !e.shiftKey && isReplaceableImageMime(file.type)
         ? findImageDropTarget(e.clientX, e.clientY, rect)
         : null;
       if (replacementTarget) {
         setUploadingFile(true);
         void uploadDroppedImage(fetch, file)
           .then((item) => replaceUploadedImageAtDropTarget({
-            fetch, store, target: replacementTarget, item,
+            fetch, store, target: replacementTarget.target, item,
           }))
           .then((replaced) => {
             if (!replaced) {
@@ -2048,11 +2070,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         const fileTypes = e.dataTransfer.files.length
           ? Array.from(e.dataTransfer.files, (file) => file.type)
           : Array.from(e.dataTransfer.items, (item) => item.kind === 'file' ? item.type : '');
-        const replacing = !!(rect && e.altKey && fileTypes.some(
-          (type) => type.startsWith('image/') && type !== 'image/svg+xml'
-        ) && findImageDropTarget(e.clientX, e.clientY, rect));
-        e.dataTransfer.dropEffect = 'copy';
-        setDragReplace(replacing);
+        const replacementSource = hasStillImageDrag(e.dataTransfer) || fileTypes.some(isReplaceableImageMime);
+        const replacement = rect && !e.shiftKey && replacementSource
+          ? findImageDropTarget(e.clientX, e.clientY, rect)
+          : null;
+        setDragReplacement(replacement);
         if (rect) {
           setDragPosition({
             x: (e.clientX - rect.left - viewportX) / zoom,
@@ -2065,7 +2087,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       onDragLeave={(e) => {
         if (e.currentTarget.contains(e.relatedTarget as Node)) return;
         setDragOver(false);
-        setDragReplace(false);
+        setDragReplacement(null);
         containerRef.current?.classList.remove('designer-drop-active');
       }}
       onDrop={handleDrop}
@@ -2596,14 +2618,25 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       {dragOver && !uploadingFile && (
         <div
-          data-drop-mode={dragReplace ? 'replace' : 'insert'}
-          className={`absolute pointer-events-none z-40 flex h-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center border-2 border-designerAccent rounded-lg bg-designerAccent/10 ${dragReplace ? 'border-solid px-3 text-[12px] font-medium text-btnPrimaryAccent' : 'w-12 border-dashed'}`}
-          style={{
+          data-drop-mode={dragReplacement ? 'replace' : 'insert'}
+          className={dragReplacement
+            ? 'absolute pointer-events-none z-40 rounded-lg border-2 border-solid border-designerAccent bg-designerAccent/10'
+            : 'absolute pointer-events-none z-40 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg border-2 border-dashed border-designerAccent bg-designerAccent/10'}
+          style={dragReplacement ? {
+            left: dragReplacement.bounds.x,
+            top: dragReplacement.bounds.y,
+            width: dragReplacement.bounds.width,
+            height: dragReplacement.bounds.height,
+          } : {
             left: dragPosition.x * zoom + viewportX,
             top: dragPosition.y * zoom + viewportY,
           }}
         >
-          {dragReplace && t('designer_replace_image', 'Replace image…')}
+          {dragReplacement && (
+            <span className="absolute start-1 top-1 rounded bg-newBgColorInner px-2 py-1 text-[12px] font-medium whitespace-nowrap text-btnPrimaryAccent">
+              {t('designer_drop_to_replace', 'Drop to replace')}
+            </span>
+          )}
         </div>
       )}
 

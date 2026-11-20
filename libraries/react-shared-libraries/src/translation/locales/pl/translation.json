@@ -3663,6 +3663,7 @@
   "designer_image_to_image_failed": "Przekształcenie obrazu nie powiodło się",
   "designer_mask_upload_failed": "Przesyłanie maski nie powiodło się",
   "designer_replace_image": "Zastąp obraz…",
+  "designer_drop_to_replace": "Upuść, aby zastąpić",
   "designer_label_fit_mode": "Tryb dopasowania",
   "designer_fit_option_fit": "Dopasuj",
   "designer_fit_option_cover": "Wypełnij",

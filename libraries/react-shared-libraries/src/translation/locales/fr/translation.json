@@ -3646,6 +3646,7 @@
   "designer_image_to_image_failed": "Échec de la transformation image à image",
   "designer_mask_upload_failed": "Échec de l'import du masque",
   "designer_replace_image": "Remplacer l'image…",
+  "designer_drop_to_replace": "Déposez pour remplacer",
   "designer_label_fit_mode": "Mode d'ajustement",
   "designer_fit_option_fit": "Ajuster",
   "designer_fit_option_cover": "Couvrir",

@@ -121,6 +121,7 @@ const subscribeToStorage = (onChange: () => void) => {
 export const FileManager: FC<{
   standalone?: boolean;
   onSelect?: (items: FileItem[]) => void;
+  onFileDragStart?: (file: FileItem, event: React.DragEvent) => void;
   onFolderChange?: (folderId: string | null) => void;
   refreshKey?: number | string;
   /**
@@ -148,6 +149,7 @@ export const FileManager: FC<{
 }> = ({
   standalone,
   onSelect,
+  onFileDragStart,
   onFolderChange,
   refreshKey,
   sidebarMode,
@@ -808,6 +810,7 @@ export const FileManager: FC<{
               onFileClick={handleFileClick}
               standalone={standalone}
               onSelect={onSelect}
+              onFileDragStart={onFileDragStart}
               folders={visibleFolders}
               onFolderOpen={handleFolderSelect}
               folderDropProps={folderDropProps}
@@ -821,6 +824,7 @@ export const FileManager: FC<{
               selectedFiles={selectedFiles}
               onToggleSelect={toggleFileSelection}
               onFileClick={handleFileClick}
+              onFileDragStart={onFileDragStart}
               folders={visibleFolders}
               onFolderOpen={handleFolderSelect}
               folderDropProps={folderDropProps}

@@ -73,6 +73,7 @@ import { BulkCreateDialog } from './bulk-create-dialog';
 import { EditAsVideoDialog } from './edit-as-video-dialog';
 import { MobileQuickActions, MobileSheetHeader, MobileToolsDialog, MobileWorkspaceSheet, type MobileSheetSnap } from './mobile-designer-tools';
 import { addMediaToTimeline } from './add-media-to-timeline';
+import { writeDesignerMediaDrag } from './stock-media-drag';
 import { useDesignerMediaInsertion, type DesignerMediaKind } from './use-designer-media-insertion';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -1170,6 +1171,10 @@ const DesignerContent: FC<
         title: TITLES[kind],
         tabs: TABS[kind],
         requireFile: kind === 'vector',
+        onMediaDragStart: (item, event) => {
+          event.dataTransfer.effectAllowed = 'copyMove';
+          writeDesignerMediaDrag(event.dataTransfer, kind, item);
+        },
         onSelect: (item) => insertMedia(kind, item),
       });
     },

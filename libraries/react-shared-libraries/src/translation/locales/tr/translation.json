@@ -3646,6 +3646,7 @@
   "designer_image_to_image_failed": "Görselden görsele işlem başarısız oldu",
   "designer_mask_upload_failed": "Maske yüklemesi başarısız oldu",
   "designer_replace_image": "Görseli değiştir…",
+  "designer_drop_to_replace": "Değiştirmek için bırakın",
   "designer_label_fit_mode": "Sığdırma modu",
   "designer_fit_option_fit": "Sığdır",
   "designer_fit_option_cover": "Kapla",

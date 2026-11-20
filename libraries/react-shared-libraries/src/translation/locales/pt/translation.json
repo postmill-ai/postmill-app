@@ -3646,6 +3646,7 @@
   "designer_image_to_image_failed": "Falha na conversão de imagem para imagem",
   "designer_mask_upload_failed": "Falha ao enviar a máscara",
   "designer_replace_image": "Substituir imagem…",
+  "designer_drop_to_replace": "Solte para substituir",
   "designer_label_fit_mode": "Modo de ajuste",
   "designer_fit_option_fit": "Ajustar",
   "designer_fit_option_cover": "Cobrir",

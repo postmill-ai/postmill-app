@@ -3646,6 +3646,7 @@
   "designer_image_to_image_failed": "图生图失败",
   "designer_mask_upload_failed": "蒙版上传失败",
   "designer_replace_image": "替换图片…",
+  "designer_drop_to_replace": "拖放以替换",
   "designer_label_fit_mode": "适配模式",
   "designer_fit_option_fit": "适应",
   "designer_fit_option_cover": "填充",

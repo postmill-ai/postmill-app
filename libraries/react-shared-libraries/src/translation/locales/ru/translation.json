@@ -3648,6 +3648,7 @@
   "designer_image_to_image_failed": "Ошибка преобразования изображения",
   "designer_mask_upload_failed": "Не удалось загрузить маску",
   "designer_replace_image": "Заменить изображение…",
+  "designer_drop_to_replace": "Перетащите для замены",
   "designer_label_fit_mode": "Режим вписывания",
   "designer_fit_option_fit": "Вписать",
   "designer_fit_option_cover": "Заполнить",
