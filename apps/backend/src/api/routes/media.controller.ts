@@ -32,6 +32,7 @@ import { InpaintImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/inpaint.i
 import { MagicGrabImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/magic-grab.image.dto';
 import { MagicGrabCleanupDto } from '@postmill-ai/nestjs-libraries/dtos/ai/magic-grab-cleanup.dto';
 import { OutpaintImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/outpaint.image.dto';
+import { OutpaintPageImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/outpaint-page.dto';
 import { OutpaintCleanupDto } from '@postmill-ai/nestjs-libraries/dtos/ai/outpaint-cleanup.dto';
 import { ImageToImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/image-to-image.dto';
 import { UpscaleVideoDto } from '@postmill-ai/nestjs-libraries/dtos/ai/upscale-video.dto';
@@ -365,6 +366,23 @@ export class MediaController {
   ) {
     await this._aiMediaService.cleanupMagicGrab(body.fileId, org.id);
     return { success: true };
+  }
+
+  @Post('/outpaint/page')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async outpaintPage(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: OutpaintPageImageDto
+  ) {
+    return {
+      url: await this._aiMediaService.outpaintPage(
+        body.imageUrl,
+        body.maskUrl,
+        body.prompt,
+        { orgId: org.id }
+      ),
+    };
   }
 
   @Post('/outpaint')

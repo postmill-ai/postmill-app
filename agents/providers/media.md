@@ -143,8 +143,12 @@ The shared review modal invokes it on every unapplied close; successful Apply re
 background, and rejected static/video inserts return false and clean up rather than reporting success.
 Both review and final subject render original source pixels through the provider alpha, never an RGB
 silhouette. Directional expansion sends and restores the same cropped/cover frame and uses canonical
-mode geometry rather than independent provider-width/height scales. Whole-page expansion preserves
-all original layers and the page background, exposing generated pixels only outside the original
+mode geometry rather than independent provider-width/height scales. Whole-page expansion uses
+`POST /media/outpaint/page`, which pins Replicate `flux-fill-pro` for the browser-composed mask
+rather than falling back to the generic inpainting model. Both expansion paths share a
+background-only prompt that forbids unrequested text, logos, and new foreground content; optional
+user guidance is appended without replacing that instruction. Whole-page expansion preserves all
+original layers and the page background, exposing generated pixels only outside the original
 page rect. Referenced final expansion Files carry `internal: 'design-asset'` (including the large
 `/files/upload-server` path), so they stay out of the library. `POST /media/outpaint/cleanup` uses
 the `media:create` gate and deletes only org-owned Files with that stamp after cancel/stale review;

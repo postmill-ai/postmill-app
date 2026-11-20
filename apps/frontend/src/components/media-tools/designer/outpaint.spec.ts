@@ -292,6 +292,11 @@ describe('whole-page expansion', () => {
 
     expect(store.getState().history).toBe(history);
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('/media/outpaint/page');
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toEqual({
+      imageUrl: 'data:image/png;base64,AAAA',
+      maskUrl: 'data:image/png;base64,AAAA',
+    });
     expect(candidate).toMatchObject({ kind: 'page', targetWidth: 1500, targetHeight: 750 });
     const drawn = contexts.find((item) => item.drawImage.mock.calls.length);
     const masked = contexts.find((item) => item.fillRect.mock.calls.some((call: number[]) => call[0] === 350));
@@ -342,6 +347,28 @@ describe('whole-page expansion', () => {
     const reopened = createDesignerStore();
     reopened.getState().setDoc(JSON.parse(JSON.stringify(store.getState().doc)));
     expect((reopened.getState().doc.outputs[0] as any).children).toHaveLength(3);
+  });
+
+  it('trims custom whole-page guidance and sends it to the expansion endpoint', async () => {
+    const store = createDesignerStore(1000, 500);
+    store.getState().addElement(imageElement());
+    const fetch = vi.fn(async () => response('/expanded-page.png'));
+
+    await prepareWholePageOutpaint({
+      fetch,
+      store,
+      elementId: 'image-1',
+      targetWidth: 1500,
+      targetHeight: 750,
+      prompt: ' continue the burgundy backdrop ',
+    });
+
+    expect(fetch.mock.calls[0][0]).toBe('/media/outpaint/page');
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toEqual({
+      imageUrl: 'data:image/png;base64,AAAA',
+      maskUrl: 'data:image/png;base64,AAAA',
+      prompt: 'continue the burgundy backdrop',
+    });
   });
 
   it('rejects oversized whole-page compositions before reading or uploading the image', async () => {

@@ -404,13 +404,13 @@ export const prepareWholePageOutpaint = async ({
   if (imageData.length + maskData.length > 45 * 1024 * 1024) {
     throw new Error('The expanded page exceeds the 45 MB combined upload limit. Choose smaller page dimensions.');
   }
-  const response = await fetch('/media/inpaint', {
+  const response = await fetch('/media/outpaint/page', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       imageUrl: imageData,
       maskUrl: maskData,
-      prompt: prompt?.trim() || 'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.',
+      ...(prompt?.trim() ? { prompt: prompt.trim() } : {}),
     }),
   });
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Page expansion failed'));

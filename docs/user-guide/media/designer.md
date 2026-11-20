@@ -213,8 +213,10 @@ Beyond layers, shapes, text, and pen/paint tools, the **Tools** menu carries the
 actions — **Generate Image…**, **Inpaint…**, **Remove Background**, and **Expand Image (AI)…**,
 which extends an image beyond its borders (zoom out 1.5×/2×, make square, or extend left, right, up,
 or down) and requires [Replicate](./replicate). Expand can also target the **Whole page** with custom
-dimensions. Generation shows a before/after review first, prevents duplicate submissions, and only
-changes the selected image or page when you Apply the result. The color picker supports alpha; fills include
+dimensions. Both modes use background-preserving prompts intended to continue the existing scene
+without inventing unrequested text or objects. Generation shows a before/after review first, prevents
+duplicate submissions, and only changes the selected image or page when you Apply the result. The
+color picker supports alpha; fills include
 patterns (with a noise preset) and output backgrounds can carry grain or paper textures. The font
 picker includes **Upload font** for one or more of your own `.ttf`, `.otf`, or `.woff2` files.
 Batch uploads continue past individual failures and report partial success; WOFF2 fonts are not
