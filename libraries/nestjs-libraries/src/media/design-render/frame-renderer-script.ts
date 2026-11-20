@@ -464,12 +464,12 @@ ${stripExportsNamespace(mediaGeometrySource())}
       });
       ctx.closePath();
       ctx.fill();
-      if (clip.strokeWidth) ctx.stroke();
+      if (clip.stroke && clip.strokeWidth) ctx.stroke();
     } else if (clip.shape === 'ellipse') {
       ctx.beginPath();
       ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
       ctx.fill();
-      if (clip.strokeWidth) ctx.stroke();
+      if (clip.stroke && clip.strokeWidth) ctx.stroke();
     } else if (clip.shape === 'line') {
       ctx.beginPath();
       ctx.moveTo(0, h / 2);
@@ -482,7 +482,7 @@ ${stripExportsNamespace(mediaGeometrySource())}
       if (radii.some((radius) => radius > 0) && ctx.roundRect) ctx.roundRect(0, 0, w, h, radii);
       else ctx.rect(0, 0, w, h);
       ctx.fill();
-      if (clip.strokeWidth) ctx.stroke();
+      if (clip.stroke && clip.strokeWidth) ctx.stroke();
     }
     ctx.restore();
   }

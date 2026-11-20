@@ -248,6 +248,41 @@ describe('parity: geometry', () => {
     expect(pixels.at(196, 100)[2]).toBeGreaterThan(240);
   });
 
+  it('renders visible and explicit-zero video shape strokes through the poster projection', async () => {
+    const poster = videoOutputToPosterOutput({
+      id: 'video-stroke-poster',
+      formatId: 'square',
+      name: 'Video stroke poster',
+      width: 200,
+      height: 200,
+      fps: 30,
+      durationMs: 1000,
+      background: '#ffffff',
+      tracks: [{
+        id: 'shape-track',
+        type: 'shape',
+        clips: [
+          {
+            id: 'visible-stroke', startMs: 0, endMs: 1000, shape: 'rect',
+            x: 20, y: 20, width: 80, height: 60,
+            fill: '#ff0000', stroke: '#000000', strokeWidth: 6,
+          },
+          {
+            id: 'zero-stroke', startMs: 0, endMs: 1000, shape: 'rect',
+            x: 120, y: 100, width: 60, height: 60,
+            fill: '#00ff00', stroke: '#000000', strokeWidth: 0,
+          },
+        ],
+      }],
+    });
+
+    const pixels = await render({ ...doc([]), outputs: [poster] });
+    expect(pixels.at(20, 40)).toEqual([0, 0, 0, 255]);
+    expect(pixels.at(50, 40)).toEqual([255, 0, 0, 255]);
+    expect(pixels.at(120, 130)).toEqual([0, 255, 0, 255]);
+    expect(pixels.at(150, 130)).toEqual([0, 255, 0, 255]);
+  });
+
   it('rounds each corner separately when given four radii', async () => {
     const pixels = await render(
       doc([

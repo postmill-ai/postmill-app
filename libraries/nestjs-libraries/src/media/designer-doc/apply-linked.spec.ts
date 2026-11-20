@@ -797,6 +797,8 @@ describe('applyLinkedVideoClip styles', () => {
         align: 'justify',
         fontStyle: 'italic',
         textStroke: { color: '#000000', width: 6 },
+        stroke: '#123456',
+        strokeWidth: 6,
         groupId: 'new-group',
         x: 999,
       },
@@ -808,6 +810,8 @@ describe('applyLinkedVideoClip styles', () => {
     expect(sibling.align).toBe('justify');
     expect(sibling.fontStyle).toBe('italic');
     expect(sibling.textStroke).toEqual({ color: '#000000', width: 5 });
+    expect(sibling.stroke).toBe('#123456');
+    expect(sibling.strokeWidth).toBe(6);
     expect(sibling.groupId).toBe('group-1');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);
@@ -817,14 +821,30 @@ describe('applyLinkedVideoClip styles', () => {
       0,
       'track-0',
       'clip-0',
-      { fillGradient: undefined, fill: '#123456' },
+      { fillGradient: undefined, fill: '#123456', strokeWidth: 0 },
       false
     );
     const solidSibling = (cleared.outputs[1] as any).tracks[0].clips[0];
     expect(solidSibling.fillGradient).toBeUndefined();
     expect(solidSibling.fill).toBe('#123456');
+    expect(solidSibling.strokeWidth).toBe(0);
     expect(solidSibling.x).toBe(100);
     expect(solidSibling.startMs).toBe(500);
+
+    const local = applyLinkedVideoClip(
+      doc, 0, 'track-0', 'clip-0', { stroke: '#abcdef', strokeWidth: 0 }, true
+    );
+    expect((local.outputs[0] as any).tracks[0].clips[0]).toMatchObject({ stroke: '#abcdef', strokeWidth: 0 });
+    expect((local.outputs[1] as any).tracks[0].clips[0].stroke).toBeUndefined();
+
+    const frozenDoc = {
+      ...doc,
+      outputs: [doc.outputs[0], { ...doc.outputs[1], frozen: true }],
+    } as DesignerDoc;
+    const frozen = applyLinkedVideoClip(
+      frozenDoc, 0, 'track-0', 'clip-0', { stroke: '#abcdef', strokeWidth: 4 }, false
+    );
+    expect(frozen.outputs[1]).toBe(frozenDoc.outputs[1]);
   });
 
   it('clears stale crop and focal points on linked clips when their media is replaced', () => {

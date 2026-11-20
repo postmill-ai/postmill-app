@@ -62,6 +62,8 @@ interface VideoClipSnapshot {
   keyframes?: unknown[];
   shape?: string;
   fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
   crop?: CropSnapshot;
   fitMode?: 'contain' | 'cover' | 'fill';
   blendMode?: string;
@@ -1356,7 +1358,7 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
 });
 
 test.describe('Designer video Inspector and timeline essentials (mocked local document)', () => {
-  test('shape gradients paint, reflow controls persist, and frames match preview pixels', async ({ page }) => {
+  test('shape gradients and strokes paint, persist, export, and match preview pixels', async ({ page }) => {
     const mocks = new DesignerMocks();
     mocks.doc = essentialsDoc();
     mocks.name = 'Video shape gradient E2E';
@@ -1410,6 +1412,50 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     expect(radialEdge[2]).toBeGreaterThan(80);
     expect(radialEdge[2]).toBeLessThan(180);
 
+    const stroke = page.getByRole('group', { name: 'Stroke', exact: true });
+    await stroke.getByRole('button', { name: '#ff0000', exact: true }).click();
+    const strokeHex = page.getByRole('textbox', { name: 'Hex color', exact: true });
+    await strokeHex.fill('#123456');
+    await strokeHex.press('Enter');
+    const width = stroke.getByRole('spinbutton', { name: 'Width', exact: true });
+    const deselectCanvas = async () => {
+      await page.getByRole('application', { name: 'Design canvas', exact: true }).press('Escape');
+      await expect(stroke).toHaveCount(0);
+    };
+    await width.fill('6');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+    await deselectCanvas();
+    // Sample the centre of the left stroke band (the shape edge itself): a
+    // 6px stroke spans doc x 197–203, so this point stays solid stroke even
+    // when the sampled canvas pixel rounds one device pixel off.
+    await expect.poll(async () => canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))
+      .toEqual([18, 52, 86, 255]);
+
+    await clipOnTrack(page, 'Shape').click();
+    await width.fill('0');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 0,
+    });
+    await deselectCanvas();
+    // At width 0 the same point shows what lies beneath the old stroke band:
+    // the gradient's dark-blue outer stop at the shape edge, or the black
+    // artboard just outside it — never the stroke's red/green channels.
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))[0])
+      .toBeLessThan(10);
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))[1])
+      .toBeLessThan(10);
+
+    await clipOnTrack(page, 'Shape').click();
+    await width.fill('6');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+
     await saveDesign(page);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
@@ -1421,7 +1467,13 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       focalY: 0.75,
       stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000FF80' }],
     });
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
+    expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(200);
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 225, 95))[2]).toBeLessThan(40);
+    await expect.poll(async () => canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))
+      .toEqual([18, 52, 86, 255]);
 
     const framePage = await page.context().newPage();
     await mocks.install(framePage);
@@ -1431,12 +1483,23 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const frameEdge = await renderedFrameRgba(framePage, mocks, 290, 30);
     expect(frameEdge[2]).toBeGreaterThan(80);
     expect(frameEdge[2]).toBeLessThan(180);
+    expect(await renderedFrameRgba(framePage, mocks, 202, 60)).toEqual([18, 52, 86, 255]);
     await framePage.close();
 
     await clipOnTrack(page, 'Shape').click();
     await page.getByRole('radio', { name: 'Solid', exact: true }).click();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient).toBeUndefined();
     await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60)).toEqual([255, 0, 0, 255]);
+
+    await page.keyboard.press('Control+e');
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByRole('button', { name: 'Start Render', exact: true }).click();
+    await expect(page.getByText('Render Complete', { exact: true })).toBeVisible();
+    const composition = mocks.renderRequests[0].composition as DesignerDocSnapshot['outputs'][0];
+    const exportedShape = composition.tracks.find((track) => track.type === 'shape')
+      ?.clips.find((clip) => clip.id === 'shape-original');
+    expect(exportedShape).toMatchObject({ stroke: '#123456', strokeWidth: 6 });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
@@ -1779,6 +1842,45 @@ async function canvasRgbaAtDocumentPoint(
     const pixelY = Math.max(0, Math.min(canvas.height - 1, Math.round((clientY - rect.top) * canvas.height / rect.height)));
     return Array.from(context.getImageData(pixelX, pixelY, 1, 1).data);
   }, point);
+}
+
+// Sample the preview without assuming anything about the stage's on-screen
+// layout. The Konva backing store always holds the whole artboard regardless
+// of zoom, pan, or Inspector overlays, and the video output's artboard is the
+// only solid opaque black rectangle on it, so locating that rectangle gives
+// the exact doc → canvas-pixel mapping after any layout change (selection,
+// deselect, reload).
+async function canvasRgbaAtOutputPoint(
+  page: Page,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+): Promise<number[]> {
+  return page.evaluate(({ ow, oh, dx, dy }) => {
+    const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>('.konvajs-content canvas'));
+    const canvas = canvases.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    if (!canvas) throw new Error('No designer canvas');
+    const context = canvas.getContext('2d')!;
+    const { width: w, height: h } = canvas;
+    const data = context.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const i = (py * w + px) * 4;
+        if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 255) {
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+      }
+    }
+    if (maxX < 0) throw new Error('Artboard not found on canvas');
+    const sx = Math.max(0, Math.min(w - 1, Math.round(minX + dx * (maxX - minX + 1) / ow)));
+    const sy = Math.max(0, Math.min(h - 1, Math.round(minY + dy * (maxY - minY + 1) / oh)));
+    return Array.from(context.getImageData(sx, sy, 1, 1).data);
+  }, { ow: outputWidth, oh: outputHeight, dx: x, dy: y });
 }
 
 async function renderedFrameRgba(

@@ -1435,6 +1435,37 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             label={translate('fill_button', 'Fill')}
             brandEnforcement={brandEnforcement}
           />
+          {clip.shape !== 'line' && (
+            <div
+              role="group"
+              aria-label={translate('designer_label_stroke', 'Stroke')}
+              className="space-y-2"
+            >
+              <div className="text-[11px] text-textColor/50">{translate('designer_label_stroke', 'Stroke')}</div>
+              <ColorSwatch
+                label={translate('color', 'Color')}
+                value={clip.stroke || clip.fill || '#2B5CD3'}
+                onChange={(stroke) => updateClip({
+                  stroke,
+                  ...(clip.strokeWidth === undefined ? { strokeWidth: 0 } : {}),
+                })}
+                brandEnforcement={brandEnforcement}
+              />
+              <Stepper
+                label={translate('designer_label_width', 'Width')}
+                min={0}
+                max={40}
+                value={clip.strokeWidth ?? 0}
+                onChange={(strokeWidth) => updateClipSilent({
+                  strokeWidth,
+                  ...(strokeWidth > 0 && !clip.stroke
+                    ? { stroke: clip.fill || '#2B5CD3' }
+                    : {}),
+                })}
+                onCommit={commitClip}
+              />
+            </div>
+          )}
           <CornerRadiusControl
             value={clip.borderRadius}
             width={clip.width ?? 1}

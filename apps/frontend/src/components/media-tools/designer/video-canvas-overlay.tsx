@@ -937,7 +937,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           const common = {
             fill: hasGradient ? undefined : canvasColor(clip.fill || '#2B5CD3'),
             stroke: canvasColor(clip.stroke),
-            strokeWidth: clip.strokeWidth || (clip.stroke ? 1 : 0),
+            strokeWidth: clip.strokeWidth ?? (clip.stroke ? 1 : 0),
             globalCompositeOperation: blendGco,
           };
           const points = pointsForShape(

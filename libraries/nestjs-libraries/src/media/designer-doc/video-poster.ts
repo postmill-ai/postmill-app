@@ -141,7 +141,7 @@ const clipToElement = (
         ...(clip.fill ? { fill: clip.fill } : {}),
         ...(clip.fillGradient ? { fillGradient: clip.fillGradient } : {}),
         ...(clip.stroke ? { stroke: clip.stroke } : {}),
-        ...(clip.strokeWidth ? { strokeWidth: clip.strokeWidth } : {}),
+        ...(clip.strokeWidth !== undefined ? { strokeWidth: clip.strokeWidth } : {}),
         ...(clip.borderRadius !== undefined
           ? { borderRadius: clip.borderRadius }
           : {}),

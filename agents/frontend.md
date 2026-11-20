@@ -603,7 +603,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   those same gradients plus optional v14 `textStroke`; the shared Inspector exposes solid/multi-stop
   fills and outline color/width. Chromium strokes before filling through `drawVideoText` with Konva's
   miter limit 2, composites the resulting text/caption bitmap once at transition opacity, and Konva uses
-  `fillAfterStrokeEnabled`; posters project both fields to static text. Static 3D is an `extrusion` layer
+  `fillAfterStrokeEnabled`; posters project both fields to static text. Closed shape clips expose their
+  existing flat `stroke`/`strokeWidth` fields through the same ColorSwatch/Stepper controls as static
+  shapes (0–40px); explicit zero hides the outline without clearing color, while line clips retain their
+  separate color/2px fallbacks. Frame export never substitutes fill for a missing non-line stroke color.
+  Static 3D is an `extrusion` layer
   style rendered from the layer alpha; text clips use optional v12 `textExtrusion`. Both derive
   offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
   script and projected onto the poster as an extrusion style. Animation presets live in

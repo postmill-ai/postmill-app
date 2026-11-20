@@ -448,7 +448,9 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   is part of the canvas font shorthand in Konva, `drawVideoText`, captions, and poster projection;
   italic catalog faces must be included in `fontLinksForOutput` and `fontPreloadsForOutput`. Shape
   gradients use injected `buildStyleGradient`; doc v9 `fillGradient`/`align` also project through
-  `video-poster.ts`. The Konva preview omits a shape's solid `fill` whenever gradient stops exist —
+  `video-poster.ts`. Shape strokes use the existing flat `stroke`/`strokeWidth` fields: explicit zero
+  suppresses non-line outlines in preview, poster, and frames, missing non-line stroke color never falls
+  back to fill, and lines retain their separate color/2px fallbacks. The Konva preview omits a shape's solid `fill` whenever gradient stops exist —
   Konva's default `fillPriority: color` otherwise paints the solid and hides the gradient. Rect clips
   accept scalar or `[tl,tr,br,bl]` radii through injected `cornerRadii`
   and Canvas `roundRect` — never coerce a tuple to a scalar. Doc v10 `groupId` is editor/reflow
