@@ -126,9 +126,9 @@ describe('StorageService — credential sanitization (#54)', () => {
 
 describe('StorageService — organization-scoped configuration lookup', () => {
   it.each([
-    ['missing', undefined],
-    ['another organization\'s', { ...localConfig, organizationId: 'org-2' }],
-  ])('returns 404 for a %s configuration without mutating it', async (_case, config) => {
+    ['a missing configuration', undefined],
+    ['another organization\'s configuration', { ...localConfig, organizationId: 'org-2' }],
+  ])('returns 404 for %s without mutating it', async (_case, config) => {
     const repo = makeRepo({ findById: vi.fn().mockResolvedValue(config) });
     const service = makeStorageService(repo);
 

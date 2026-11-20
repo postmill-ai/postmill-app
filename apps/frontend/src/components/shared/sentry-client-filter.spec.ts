@@ -39,6 +39,7 @@ describe('frontend Sentry exception filtering', () => {
 
   it.each([
     ['AbortError', 'The operation failed for another reason'],
+    ['Error', 'Upload failed: signal is aborted without reason'],
     ['TypeError', 'Unexpected application failure'],
   ])('keeps unrelated %s exceptions', (type, value) => {
     const event = exceptionEvent(type, value);
