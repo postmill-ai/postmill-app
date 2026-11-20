@@ -73,16 +73,28 @@ describe('buildResizePatch', () => {
     expect(patch.fontSize).toBe(80);
   });
 
+  it('scales current and previous auto-fit minima with an intentional corner resize', () => {
+    const patch = buildResizePatch(
+      textEl({ autoFitMinFontSize: 12, autoFitPreviousMinFontSize: 9 }),
+      node({ scaleX: 2, scaleY: 2 }),
+      'bottom-right'
+    );
+    expect(patch.fontSize).toBe(80);
+    expect(patch.autoFitMinFontSize).toBe(24);
+    expect(patch.autoFitPreviousMinFontSize).toBe(18);
+  });
+
   it('leaves fontSize alone when text is dragged by a side handle', () => {
     // Dragging a side re-wraps the text at the same size — the box is a
     // wrapping frame there, not a zoom control.
     const patch = buildResizePatch(
-      textEl(),
+      textEl({ autoFitMinFontSize: 12 }),
       node({ scaleX: 2, scaleY: 1 }),
       'middle-right'
     );
     expect(patch.width).toBe(400);
     expect(patch.fontSize).toBeUndefined();
+    expect(patch.autoFitMinFontSize).toBeUndefined();
   });
 
   it('leaves fontSize alone for top/bottom handles', () => {

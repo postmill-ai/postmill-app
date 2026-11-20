@@ -122,6 +122,7 @@ import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/des
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
+import { DesignVideoConversionService } from '@postmill-ai/nestjs-libraries/media/design-render/design-video-conversion.service';
 import { VideoThumbnailService } from '@postmill-ai/nestjs-libraries/media/video-thumbnail.service';
 import { DesignBulkService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk.service';
 import { DesignBulkCreateService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk-create.service';
@@ -264,6 +265,7 @@ import { OrgImportRepository } from '@postmill-ai/nestjs-libraries/database/pris
     DesignerDocService,
     DesignRenderService,
     DesignPreviewService,
+    DesignVideoConversionService,
     VideoThumbnailService,
     OrgPortabilityService,
     OrgPortabilityRepository,

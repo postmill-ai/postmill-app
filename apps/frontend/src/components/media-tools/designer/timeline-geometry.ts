@@ -23,7 +23,25 @@ export interface TimelineRowGeometry {
   rulerHeight: number;
   trackHeight: number;
   trackGap: number;
+  trackHeights?: number[];
 }
+
+export const timelineRowTops = (
+  trackCount: number,
+  geometry: TimelineRowGeometry
+): number[] => {
+  if (!geometry.trackHeights) {
+    return Array.from({ length: trackCount }, (_, index) =>
+      geometry.rulerHeight + index * (geometry.trackHeight + geometry.trackGap)
+    );
+  }
+  let top = geometry.rulerHeight;
+  return geometry.trackHeights.slice(0, trackCount).map((height) => {
+    const current = top;
+    top += height + geometry.trackGap;
+    return current;
+  });
+};
 
 export const timelineTrackIndexAtClientY = (
   clientY: number,
@@ -32,7 +50,18 @@ export const timelineTrackIndexAtClientY = (
   geometry: TimelineRowGeometry
 ): number => {
   const contentY = clientY - viewportTop + scrollTop - geometry.rulerHeight;
-  return Math.floor(contentY / (geometry.trackHeight + geometry.trackGap));
+  if (!geometry.trackHeights) {
+    return Math.floor(contentY / (geometry.trackHeight + geometry.trackGap));
+  }
+  if (contentY < 0) return -1;
+  let rowTop = 0;
+  for (let index = 0; index < geometry.trackHeights.length; index++) {
+    if (contentY < rowTop + geometry.trackHeights[index] + geometry.trackGap) return index;
+    rowTop += geometry.trackHeights[index] + geometry.trackGap;
+  }
+  return contentY < rowTop + geometry.trackHeight + geometry.trackGap
+    ? geometry.trackHeights.length
+    : geometry.trackHeights.length + 1;
 };
 
 export const timelineTrackAtClientY = <T>(

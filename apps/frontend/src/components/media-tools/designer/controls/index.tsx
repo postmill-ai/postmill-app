@@ -622,7 +622,8 @@ export const Stepper: React.FC<StepperProps> = ({
 
   const bump = (dir: 1 | -1) => {
     dirtyRef.current = true;
-    onChange(clamp(value + dir * step));
+    const next = value + dir * step;
+    onChange(dir === -1 && value > max ? next : clamp(next));
     commit();
   };
 

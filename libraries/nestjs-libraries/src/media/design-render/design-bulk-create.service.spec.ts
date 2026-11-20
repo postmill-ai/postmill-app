@@ -519,6 +519,49 @@ describe('DesignBulkCreateService processing', () => {
     expect(redis.has('design-bulk:payload:job-1')).toBe(false);
   });
 
+  it('keeps auto-fit settings and authored boxes stable for long flat and rich values', async () => {
+    const { service, designService, renderService } = makeService();
+    const doc = makeDoc();
+    Object.assign(doc.outputs[0].children[0], {
+      fontSize: 40,
+      autoFit: true,
+      autoFitMinFontSize: 1,
+    });
+    doc.outputs[0].children.push({
+      id: 'rich-text', type: 'text', text: '',
+      richText: [{ text: 'For ' }, { text: '{{name}}', fontSize: 48, fontWeight: 700 }],
+      x: 0, y: 20, width: 50, height: 20,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+      fontSize: 40, autoFit: true, autoFitMinFontSize: 2,
+    });
+    const value = 'socialmedia managers with an unbrokenSupercalifragilistic token';
+
+    await service.enqueueBulkCreate('org-1', 'user-1', {
+      doc,
+      rows: [{ name: value, image: 'https://cdn.example.test/a.png' }],
+      nameBase: 'Campaign',
+    });
+    await service.processBulkCreate('job-1');
+
+    const saved = designService.createDesign.mock.calls[0][2].doc;
+    expect(saved.outputs[0].children[0]).toMatchObject({
+      text: `Hello ${value}`,
+      x: 0, y: 0, width: 50, height: 20,
+      fontSize: 40, autoFit: true, autoFitMinFontSize: 1,
+    });
+    expect(saved.outputs[0].children[2]).toMatchObject({
+      x: 0, y: 20, width: 50, height: 20,
+      fontSize: 40, autoFit: true, autoFitMinFontSize: 2,
+      richText: [{ text: 'For ' }, { text: value, fontSize: 48, fontWeight: 700 }],
+    });
+    for (const call of renderService.renderPage.mock.calls) {
+      expect(call[0].outputs[0].children[0]).toMatchObject({
+        width: 50, height: 20, autoFit: true,
+      });
+      expect(call[0].outputs[0].children[2].richText[1].text).toBe(value);
+    }
+  });
+
   it('keeps independent solid and gradient colors on every editable row', async () => {
     const { service, designService } = makeService();
     const doc = makeDoc();

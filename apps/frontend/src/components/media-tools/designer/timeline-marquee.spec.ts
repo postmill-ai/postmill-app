@@ -52,6 +52,29 @@ describe('timeline marquee', () => {
     expect(hits).toEqual([{ trackId: 't1', clipId: 'a' }]);
   });
 
+  it('uses variable row offsets and omits clips on collapsed tracks', () => {
+    const tracks = [
+      track('t1', [{ id: 'a', startMs: 0, endMs: 1000 }]),
+      track('t2', [{ id: 'b', startMs: 0, endMs: 1000 }]),
+      track('t3', [{ id: 'c', startMs: 0, endMs: 1000 }]),
+    ];
+    const geometry: MarqueeGeometry = {
+      ...GEOM,
+      trackGap: 2,
+      trackHeights: [36, 28, 36],
+      collapsedTrackIds: new Set(['t2']),
+    };
+    expect(marqueeHitClips(
+      tracks, { left: 0, right: 500, top: 90, bottom: 94 }, PPM, geometry
+    )).toEqual([{ trackId: 't3', clipId: 'c' }]);
+    expect(marqueeHitClips(
+      tracks, { left: 0, right: 500, top: 0, bottom: 200 }, PPM, geometry
+    )).toEqual([
+      { trackId: 't1', clipId: 'a' },
+      { trackId: 't3', clipId: 'c' },
+    ]);
+  });
+
   it('misses when the rect only touches the ruler or the gaps', () => {
     const tracks = [track('t1', [{ id: 'a', startMs: 0, endMs: 1000 }])];
     // Entirely within the ruler band.

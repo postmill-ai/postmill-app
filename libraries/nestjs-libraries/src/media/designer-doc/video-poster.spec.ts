@@ -4,6 +4,7 @@ import {
   videoOutputToPosterOutput,
 } from './video-poster';
 import { DesignerDocService } from './designer-doc.service';
+import { planClipArrangement } from './clip-arrangement';
 import type { VideoOutput } from './designer-doc.schema';
 
 const makeVideoOutput = (over: Partial<VideoOutput> = {}): VideoOutput => ({
@@ -144,6 +145,32 @@ describe('videoOutputToPosterOutput', () => {
     expect(byId.has('clip-vid')).toBe(false);
   });
 
+  it('keeps an arranged shared-track selection in the same poster order', () => {
+    const out = makeVideoOutput({
+      tracks: [
+        {
+          id: 'source', type: 'shape',
+          clips: [
+            { id: 'selected', startMs: 0, endMs: 1000, shape: 'rect', fill: '#ff0000' },
+            { id: 'resident', startMs: 2000, endMs: 3000, shape: 'rect', fill: '#00ff00' },
+          ],
+        },
+        {
+          id: 'target', type: 'shape',
+          clips: [{ id: 'target-clip', startMs: 0, endMs: 1000, shape: 'rect', fill: '#0000ff' }],
+        },
+      ],
+    });
+    const planned = planClipArrangement(out, [
+      { trackId: 'source', clipId: 'selected' },
+    ], 'forward', () => 'arranged');
+    expect(planned.status).toBe('ok');
+    if (planned.status !== 'ok') return;
+
+    const poster = videoOutputToPosterOutput({ ...out, tracks: planned.tracks });
+    expect(poster.children.map((element) => element.id)).toEqual(['target-clip', 'selected']);
+  });
+
   it('a video clip with a poster projects as an image element', () => {
     const poster = videoOutputToPosterOutput(
       makeVideoOutput(),
@@ -267,6 +294,19 @@ describe('videoOutputToPosterOutput', () => {
     expect(poster.children.find((el) => el.id === text.id)?.fillGradient).toEqual(text.fillGradient);
     expect(poster.children.find((el) => el.id === text.id)?.textStroke).toEqual(text.textStroke);
     expect(poster.children.find((el) => el.id === shape.id)?.fillGradient).toEqual(shape.fillGradient);
+  });
+
+  it.each([0, 6])('projects shape stroke color and explicit width %s', (strokeWidth) => {
+    const out = makeVideoOutput();
+    const shape = out.tracks[2].clips[0];
+    shape.stroke = '#123456';
+    shape.strokeWidth = strokeWidth;
+
+    const poster = videoOutputToPosterOutput(out);
+    expect(poster.children.find((el) => el.id === shape.id)).toMatchObject({
+      stroke: '#123456',
+      strokeWidth,
+    });
   });
 
   it('the projection validates as a renderable image-mode doc', () => {

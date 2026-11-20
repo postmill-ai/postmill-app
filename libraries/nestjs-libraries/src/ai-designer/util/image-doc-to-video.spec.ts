@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   imageDocToVideoDoc,
   imageOutputToVideo,
+  preservedVideoElementUnsupportedReason,
 } from './image-doc-to-video';
 import type {
   DesignerDoc,
@@ -571,5 +572,226 @@ describe('entrance staggering and element porting', () => {
       makeOutput({ children: [el('t1', 'text', { text: 'kept' })] }),
       { onDropped }
     );
+  });
+});
+
+
+describe('Edit as Video content preservation', () => {
+  const layer = (
+    id: string,
+    type: DesignerOutput['children'][number]['type'],
+    extra: Record<string, unknown> = {}
+  ) => ({
+    id,
+    type,
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 80,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    ...extra,
+  }) as DesignerOutput['children'][number];
+
+  it('converts pages to exact sequential scenes in every output without added motion', () => {
+    const doc: DesignerDoc = {
+      version: 14,
+      mode: 'image',
+      outputs: [
+        makeOutput({
+          children: [layer('p1', 'text', { text: 'one' })],
+          pages: [
+            { id: 'page-2', name: 'Second', children: [layer('p2', 'text', { text: 'two' })] },
+            { id: 'page-3', children: [layer('p3', 'text', { text: 'three' })] },
+          ],
+        }),
+        makeOutput({ id: 'out-2', children: [layer('other', 'text', { text: 'variant' })] }),
+      ],
+    };
+    const converted = imageDocToVideoDoc(doc, {
+      preserveContent: true,
+      pageDurationMs: 2000,
+    });
+    expect(converted.mode).toBe('video');
+    expect(converted.outputs).toHaveLength(2);
+    const output = converted.outputs[0] as VideoOutput;
+    expect(output.durationMs).toBe(6000);
+    const clips = output.tracks.flatMap((track) => track.clips);
+    expect(clips.map((clip) => [clip.text, clip.startMs, clip.endMs])).toEqual([
+      ['one', 0, 2000],
+      ['two', 2000, 4000],
+      ['three', 4000, 6000],
+    ]);
+    expect(clips.every((clip) => !clip.keyframes && !clip.transitionIn)).toBe(true);
+    expect(output.markers?.map((marker) => [marker.name, marker.tMs])).toEqual([
+      ['Page 1', 0],
+      ['Second', 2000],
+      ['Page 3', 4000],
+    ]);
+    expect(StrictVideoOutputSchema.safeParse(output).success).toBe(true);
+  });
+
+  it('preserves global z-order, grouping, origins, hidden and locked state', () => {
+    const output = imageOutputToVideo(
+      makeOutput({
+        children: [
+          layer('text-bottom', 'text', { text: 'bottom', groupId: 'move-unit' }),
+          layer('image-middle', 'image', { src: 'https://cdn.example.com/a.png' }),
+          layer('group', 'group', { hidden: true, locked: true }),
+          layer('text-hidden', 'text', { text: 'hidden', parentId: 'group' }),
+          layer('shape-top', 'shape', { shape: 'rect' }),
+        ],
+      }),
+      { preserveContent: true, pageDurationMs: 5000 }
+    );
+    expect(output.tracks.map((track) => [track.type, !!track.hidden, !!track.locked])).toEqual([
+      ['text', false, false],
+      ['image', false, false],
+      ['text', true, true],
+      ['shape', false, false],
+    ]);
+    expect(output.tracks[0].clips[0]).toMatchObject({
+      originId: 'text-bottom',
+      groupId: 'move-unit',
+    });
+    expect(output.tracks[2].clips[0]).toMatchObject({
+      originId: 'text-hidden',
+      groupId: 'group',
+      text: 'hidden',
+    });
+  });
+
+  it('keeps inherited and overridden page backgrounds in their own scenes', () => {
+    const output = imageOutputToVideo(
+      makeOutput({
+        bg: { type: 'color', color: '#101010' },
+        children: [],
+        pages: [
+          {
+            id: 'red-page',
+            background: { type: 'color', color: '#ff0000' },
+            children: [layer('red-text', 'text', { text: 'red' })],
+          },
+          {
+            id: 'image-page',
+            background: { type: 'image', src: 'https://cdn.example.com/bg.png' },
+            children: [layer('image-text', 'text', { text: 'image' })],
+          },
+          { id: 'inherited-page', children: [layer('base-text', 'text', { text: 'base' })] },
+        ],
+      }),
+      { preserveContent: true, pageDurationMs: 1000 }
+    );
+    expect(output.bg).toEqual({ type: 'color', color: '#101010' });
+    const backgroundClips = output.tracks.flatMap((track) => track.clips)
+      .filter((clip) => clip.originId === 'red-page' || clip.originId === 'image-page');
+    expect(backgroundClips).toHaveLength(0);
+    const allClips = output.tracks.flatMap((track) => track.clips);
+    expect(allClips.find((clip) => clip.fill === '#ff0000')).toMatchObject({
+      startMs: 1000,
+      endMs: 2000,
+    });
+    expect(allClips.find((clip) => clip.src === 'https://cdn.example.com/bg.png')).toMatchObject({
+      startMs: 2000,
+      endMs: 3000,
+    });
+    expect(allClips.find((clip) => clip.text === 'base')).toMatchObject({
+      startMs: 3000,
+      endMs: 4000,
+    });
+  });
+
+  it('carries supported gradients, strokes, crops and raster assets through strict validation', () => {
+    const gradient = {
+      type: 'linear' as const,
+      angle: 90,
+      stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
+    };
+    const output = imageOutputToVideo(
+      makeOutput({
+        children: [
+          layer('shape', 'shape', {
+            shape: 'rect', fillGradient: gradient, stroke: '#ff00ff', strokeWidth: 4,
+            borderRadius: [1, 2, 3, 4],
+          }),
+          layer('image', 'image', {
+            src: 'https://cdn.example.com/photo.png', fitMode: 'cover',
+            crop: { x: 0.1, y: 0.2, width: 0.7, height: 0.6 },
+            focalPoint: { x: 0.4, y: 0.5 }, naturalWidth: 1200, naturalHeight: 800,
+          }),
+          layer('raster', 'raster', { src: '/uploads/org/fallback.png', fileId: 'fallback' }),
+          layer('text', 'text', {
+            text: 'Styled', fillGradient: gradient, align: 'center',
+            textStroke: { color: '#000000', width: 2 },
+          }),
+        ],
+      }),
+      { preserveContent: true, pageDurationMs: 5000 }
+    );
+    const clips = output.tracks.flatMap((track) => track.clips);
+    expect(clips[0].fillGradient).toEqual(gradient);
+    expect(clips[0].stroke).toBe('#ff00ff');
+    expect(clips[1].crop).toEqual({ x: 0.1, y: 0.2, width: 0.7, height: 0.6 });
+    expect(clips[2].fileId).toBe('fallback');
+    expect(clips[3].textStroke).toEqual({ color: '#000000', width: 2 });
+    expect(StrictVideoOutputSchema.safeParse(output).success).toBe(true);
+  });
+
+  it('keeps zero and missing stroke widths explicit without inventing an outline', () => {
+    const output = imageOutputToVideo(
+      makeOutput({
+        children: [
+          layer('zero-stroke', 'shape', { shape: 'rect', stroke: '#000000', strokeWidth: 0 }),
+          layer('missing-stroke-width', 'shape', { shape: 'rect', stroke: '#000000' }),
+          layer('unstroked', 'shape', { shape: 'rect', fill: '#ffffff' }),
+        ],
+      }),
+      { preserveContent: true, pageDurationMs: 5000 },
+    );
+    const clips = output.tracks.flatMap((track) => track.clips);
+    expect(clips[0].strokeWidth).toBe(0);
+    expect(clips[1].strokeWidth).toBe(0);
+    expect(clips[2].strokeWidth).toBeUndefined();
+    expect(StrictVideoOutputSchema.safeParse(output).success).toBe(true);
+  });
+
+  it('requires a fallback for every unsupported construct instead of dropping it', () => {
+    const unsupported = [
+      layer('icon', 'icon'),
+      layer('path', 'path'),
+      layer('adjustment', 'adjustment'),
+      layer('rich', 'text', { text: 'rich', richText: [{ text: 'rich' }] }),
+      layer('effect', 'shape', { shape: 'rect', styles: [{ type: 'stroke' }] }),
+      layer('pattern', 'fill', { fillStyle: { type: 'pattern' } }),
+    ];
+    for (const element of unsupported) {
+      expect(preservedVideoElementUnsupportedReason(element)).toBeTruthy();
+      expect(() => imageOutputToVideo(makeOutput({ children: [element] }), {
+        preserveContent: true,
+        pageDurationMs: 5000,
+      })).toThrow(/requires raster fallback/);
+    }
+  });
+
+  it('rejects duration and track overflow rather than clamping or truncating', () => {
+    expect(() => imageOutputToVideo(makeOutput({
+      pages: Array.from({ length: 19 }, (_, index) => ({ id: `${index}`, children: [] })),
+    }), {
+      preserveContent: true,
+      pageDurationMs: 10000,
+    })).toThrow(/exceed the 180000ms video limit/);
+
+    const children = Array.from({ length: 41 }, (_, index) =>
+      layer(`alternating-${index}`, index % 2 ? 'text' : 'shape', {
+        text: `text ${index}`,
+        shape: 'rect',
+      })
+    );
+    expect(() => imageOutputToVideo(makeOutput({ children }), {
+      preserveContent: true,
+      pageDurationMs: 5000,
+    })).toThrow(/more than 40 tracks/);
   });
 });

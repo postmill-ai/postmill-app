@@ -7,7 +7,14 @@
  * video-mode — "Edit in Designer" opens the timeline and export rides the
  * existing render-video path.
  *
- * Mapping rules (all deterministic — no LLM involvement):
+ * Edit as Video uses the separate `preserveContent` branch below. It keeps
+ * source dimensions and global z-order, flattens every page into a timed scene,
+ * retains hidden/locked state on tracks, and rejects overflow instead of
+ * truncating clips. `DesignVideoConversionService` replaces constructs without
+ * an editable clip counterpart with internal raster assets before calling it;
+ * the preservation mapper throws if anything was missed.
+ *
+ * AI-delivery mapping rules (all deterministic — no LLM involvement):
  * - Canvas dims and fps come from the output's `CHANNEL_PRESETS` entry
  *   (video presets carry `fps`/`maxDurationMs`), clamped to the same bounds
  *   `validateVideoComposition` enforces (dims 1..MAX_DIMENSION, fps 1..240,
@@ -48,9 +55,11 @@ import type {
   VideoOutput,
   VideoTrack,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { CLIP_BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import {
   MAX_CLIPS_PER_TRACK,
   MAX_DIMENSION,
+  MAX_TRACKS,
   MAX_VIDEO_DURATION_MS,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
@@ -59,7 +68,10 @@ import {
   expandSymbols,
   type SymbolDefinition,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
-import { isEffectivelyHidden } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
+import {
+  isEffectivelyHidden,
+  isEffectivelyLocked,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 
 /** Mirrors MAX_FPS in media/design-render/video-render.service.ts. */
 const MAX_FPS = 240;
@@ -109,6 +121,10 @@ export interface ImageToVideoOptions {
    * disclose the loss. Called only when something was actually dropped.
    */
   onDropped?: (formatId: string, types: string[]) => void;
+  /** Faithful static-scene conversion used by Edit as Video. */
+  preserveContent?: boolean;
+  /** Required with preserveContent: duration of each source page in milliseconds. */
+  pageDurationMs?: number;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -195,6 +211,9 @@ export function imageOutputToVideo(
   output: DesignerOutput,
   options: ImageToVideoOptions = {}
 ): VideoOutput {
+  if (options.preserveContent) {
+    return preservedImageOutputToVideo(output, options);
+  }
   const preset = presetFor(output);
   const width = clamp(Math.round(preset?.width ?? output.width), 1, MAX_DIMENSION);
   const height = clamp(
@@ -376,3 +395,337 @@ export function imageDocToVideoDoc(
     ),
   };
 }
+
+
+type PreservedTrackType = 'image' | 'raster' | 'shape' | 'text';
+type PendingPreservedClip = {
+  clip: VideoClip;
+  type: PreservedTrackType;
+  hidden: boolean;
+  locked: boolean;
+};
+
+/**
+ * Returns the visual feature that prevents a source element from becoming an
+ * editable video clip. The Edit as Video service uses this to select raster
+ * fallbacks before calling the synchronous mapper.
+ */
+export function preservedVideoElementUnsupportedReason(
+  el: DesignerElement
+): string | null {
+  if (el.type === 'group') return null;
+  if (el.type === 'symbol') return 'unexpanded symbol';
+  if (el.type === 'icon' || el.type === 'path' || el.type === 'adjustment') {
+    return `${el.type} layers have no editable clip counterpart`;
+  }
+  if (el.styles?.length) return 'layer styles';
+  if (el.clipped) return 'clipped compositing';
+  if (el.backdropFilter) return 'backdrop filtering';
+  if (
+    el.blendMode &&
+    el.blendMode !== 'normal' &&
+    !CLIP_BLEND_MODES.includes(el.blendMode as (typeof CLIP_BLEND_MODES)[number])
+  ) {
+    return `blend mode ${el.blendMode}`;
+  }
+  if (el.mask) return 'preset layer masks';
+  if (el.flipX || el.flipY) return 'flipped geometry';
+  if (el.warp) return 'warped geometry';
+  if (el.boxShadow) return 'box shadow';
+
+  if (el.type === 'fill') {
+    if (el.fillStyle?.type === 'solid' && el.fillStyle.color) return null;
+    if (el.fillStyle?.type === 'gradient' && el.fillStyle.gradient) return null;
+    return 'pattern or incomplete fill layers';
+  }
+  if (el.type === 'image' || el.type === 'raster') {
+    return el.src || el.fileId ? null : 'missing image source';
+  }
+  if (el.type === 'shape') {
+    if (!el.shape) return 'missing shape geometry';
+    if (el.nodes || el.subpaths) return 'custom shape paths';
+    if (el.strokeStyle) return 'advanced stroke styling';
+    return null;
+  }
+  if (el.type === 'text') {
+    if (el.richText) return 'rich-text runs';
+    if (el.verticalAlign) return 'vertical text alignment';
+    if (el.lineHeight !== undefined) return 'custom line height';
+    if (el.letterSpacing !== undefined) return 'letter spacing';
+    if (el.textScaleX !== undefined) return 'horizontal text scaling';
+    if (el.textShadow) return 'text shadow';
+    if (el.curve !== undefined || el.textPath) return 'curved text';
+    if (el.textTransform && el.textTransform !== 'none') return 'text transformation';
+    if (el.paragraphSpacing !== undefined) return 'paragraph spacing';
+    if (el.firstLineIndent !== undefined) return 'first-line indentation';
+    return typeof el.text === 'string' ? null : 'missing text content';
+  }
+  return 'unsupported element type';
+}
+
+const preservedClipBase = (
+  el: DesignerElement,
+  pageIndex: number,
+  pageDurationMs: number
+): VideoClip => {
+  const startMs = pageIndex * pageDurationMs;
+  return {
+    ...baseClip(el, pageDurationMs),
+    startMs,
+    endMs: startMs + pageDurationMs,
+    ...(el.groupId || el.parentId
+      ? { groupId: el.groupId || el.parentId }
+      : {}),
+    ...(pageIndex === 0 ? { originId: el.originId || el.id } : {}),
+    ...(el.blendMode && el.blendMode !== 'normal'
+      ? { blendMode: el.blendMode as VideoClip['blendMode'] }
+      : {}),
+    ...(el.filters ? { filters: el.filters } : {}),
+    ...(el.smartFilters ? { smartFilters: el.smartFilters } : {}),
+    ...(el.originalSrc ? { originalSrc: el.originalSrc } : {}),
+    ...(el.originalFileId ? { originalFileId: el.originalFileId } : {}),
+  };
+};
+
+const preservedClipForElement = (
+  el: DesignerElement,
+  pageIndex: number,
+  pageDurationMs: number
+): { clip: VideoClip; type: PreservedTrackType } => {
+  const unsupported = preservedVideoElementUnsupportedReason(el);
+  if (unsupported) {
+    throw new Error(`Element ${el.id} requires raster fallback: ${unsupported}`);
+  }
+  const base = preservedClipBase(el, pageIndex, pageDurationMs);
+  if (el.type === 'image' || el.type === 'raster') {
+    return {
+      type: el.type,
+      clip: {
+        ...base,
+        src: el.src,
+        fileId: el.fileId,
+        ...(el.qr ? { qr: el.qr } : {}),
+        ...(el.fitMode ? { fitMode: el.fitMode } : {}),
+        ...(el.crop ? { crop: el.crop } : {}),
+        ...(el.focalPoint ? { focalPoint: el.focalPoint } : {}),
+        ...(el.naturalWidth ? { naturalWidth: el.naturalWidth } : {}),
+        ...(el.naturalHeight ? { naturalHeight: el.naturalHeight } : {}),
+        ...(el.maskSrc ? { maskSrc: el.maskSrc } : {}),
+        ...(el.maskFileId ? { maskFileId: el.maskFileId } : {}),
+        ...(el.maskEnabled !== undefined ? { maskEnabled: el.maskEnabled } : {}),
+        ...(el.borderRadius ? { borderRadius: el.borderRadius } : {}),
+      },
+    };
+  }
+  if (el.type === 'shape') {
+    return {
+      type: 'shape',
+      clip: {
+        ...base,
+        shape: el.shape,
+        ...(el.sides ? { sides: el.sides } : {}),
+        ...(el.innerRatio ? { innerRatio: el.innerRatio } : {}),
+        ...(el.fill ? { fill: el.fill } : {}),
+        ...(el.fillGradient ? { fillGradient: el.fillGradient } : {}),
+        ...(el.stroke ? { stroke: el.stroke } : {}),
+        ...(el.stroke || el.strokeWidth !== undefined
+          ? { strokeWidth: el.strokeWidth ?? 0 }
+          : {}),
+        ...(el.borderRadius ? { borderRadius: el.borderRadius } : {}),
+      },
+    };
+  }
+  if (el.type === 'fill') {
+    return {
+      type: 'shape',
+      clip: {
+        ...base,
+        shape: 'rect',
+        ...(el.fillStyle?.color ? { fill: el.fillStyle.color } : {}),
+        ...(el.fillStyle?.gradient ? { fillGradient: el.fillStyle.gradient } : {}),
+      },
+    };
+  }
+  return {
+    type: 'text',
+    clip: {
+      ...base,
+      text: el.text,
+      ...(el.fontFamily ? { fontFamily: el.fontFamily } : {}),
+      ...(el.fontSize ? { fontSize: el.fontSize } : {}),
+      ...(el.fontWeight ? { fontWeight: el.fontWeight } : {}),
+      ...(el.fontStyle ? { fontStyle: el.fontStyle } : {}),
+      ...(el.fill ? { fill: el.fill } : {}),
+      ...(el.fillGradient ? { fillGradient: el.fillGradient } : {}),
+      ...(el.align ? { align: el.align } : {}),
+      ...(el.textStroke ? { textStroke: el.textStroke } : {}),
+    },
+  };
+};
+
+const preservedBackgroundClip = (
+  background: NonNullable<DesignerOutput['bg']>,
+  pageId: string,
+  pageIndex: number,
+  pageDurationMs: number,
+  width: number,
+  height: number
+): { clip: VideoClip; type: PreservedTrackType } => {
+  if (background.texture) {
+    throw new Error(`Background on page ${pageIndex + 1} requires raster fallback`);
+  }
+  const element: DesignerElement = {
+    id: pageId,
+    type: background.type === 'image' ? 'image' : 'shape',
+    x: 0,
+    y: 0,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    ...(background.type === 'image'
+      ? {
+          src: background.src,
+          fileId: background.fileId,
+          ...(background.focalPoint ? { focalPoint: background.focalPoint } : {}),
+          ...(background.naturalWidth ? { naturalWidth: background.naturalWidth } : {}),
+          ...(background.naturalHeight ? { naturalHeight: background.naturalHeight } : {}),
+        }
+      : background.type === 'gradient' && background.gradient
+        ? { shape: 'rect' as const, fillGradient: background.gradient }
+        : { shape: 'rect' as const, fill: background.color || '#000000' }),
+  };
+  return preservedClipForElement(element, pageIndex, pageDurationMs);
+};
+
+const preservedImageOutputToVideo = (
+  output: DesignerOutput,
+  options: ImageToVideoOptions
+): VideoOutput => {
+  const pageDurationMs = options.pageDurationMs;
+  const pageCount = 1 + (output.pages?.length ?? 0);
+  if (
+    !Number.isInteger(pageDurationMs) ||
+    (pageDurationMs as number) < 100 ||
+    (pageDurationMs as number) > MAX_VIDEO_DURATION_MS
+  ) {
+    throw new Error('Page duration must be a whole number between 100 and 180000 milliseconds');
+  }
+  const durationMs = pageCount * (pageDurationMs as number);
+  if (durationMs > MAX_VIDEO_DURATION_MS) {
+    throw new Error(
+      `${pageCount} pages at ${pageDurationMs}ms exceed the ${MAX_VIDEO_DURATION_MS}ms video limit`
+    );
+  }
+
+  const preset = presetFor(output);
+  const width = clamp(Math.round(output.width), 1, MAX_DIMENSION);
+  const height = clamp(Math.round(output.height), 1, MAX_DIMENSION);
+  const fps = clamp(Math.round(preset?.fps ?? DEFAULT_FPS), 1, MAX_FPS);
+  const tracks: VideoTrack[] = [];
+  const layouts = new Map<string, VideoTrack[]>();
+  const markers: NonNullable<VideoOutput['markers']> = [];
+  const pages = [
+    {
+      id: `${output.id}-page-1`,
+      name: 'Page 1',
+      children: output.children ?? [],
+      background: undefined,
+    },
+    ...(output.pages ?? []),
+  ];
+
+  for (const [pageIndex, page] of pages.entries()) {
+    const expanded = expandSymbols(page.children, options.symbols);
+    const pending: PendingPreservedClip[] = [];
+    if (pageIndex > 0 && page.background) {
+      const background = preservedBackgroundClip(
+        page.background,
+        page.id,
+        pageIndex,
+        pageDurationMs as number,
+        width,
+        height
+      );
+      pending.push({ ...background, hidden: false, locked: false });
+    }
+    for (const el of expanded) {
+      if (el.type === 'group') continue;
+      const mapped = preservedClipForElement(el, pageIndex, pageDurationMs as number);
+      pending.push({
+        ...mapped,
+        hidden: isEffectivelyHidden(expanded, el),
+        locked: isEffectivelyLocked(expanded, el),
+      });
+    }
+
+    const runs: PendingPreservedClip[][] = [];
+    for (const item of pending) {
+      const previous = runs.at(-1)?.[0];
+      if (
+        previous &&
+        previous.type === item.type &&
+        previous.hidden === item.hidden &&
+        previous.locked === item.locked
+      ) {
+        runs.at(-1)!.push(item);
+      } else {
+        runs.push([item]);
+      }
+    }
+    const layoutKey = runs
+      .map((run) => `${run[0].type}:${run[0].hidden}:${run[0].locked}`)
+      .join('|');
+    let layout = layouts.get(layoutKey);
+    if (!layout) {
+      if (tracks.length + runs.length > MAX_TRACKS) {
+        throw new Error(
+          `Output ${output.formatId} needs more than ${MAX_TRACKS} tracks to preserve source order`
+        );
+      }
+      layout = runs.map((run) => ({
+        id: genId(),
+        type: run[0].type,
+        clips: [],
+        ...(run[0].hidden ? { hidden: true } : {}),
+        ...(run[0].locked ? { locked: true } : {}),
+      }));
+      layouts.set(layoutKey, layout);
+      tracks.push(...layout);
+    }
+    for (const [index, run] of runs.entries()) {
+      const track = layout[index];
+      if (track.clips.length + run.length > MAX_CLIPS_PER_TRACK) {
+        throw new Error(
+          `Output ${output.formatId} exceeds ${MAX_CLIPS_PER_TRACK} clips on one track`
+        );
+      }
+      track.clips.push(...run.map((item) => item.clip));
+    }
+    markers.push({
+      id: genId(),
+      tMs: pageIndex * (pageDurationMs as number),
+      name: page.name || `Page ${pageIndex + 1}`,
+    });
+  }
+
+  return {
+    id: output.id,
+    formatId: output.formatId,
+    name: output.name,
+    width,
+    height,
+    fps,
+    durationMs,
+    tracks,
+    markers,
+    ...(output.frozen ? { frozen: true } : {}),
+    ...(output.bg
+      ? { bg: output.bg }
+      : output.background
+        ? { bg: { type: 'color' as const, color: output.background } }
+        : {}),
+  };
+};

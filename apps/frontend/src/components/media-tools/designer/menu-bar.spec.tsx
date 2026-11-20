@@ -70,4 +70,60 @@ describe('MenuBar', () => {
     expect(item.getAttribute('role')).toBe('menuitemcheckbox');
     expect(item.getAttribute('aria-checked')).toBe('true');
   });
+
+  it('keeps a tall submenu inside a short viewport', () => {
+    const box = (left: number, top: number, width: number, height: number): DOMRect => ({
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+      x: left,
+      y: top,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(720);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-submenu-flyout')) return box(300, 480, 230, 504);
+      if (this.getAttribute('role') === 'menuitem' && this.textContent?.includes('Format')) {
+        return box(100, 480, 200, 30);
+      }
+      return box(0, 0, 0, 0);
+    });
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function () {
+      return this.hasAttribute('data-submenu-flyout') ? 637 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function () {
+      return this.hasAttribute('data-submenu-flyout') ? 502 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function () {
+      return this.hasAttribute('data-submenu-flyout') ? 228 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function () {
+      return this.hasAttribute('data-submenu-flyout') ? 228 : 0;
+    });
+
+    try {
+      const actions: DesignerAction[] = Array.from({ length: 16 }, (_, index) => ({
+        id: `format-${index}`,
+        label: `Format action ${index}`,
+        menu: 'file',
+        submenuPath: ['Format'],
+        run: vi.fn(),
+      }));
+      render(<MenuBar actions={actions} />);
+      fireEvent.click(screen.getByRole('menuitem', { name: 'File' }));
+      fireEvent.mouseEnter(screen.getByRole('menuitem', { name: /Format/ }));
+
+      const flyout = document.querySelector<HTMLElement>('[data-submenu-flyout]')!;
+      expect(flyout.style.top).toBe('8px');
+      expect(flyout.style.maxHeight).toBe('506px');
+      expect(Number.parseFloat(flyout.style.top) + Number.parseFloat(flyout.style.maxHeight))
+        .toBeLessThanOrEqual(720);
+      expect(flyout.style.visibility).toBe('visible');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });

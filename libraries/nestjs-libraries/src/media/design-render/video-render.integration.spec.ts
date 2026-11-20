@@ -4,6 +4,8 @@ import sharp from 'sharp';
 import { ChromiumFrameCaptureService } from './chromium-frame-capture.service';
 import { FfmpegVideoEncoderService } from './ffmpeg-video-encoder.service';
 import type { VideoOutput } from './design-render.types';
+import { imageDocToVideoDoc } from '@postmill-ai/nestjs-libraries/ai-designer/util/image-doc-to-video';
+import { videoOutputToPosterOutput } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 
 const redVideo = (durationMs = 1000): VideoOutput => ({
   id: 'test-output',
@@ -406,6 +408,112 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     }
   }, 120000);
 
+  it('captures closed-shape strokes at 1x and 2x without zero or fallback outlines', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shape-stroke-capture-'));
+    const output: VideoOutput = {
+      ...redVideo(1000),
+      width: 320,
+      height: 240,
+      fps: 1,
+      background: '#ffffff',
+      tracks: [{
+        id: 'strokes',
+        type: 'shape',
+        clips: [
+          {
+            id: 'rect-stroke', shape: 'rect', startMs: 0, endMs: 1000,
+            x: 10, y: 10, width: 90, height: 60,
+            fill: '#ff0000', stroke: '#000000', strokeWidth: 4,
+          },
+          {
+            id: 'ellipse-stroke', shape: 'ellipse', startMs: 0, endMs: 1000,
+            x: 110, y: 10, width: 90, height: 60,
+            fill: '#ff0000', stroke: '#0000ff', strokeWidth: 8,
+          },
+          {
+            id: 'star-stroke', shape: 'star', startMs: 0, endMs: 1000,
+            x: 210, y: 10, width: 100, height: 60,
+            fill: '#ff0000', stroke: '#00ff00', strokeWidth: 2,
+          },
+          {
+            id: 'triangle-zero', shape: 'triangle', startMs: 0, endMs: 1000,
+            x: 40, y: 100, width: 100, height: 80,
+            fill: '#ffff00', stroke: '#000000', strokeWidth: 0,
+          },
+          {
+            id: 'polygon-stroke', shape: 'polygon', startMs: 0, endMs: 1000,
+            x: 170, y: 100, width: 100, height: 80,
+            fill: '#ff0000', stroke: '#ff00ff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color-ellipse', shape: 'ellipse', startMs: 0, endMs: 1000,
+            x: 10, y: 190, width: 80, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color-polygon', shape: 'polygon', startMs: 0, endMs: 1000,
+            x: 110, y: 190, width: 90, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color', shape: 'rect', startMs: 0, endMs: 1000,
+            x: 220, y: 190, width: 80, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+        ],
+      }],
+    };
+
+    try {
+      for (const scale of [1, 2]) {
+        const dir = path.join(frameRoot, `${scale}x`);
+        fs.mkdirSync(dir);
+        expect(await capture.captureFrames(output, 1, dir, undefined, undefined, scale)).toBe(1);
+        const { data, info } = await sharp(path.join(dir, 'frame-00001.png'))
+          .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        expect(info.width).toBe(320 * scale);
+        expect(info.height).toBe(240 * scale);
+        const at = (x: number, y: number) => {
+          const index = (y * scale * info.width + x * scale) * info.channels;
+          return [...data.subarray(index, index + 4)];
+        };
+        expect(at(10, 40)).toEqual([0, 0, 0, 255]);
+        expect(at(50, 40)).toEqual([255, 0, 0, 255]);
+        expect(at(155, 10)).toEqual([0, 0, 255, 255]);
+        expect(at(50, 187)).toEqual([255, 255, 255, 255]);
+        expect(at(50, 210)).toEqual([0, 255, 255, 255]);
+        expect(at(155, 187)).toEqual([255, 255, 255, 255]);
+        expect(at(155, 210)).toEqual([0, 255, 255, 255]);
+        expect(at(217, 210)).toEqual([255, 255, 255, 255]);
+        expect(at(220, 210)).toEqual([0, 255, 255, 255]);
+
+        const count = (
+          left: number, top: number, width: number, height: number,
+          predicate: (r: number, g: number, b: number) => boolean,
+        ) => {
+          let matches = 0;
+          for (let y = top * scale; y < (top + height) * scale; y++) {
+            for (let x = left * scale; x < (left + width) * scale; x++) {
+              const index = (y * info.width + x) * info.channels;
+              if (predicate(data[index], data[index + 1], data[index + 2])) matches++;
+            }
+          }
+          return matches;
+        };
+        expect(count(210, 10, 100, 60, (r, g, b) => r < 80 && g > 180 && b < 80))
+          .toBeGreaterThan(10 * scale);
+        expect(count(170, 100, 100, 80, (r, g, b) => r > 180 && g < 80 && b > 180))
+          .toBeGreaterThan(20 * scale);
+        expect(count(40, 100, 100, 80, (r, g, b) => r < 80 && g < 80 && b < 80)).toBe(0);
+      }
+    } finally {
+      fs.rmSync(frameRoot, { recursive: true, force: true });
+    }
+  }, 120000);
+
   it('exports gradient and outlined text over an animated video clip to MP4', async () => {
     const fs = await import('fs');
     const { execFileSync } = await import('child_process');
@@ -520,6 +628,75 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     }
   }, 120000);
 
+  it('exports converted scene timing, z-order, poster and hidden-track state', async () => {
+    const layer = (id: string, type: string, extra: Record<string, unknown>) => ({
+      id, type, x: 0, y: 0, width: 320, height: 240, rotation: 0,
+      opacity: 1, locked: false, hidden: false, ...extra,
+    });
+    const converted = imageDocToVideoDoc({
+      version: 14,
+      mode: 'image',
+      outputs: [{
+        id: 'converted-scenes', formatId: 'custom', name: 'Converted scenes',
+        width: 320, height: 240, background: '#0000ff',
+        children: [
+          layer('red-page', 'shape', { shape: 'rect', fill: '#ff0000' }),
+          layer('page-one-text', 'text', {
+            text: 'ONE', x: 20, y: 20, width: 200, height: 50,
+            fontFamily: 'Arial', fontSize: 32, fill: '#ffffff',
+          }),
+          layer('hidden-cover', 'shape', { shape: 'rect', fill: '#000000', hidden: true }),
+        ],
+        pages: [{
+          id: 'green-page', background: { type: 'color', color: '#00ff00' },
+          children: [layer('page-two-text', 'text', {
+            text: 'TWO', x: 20, y: 20, width: 200, height: 50,
+            fontFamily: 'Arial', fontSize: 32, fill: '#000000',
+          })],
+        }],
+      }],
+    } as any, { preserveContent: true, pageDurationMs: 1000 });
+    const output = converted.outputs[0] as any;
+    const poster = videoOutputToPosterOutput(output);
+    expect(output.durationMs).toBe(2000);
+    expect(poster.children.map((child) => child.type)).toEqual(['shape', 'text']);
+    expect(poster.children.map((child) => child.text)).toEqual([undefined, 'ONE']);
+    expect(poster.children.some((child) => child.fill === '#000000')).toBe(false);
+
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edit-as-video-frames-'));
+    try {
+      await capture.captureFrames(output, 1, frameDir);
+      const readFrame = async (name: string) => {
+        const frame = await sharp(path.join(frameDir, name))
+          .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        const at = (x: number, y: number) => {
+          const index = (y * frame.info.width + x) * frame.info.channels;
+          return [...frame.data.subarray(index, index + 3)];
+        };
+        const textPixels = (color: 'white' | 'black') => {
+          let count = 0;
+          for (let y = 20; y < 70; y++) {
+            for (let x = 20; x < 220; x++) {
+              const [r, g, b] = at(x, y);
+              if (color === 'white' && r > 240 && g > 240 && b > 240) count++;
+              if (color === 'black' && r < 15 && g < 15 && b < 15) count++;
+            }
+          }
+          return count;
+        };
+        return { at, textPixels };
+      };
+      const first = await readFrame('frame-00001.png');
+      expect(first.at(160, 120)).toEqual([255, 0, 0]);
+      expect(first.textPixels('white')).toBeGreaterThan(10);
+      const second = await readFrame('frame-00002.png');
+      expect(second.at(160, 120)).toEqual([0, 255, 0]);
+      expect(second.textPixels('black')).toBeGreaterThan(10);
+    } finally {
+      fs.rmSync(frameDir, { recursive: true, force: true });
   it('exports a multi-point motion path at matching times and resolutions', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);

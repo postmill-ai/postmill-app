@@ -149,6 +149,25 @@ describe('reflowVideoClip', () => {
     expect(out.fillGradient).toEqual(fillGradient);
   });
 
+  it('scales nonzero shape strokes and preserves color and explicit zero', () => {
+    const source = clip({
+      shape: 'rect', x: 100, y: 100, width: 400, height: 300,
+      stroke: '#123456', strokeWidth: 8,
+    });
+    const scaled = reflowVideoClip(source, 'shape', LANDSCAPE, { width: 960, height: 540 });
+    expect(scaled.stroke).toBe('#123456');
+    expect(scaled.strokeWidth).toBe(4);
+
+    const zero = reflowVideoClip(
+      { ...source, strokeWidth: 0 },
+      'shape',
+      LANDSCAPE,
+      { width: 960, height: 540 }
+    );
+    expect(zero.stroke).toBe('#123456');
+    expect(zero.strokeWidth).toBe(0);
+  });
+
   it('never touches audio clips', () => {
     const c = clip({ x: 1, y: 2, width: 3, height: 4, volume: 0.7 });
     expect(reflowVideoClip(c, 'audio', LANDSCAPE, PORTRAIT)).toMatchObject({

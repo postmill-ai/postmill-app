@@ -24,6 +24,7 @@ export async function runMagicGrabAcceptance(page: Page, testInfo: TestInfo): Pr
   const prepare = process.env.E2E_LIVE_PREPARE_RESIZED;
   if (prepare) {
     const filename = 'magic-grab-chair-source.jpg';
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
     await page.getByRole('button', { name: 'Replace image…', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Replace image', exact: true });
     await expect(picker).toBeVisible();
@@ -57,6 +58,7 @@ export async function runMagicGrabAcceptance(page: Page, testInfo: TestInfo): Pr
     response.request().method() === 'POST' && apiPath(response.url()) === '/media/magic-grab',
     { timeout: 240_000 }
   );
+  await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
   await page.getByRole('button', { name: 'Magic Grab / Select Subject', exact: true }).click();
   const generation = await generationPromise;
   const result = await generation.json().catch(() => undefined) as {

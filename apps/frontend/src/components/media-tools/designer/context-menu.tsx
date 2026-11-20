@@ -3,13 +3,20 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { defaultTextBox } from './measure-text';
+import { addText } from './add-text';
 import {
   combinableElements,
   combineElements,
   PATHFINDER_OPS,
 } from './layer-actions';
-import type { DesignerElement, DesignerOutput } from './designer.store';
+import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
+import {
+  CLIP_ARRANGEMENT_MENU_COMMANDS,
+  clipArrangementFailureText,
+  clipArrangementRefsForTarget,
+  clipArrangementSelectionFailure,
+  runClipArrangement,
+} from './clip-arrangement-actions';
 import { pageChildren } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
   getContextMenuPlacement,
@@ -40,6 +47,7 @@ interface MenuItem {
   label: string;
   action: (() => void) | null;
   disabled?: boolean;
+  title?: string;
   /** A hover/focus/touch flyout — the canvas context menu's answer to the
       menu bar's submenuPath (used by Pathfinder). */
   children?: { label: string; action: () => void }[];
@@ -70,6 +78,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
     ? out.tracks.find((track) => track.clips.some((clip) => clip.id === elementId))
     : undefined;
   const videoClip = clipTrack?.clips.find((clip) => clip.id === elementId);
+  const clipTarget = clipTrack && videoClip
+    ? { trackId: clipTrack.id, clipId: videoClip.id }
+    : null;
+  const clipArrangementRefs = clipTarget
+    ? clipArrangementRefsForTarget(s.selectedClips, clipTarget)
+    : [];
+  const clipArrangementFailure = 'tracks' in out
+    ? clipArrangementSelectionFailure(out as VideoOutput, clipArrangementRefs)
+    : null;
 
   // Selection order matters to Pathfinder (Minus Front consumes the top one),
   // so the ops read the selected elements in selectedIds order, like the
@@ -252,6 +269,22 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
             },
           },
           { label: '-', action: null },
+          ...CLIP_ARRANGEMENT_MENU_COMMANDS.map((command) => ({
+            label: t(command.key, command.label),
+            disabled: !!clipArrangementFailure,
+            title: clipArrangementFailure
+              ? clipArrangementFailureText(clipArrangementFailure, t)
+              : undefined,
+            action: () => runClipArrangement(
+              store,
+              s.currentOutput,
+              clipArrangementRefs,
+              command.direction,
+              toaster,
+              t
+            ),
+          })),
+          { label: '-', action: null },
           {
             label: t('group', 'Group'),
             action: () => store.getState().groupSelection(),
@@ -323,7 +356,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           { label: '-', action: null },
           { label: t('designer_action_select_all_select_all', 'Select All'), action: () => s.setSelectedIds(imageOut?.children.map((c) => c.id) ?? []) },
           { label: '-', action: null },
-          { label: t('designer_context_add_text', 'Add Text'), action: () => s.addElement({ id: '', type: 'text', x: 100, y: 100, ...defaultTextBox({ text: 'Text', fontSize: 16 }), rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Text' }) },
+          { label: t('designer_context_add_text', 'Add Text'), action: () => addText(store, {}, { at: { x: 100, y: 100 } }) },
           { label: t('designer_context_add_shape', 'Add Shape'), action: () => s.addElement({ id: '', type: 'shape', x: 100, y: 100, width: 200, height: 200, rotation: 0, opacity: 1, locked: false, hidden: false, shape: 'rect' }) },
           { label: t('designer_context_add_image', 'Add Image'), action: () => onAddImage?.() },
         ];
@@ -431,7 +464,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           <button
             key={item.label}
             disabled={item.disabled}
-            className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset disabled:opacity-40 disabled:cursor-not-allowed"
+            title={item.title}
+            className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             onClick={() => {
               item.action?.();
               onClose();

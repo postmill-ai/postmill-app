@@ -234,9 +234,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   IS page 1; `output.pages[0..n]` are the extra pages (`{ id, name?, background?, children[] }` — no
   size: pages inherit their output's canvas, capped at `MAX_PAGES_PER_OUTPUT`). This is one document
   model, not a separate carousel doc type. **View → Pages / Carousel** opens the side-by-side strip;
-  Carousel can insert after any slide and delete slide 1 by promoting the next slide (`allowFirst`),
-  while ordinary Pages keeps the base-slot deletion restriction. Selection/reorder/duplicate/delete/
-  insert each commit one Undo. Shared accessors live in `designer-doc/designer-doc.pages.ts`
+  adding or duplicating page content also reopens it after a saved hide override by clearing that
+  override, not by saving an always-on preference. Every page has
+  right-click and always-visible three-dot actions. Carousel can insert after any slide and delete
+  slide 1 by promoting the next slide (`allowFirst`), while ordinary Pages keeps the base-slot
+  deletion restriction. Selection/reorder/duplicate/delete/insert each commit one Undo. Page
+  duplication fresh-mints element/origin ids and consistently remaps `parentId`/`groupId`. Shared
+  accessors live in `designer-doc/designer-doc.pages.ts`
   (`pageChildren`/`withPageChildren`/`pageBackground`/`appendPage`/`removePageAt`) — never read
   `output.children` directly in an editing surface. Headless `addPage` accepts `afterPageNumber`, and
   `removePage` accepts `allowFirst`. Linked-edit (`originId`) propagation across outputs is a
@@ -253,6 +257,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `private, no-store` and no File row. Stored version thumbnails avoid only the version fetch;
   preview loads are request-scoped by design/version id and are not restarted by changing
   translation identities.
+- **Edit as Video clones instead of switching modes.** File → Format → Edit as Video opens
+  `edit-as-video-dialog.tsx`; it saves current edits through `runManualSave`, then POSTs only the
+  source id and selected page duration to `/media/designs/:id/convert-to-video` with one stable
+  `X-Idempotency-Key` per dialog attempt. The backend creates a separate video design and returns it
+  with the conversion summary. The dialog loads that returned document/id and updates the standalone
+  URL without refetching; Cancel makes no request, failures leave the source open, and success lists
+  scene timing, hidden layers, and every raster fallback. The old static-to-video `setMode` warning is
+  gone. Video-to-image mode conversion remains unchanged and is not a reverse-content-preservation
+  feature.
 - **Video outputs have variants too.** The `+` add-format flow works in video mode: a new output
   CLONES the current output's tracks/clips with fresh ids and smart-reflows the geometry onto the
   new canvas via `designer-doc/video-reflow.ts` (clips map onto pseudo-elements and go through
@@ -277,7 +290,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Formats can be linked or independent.** Add Formats defaults to linked content; independent
-  copies use fresh ids without shared `originId`s for static pages/elements and video clips. The
+  copies use fresh ids without shared `originId`s for static pages/elements and video clips. Format
+  right-click/three-dot menus also expose explicit linked and independent duplication through the
+  store's `duplicateOutput`; unlike Add Format, duplication preserves dimensions and geometry exactly,
+  including every static page or video track/clip, while fresh-minting local ids and remapping groups.
+  Linked static duplication shares page-one origins only; independent duplication removes origins and
+  receives a fresh `contentLinkGroup`. Each copy inserts after its source with one Undo. The
   store and headless `addOutput` op both accept `linkContent: false`; omitting it preserves linked
   behavior, and Undo adds/removes the whole format. The store seeds from the ACTIVE output (including
   its pages); a frozen source is allowed unless linked copying would need to backfill its missing
@@ -309,7 +327,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `renderLibraryPreview`, which retains the original full-size stage before scaling the final JPEG.
 - **Output freeze is distinct from layer/track lock.** Optional-additive `output.frozen` is valid on
   v13 without a version bump (and remains additive when a later version lands). Snowflakes switch
-  the flag through `setOutputFrozen` (store and headless op); switching output, exporting, and
+  the flag through `setOutputFrozen` (store and headless op), and frozen tabs carry a visible Frozen
+  label/tint. Duplication creates an editable unfrozen copy; linked duplication still cannot backfill
+  a frozen source's missing origins. Switching output, exporting, and
   read-only clip/keyframe clipboard copies remain available. `output-freeze.ts` performs
   reference-fast, key-order-insensitive checks (including referenced symbol definitions) for the
   store's boolean-returning guarded actions and `DesignerDocService.applyOps`. Frozen
@@ -357,6 +377,21 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   selected visible node commits through silent clip updates plus ONE history push. Shift/Ctrl/Cmd-click
   and marquee use `selectedClips`; grouped members select together, duplicate/paste remaps group ids,
   and `video-reflow.ts` supplies one group box so relative geometry survives resize/seed.
+- **Video clip arrangement is an atomic track edit.** `output.tracks` is back-to-front for the Konva
+  preview, time-zero poster projection and injected frame renderer. `designer-doc/clip-arrangement.ts`
+  plans Bring Forward, Send Backward, Bring to Front and Send to Back; the store's
+  `arrangeVideoClips` is the single commit path for the canvas menu, timeline menu and clip Inspector.
+  A multi-selection moves as one block with internal order preserved. Persistent groups and active
+  transition pairs expand together until stable, so a transition partner also brings its whole group.
+  The completed plan is rejected with a `transition` outcome if extraction, neighbor bridging or
+  merging would still add or remove any rendered transition pair. Whole tracks reorder intact. A partial selection leaves unselected clips on its source track and
+  merges only into an unlocked same-type track with clip capacity and no effective-interval collision
+  (including `freezeAtMs`), otherwise it inserts a compatible track at the requested stack position.
+  Timing, trims, transitions, keyframes, IDs, `originId`/`groupId` and content/style objects stay
+  unchanged, and arrangement is format-local. Audio selections, locked source tracks, frozen outputs,
+  unknown refs, extremes and track-cap failures are explicit non-edits with disabled controls or a
+  warning and no empty history entry. A successful command commits ONE history entry and one Undo
+  restores every clip and track. Static-element `reorder` remains separate and unchanged.
 - **Canvas input works with mouse and touch.** Stage tools share `MouseEvent | TouchEvent` handlers,
   the canvas owns its gesture with `touchAction: none`, and a short touch tap places a default shape
   through `rectFromTap` while a drag uses the authored box. Text and caption hit surfaces cover the
@@ -384,6 +419,21 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   box keeps its geometry; an unshrunk box grows through the same bounded helper so each increase paints
   at the new size. Unset caption sizes start at the renderer's 28px fallback. Inline blur serialization
   applies shortcut deltas instead of restoring stale run sizes.
+- **Text defaults and auto-fit are output-aware and opt-in.** `add-text.ts` scales every new-text
+  preset and measured starting box through `textStyleScale`/`typeBasisPx`, including video text;
+  this creation/preset scale is clamped to 0.5–4, while linked copies deliberately keep the
+  unclamped `typeScaleRatio` so existing variants remain proportional. Context-menu insertion must
+  use that same helper. Static elements carry optional `autoFit` and
+  `autoFitMinFontSize`: absent preserves legacy height-only fitting, explicit false disables
+  shrinking, and true uses shared `fit-text.ts` layout to fit both dimensions (including long
+  unbroken words and straight rich runs) without changing the authored box. The minimum defaults to
+  8px, never grows small runs, and scales with linked/reflowed/corner-resized variants. The Inspector
+  persists the pre-enable state in optional `autoFitPrevious` (`null` means absent) and
+  `autoFitPreviousMinFontSize`, so disabling after deselection, reload or collaboration restores the
+  exact earlier behavior; the saved minimum scales with the same geometry rules, both snapshot fields
+  clear on restore, and neither is read by renderers. Auto-fit font-size edits change only the authored ceiling. Konva,
+  node-canvas, SVG, preflight, previews and Bulk Create consume the shared result; curved/on-path and
+  video/caption layout stay separate.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
   Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand mount on their first visible
   activation, then stay mounted under hidden wrappers so results and in-flight work survive tab and
@@ -401,6 +451,30 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   growth cannot move an active clip drag; without a sheet, the canvas retains its flexible sizing. Long sheet
   bodies scroll independently and Brand mounts only in its active mobile layout. Mobile keeps design rename
   and timeline collapse/zoom-to-fit available.
+  The video timeline also has organization-scoped local preferences for comfortable/compact density,
+  per-track/all-track collapse, whole-panel collapse, and height. These are editor-only store fields,
+  never document/history data. Compact mode subtracts the reclaimed row height from the panel so the
+  canvas actually grows. `timeline-workspace.ts` owns density constants, preference validation, and
+  responsive height bounds; `timeline-geometry.ts` and `timeline-marquee.ts` share cumulative row tops
+  so cross-track drops, the new-track zone, and marquee selection remain correct with collapsed rows.
+  The splitter supports pointer drag plus Arrow Up/Down and Home/End; it is hidden on mobile, where the
+  wrapping toolbar and selected-clip timing fields remain available beside the Inspector sheet. Desktop
+  keeps a 240 px minimum canvas; when that and the minimum timeline cannot both fit, the workspace column
+  scrolls instead of collapsing the canvas. Existing mobile canvas/sheet minimums stay unchanged.
+- **Inspector is task-tabbed per element category** (`panels/inspector-tabs.tsx`): image gets
+  Layout | Style | AI Tools, text gets Layout | Text | Effects, shape/path/raster/icon/symbol/fill/group/mixed
+  get Layout | Style, and adjustment gets Layout | Adjust. `inspector-panel.tsx` owns the sticky
+  `OverflowTabs` bar (below the always-visible Linked/Unlink row) and the category discriminator;
+  each inspector takes a `tab` prop and wraps its controls in `InspectorTabGroup`s, which hide inactive
+  groups with `hidden` instead of unmounting — in-flight AI jobs, mask canvases, rich-text selection and
+  control drafts survive tab switches. Each group is a labeled `tabpanel` linked to its tab's stable
+  per-Inspector ID. `CommonInspector` splits geometry/alignment/layer order (Layout)
+  from opacity/blend (`styleTab`: Style normally, Effects for text, Adjust for adjustment layers), and the
+  shared `EffectsList` lives on Effects for text and Style elsewhere. Every control keeps exactly one
+  primary home. Active tab and `InspectorSection` collapse state persist per category per org in
+  localStorage (`designer-inspector-tabs-<orgId>`), hydrated in a microtask that merges under any earlier
+  click; selection changes never write the preference, so they cannot force a tab. Sections collapse
+  through `Disclosure`'s `keepMounted` mode, never by unmounting draft-holding bodies.
 - **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
   from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
   capture call goes through it), with pointer-id checks, cancellation/lost-capture handling, and
@@ -585,7 +659,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   those same gradients plus optional v14 `textStroke`; the shared Inspector exposes solid/multi-stop
   fills and outline color/width. Chromium strokes before filling through `drawVideoText` with Konva's
   miter limit 2, composites the resulting text/caption bitmap once at transition opacity, and Konva uses
-  `fillAfterStrokeEnabled`; posters project both fields to static text. Static 3D is an `extrusion` layer
+  `fillAfterStrokeEnabled`; posters project both fields to static text. Closed shape clips expose their
+  existing flat `stroke`/`strokeWidth` fields through the same ColorSwatch/Stepper controls as static
+  shapes (0–40px); explicit zero hides the outline without clearing color, while line clips retain their
+  separate color/2px fallbacks. Frame export never substitutes fill for a missing non-line stroke color.
+  Static 3D is an `extrusion` layer
   style rendered from the layer alpha; text clips use optional v12 `textExtrusion`. Both derive
   offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
   script and projected onto the poster as an extrusion style. Animation presets live in
