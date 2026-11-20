@@ -123,6 +123,7 @@ return <><Button onClick={picker.open} />{picker.element}</>;
   to PNG server-side (`importFromUrl` `rasterizeSvg`), never stored as SVG. Folder, attribution and AI-reference metadata are preserved.
 - The picker opens on **My Files**, not stock. `FileManager` embedded there renders no page chrome —
   that is gated on its `standalone` prop.
+- Designer's docked **Elements** tab is the intentional inline-browsing exception, not another modal picker. It reuses the six stock browser components and `use-designer-media-insertion.ts` for click and drag; do not create a parallel stock search/import path or render `MediaSelectorModal` inline.
 
 Name collisions to be aware of:
 
@@ -229,9 +230,9 @@ Pattern (see `SectionCard`, `components/dashboard/kit/section-card.tsx`): **rend
 6. Modals only via `useModals()`; confirms only via `useDecisionModal()`/`areYouSure()`; text input
    via `usePromptModal()`. No native `alert`/`confirm`/`prompt` — enforced by `no-alert` +
    `no-restricted-globals` (frontend block of `eslint.config.mjs`).
-7. File/media picking only via `useMediaPicker()` — never render `MediaSelectorModal` directly and
+7. Modal file/media picking only via `useMediaPicker()` — never render `MediaSelectorModal` directly and
    never wrap it in `openModal` (it renders its own dialog; wrapping stacks two chromes with
-   different headers). Enforced by `media-tools/media-picker-single-chrome.spec.ts`.
+   different headers). The docked Designer Elements tab instead uses the documented inline stock-browser/shared-insertion path. Enforced by `media-tools/media-picker-single-chrome.spec.ts`.
 8. Horizontal tab/chip/sub-nav rows only via `OverflowTabs` — never hand-roll a scroll track, and
    never let a row rely on `overflow-x-auto` alone (the scrollbar is suppressed app-wide, so the
    tail becomes unreachable).

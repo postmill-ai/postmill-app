@@ -53,6 +53,19 @@ describe('MediaIndex hero', () => {
     expect(hrefs).toContain('/media/ai-designer');
   });
 
+  it('promotes all six free asset cards above AI Media without replacing their routes', () => {
+    renderIndex();
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+    for (const href of ['/media/stock-photos', '/media/stock-videos', '/media/stock-vectors', '/media/stock-icons', '/media/stock-stickers', '/media/stock-audio']) {
+      expect(hrefs).toContain(href);
+    }
+
+    const freeAssets = screen.getByText('Free assets');
+    const aiMedia = screen.getByText('AI Media');
+    expect(freeAssets.compareDocumentPosition(aiMedia) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: /Browse free assets/ })).toHaveLength(6);
+  });
+
   it('always lists the stock libraries', () => {
     renderIndex();
     const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));

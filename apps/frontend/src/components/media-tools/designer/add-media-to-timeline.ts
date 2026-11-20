@@ -140,6 +140,7 @@ interface AddMediaToTimelineOptions {
   height?: number;
   durationMs?: number;
   sticker?: boolean;
+  at?: { x: number; y: number };
 }
 
 export const timelineMediaTypeForPick = (
@@ -162,6 +163,7 @@ export interface AddImageClipOptions {
    * a square box at a fifth of the canvas instead.
    */
   square?: boolean;
+  at?: { x: number; y: number };
 }
 
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
@@ -307,7 +309,7 @@ export function probeAudioDuration(url: string): Promise<number> {
  * clip at the playhead on an image track (created on demand).
  *
  * Placement mirrors `addImageElementFromMedia` (insert-image.ts): aspect-
- * preserving fit within 80% of the canvas, centered, with the natural size
+ * preserving fit within 80% of the canvas, centered on the canvas or drop point, with the natural size
  * probed asynchronously when the picker doesn't know it — the probe shares the
  * image cache, so the Konva loader doesn't fetch twice. Duration defaults to
  * DEFAULT_CLIP_MS (same as a text clip), extending the output the way a media
@@ -360,8 +362,8 @@ export function addImageClipToTimeline(
     // Explicit hint: the canvas overlay prefers it over the URL extension
     // sniff (extensionless AI-generated video URLs mis-sniff as images).
     mediaType: 'image',
-    x: Math.round((vo.width - geo.width) / 2),
-    y: Math.round((vo.height - geo.height) / 2),
+    x: Math.round(options.at ? options.at.x - geo.width / 2 : (vo.width - geo.width) / 2),
+    y: Math.round(options.at ? options.at.y - geo.height / 2 : (vo.height - geo.height) / 2),
     width: Math.round(geo.width),
     height: Math.round(geo.height),
     opacity: 1,
@@ -673,8 +675,8 @@ export function addMediaToTimeline(
       if (needsDimensions && width !== undefined && height !== undefined) {
         const fit = containVideo(width, height, curVo.width, curVo.height, options.sticker);
         Object.assign(updates, {
-          x: Math.round((curVo.width - fit.width) / 2),
-          y: Math.round((curVo.height - fit.height) / 2),
+          x: Math.round((curClip.x ?? 0) + ((curClip.width ?? fit.width) - fit.width) / 2),
+          y: Math.round((curClip.y ?? 0) + ((curClip.height ?? fit.height) - fit.height) / 2),
           width: fit.width,
           height: fit.height,
           naturalWidth: width,
@@ -758,8 +760,8 @@ export function addMediaToTimeline(
                 id,
                 startMs,
                 endMs,
-                x: Math.round((vo.width - fit.width) / 2),
-                y: Math.round((vo.height - fit.height) / 2),
+                x: Math.round(options.at ? options.at.x - fit.width / 2 : (vo.width - fit.width) / 2),
+                y: Math.round(options.at ? options.at.y - fit.height / 2 : (vo.height - fit.height) / 2),
                 width: fit.width,
                 height: fit.height,
                 naturalWidth: natW,

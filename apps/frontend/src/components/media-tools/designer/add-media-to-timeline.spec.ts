@@ -282,6 +282,17 @@ describe('addMediaToTimeline — clip geometry', () => {
     expect(firstVideoClip(videoStore).clip).toMatchObject({ width: 1080, height: 1080 });
   });
 
+  it('centers video geometry on a drop point without changing its fit', async () => {
+    const store = createDesignerStore(1080, 1080);
+    await addMediaToTimeline(store, {
+      type: 'video', url: '/fixtures/motion.mp4', durationMs: 4000,
+      width: 720, height: 1280, at: { x: 400, y: 500 },
+    });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ width: 608, height: 1080, x: 96, y: -40 });
+  });
+
   it('carries the generation fileId onto the clip (retention purge keep-list)', async () => {
     stubVideoProbe({ duration: 5, videoWidth: 1080, videoHeight: 1080 });
     const store = createDesignerStore();
@@ -453,6 +464,22 @@ describe('addMediaToTimeline — clip geometry', () => {
       naturalWidth: 720,
       naturalHeight: 1280,
     });
+  });
+
+  it('keeps late metadata centered on the original drop point', async () => {
+    const probe = deferredVideoProbe();
+    const store = createDesignerStore(1080, 1080);
+    store.getState().setMode('video');
+    const landing = addMediaToTimeline(store, {
+      type: 'video', url: 'https://example.com/slow.mp4', at: { x: 400, y: 500 },
+    });
+    probe.fail();
+    await landing;
+
+    probe.succeed({ duration: 6.25, videoWidth: 720, videoHeight: 1280 });
+
+    const { clip } = firstVideoClip(store);
+    expect(clip).toMatchObject({ x: 96, y: -40, width: 608, height: 1080 });
   });
 
   it('does not clobber user edits when a late probe succeeds', async () => {
@@ -672,6 +699,18 @@ describe('addImageClipToTimeline', () => {
     expect(clip!.x).toBe(Math.round((vo.width - side) / 2));
     expect(clip!.y).toBe(Math.round((vo.height - side) / 2));
     expect(clip!.naturalWidth).toBeUndefined();
+  });
+
+  it('centers an aspect-correct image clip on the drop point', () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+
+    addImageClipToTimeline(store, {
+      url: 'https://example.com/a.png', width: 1600, height: 900, at: { x: 300, y: 400 },
+    });
+
+    const { clip } = firstImageClip(store);
+    expect(clip).toMatchObject({ width: 864, height: 486, x: -132, y: 157 });
   });
 
   it('reuses an existing image track when its window is free at the playhead', () => {

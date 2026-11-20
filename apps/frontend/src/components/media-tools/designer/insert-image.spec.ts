@@ -42,6 +42,16 @@ describe('addImageElementFromMedia', () => {
     expect(probeImageNaturalSize).not.toHaveBeenCalled();
   });
 
+  it('centers an aspect-correct drop on the document point', () => {
+    const store = createDesignerStore(1080, 1080);
+    addImageElementFromMedia(store, {
+      url: '/uploads/photo.png', width: 3000, height: 2000, at: { x: 300, y: 400 },
+    });
+
+    const [el] = imagesOf(store);
+    expect(el).toMatchObject({ x: -132, y: 112, width: 864, height: 576 });
+  });
+
   it('places immediately with unknown dims, then corrects the box when the probe resolves', async () => {
     vi.mocked(probeImageNaturalSize).mockResolvedValue({ width: 2000, height: 1000 });
     const store = createDesignerStore(1080, 1080);
@@ -64,6 +74,17 @@ describe('addImageElementFromMedia', () => {
     expect(corrected.y).toBe(108 + (864 - 432) / 2);
     expect(corrected.naturalWidth).toBe(2000);
     expect(corrected.naturalHeight).toBe(1000);
+  });
+
+  it('keeps the drop center when late metadata corrects the aspect ratio', async () => {
+    vi.mocked(probeImageNaturalSize).mockResolvedValue({ width: 2000, height: 1000 });
+    const store = createDesignerStore(1080, 1080);
+
+    addImageElementFromMedia(store, { url: '/uploads/raw.jpg', at: { x: 300, y: 400 } });
+    await flush();
+
+    const [el] = imagesOf(store);
+    expect(el).toMatchObject({ x: -132, y: 184, width: 864, height: 432 });
   });
 
   it('keeps a user-resized box and only records the natural size', async () => {

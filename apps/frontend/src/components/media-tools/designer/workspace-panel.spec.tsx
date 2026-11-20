@@ -25,6 +25,18 @@ vi.mock('./panels/ai-panel', () => ({
     );
   },
 }));
+vi.mock('./panels/elements-panel', () => ({
+  ElementsPanel: () => {
+    const [query, setQuery] = useState('');
+    return (
+      <div>
+        <span>Elements panel content</span>
+        <input aria-label="Elements search" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <span>Stock request pending</span>
+      </div>
+    );
+  },
+}));
 vi.mock('./panels/brand-panel', () => ({ BrandPanel: () => <div>Brand panel content</div> }));
 vi.mock('./panels/canvas-inspector', () => ({ CanvasInspector: () => <div>Canvas panel content</div> }));
 vi.mock('./panels/inspector-panel', () => ({ InspectorPanel: () => <div>Inspector panel content</div> }));
@@ -50,6 +62,7 @@ const renderPanel = (activeTab: WorkspaceTab, onTabChange = vi.fn(), collapsed =
     hasInspectorTarget: false,
     currentOutput: 0,
     currentOutputSizeKey: '1080x1080',
+    onInsertMedia: vi.fn(),
     collapsed,
   };
   return { ...render(<DesktopWorkspacePanel {...props} />), props };
@@ -59,13 +72,13 @@ beforeEach(() => localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('DesktopWorkspacePanel', () => {
-  it('offers Inspector, Layers, Brand and AI through the shared tabs', () => {
+  it('offers Inspector, Layers, Elements, Brand and AI through the shared tabs', () => {
     const { props } = renderPanel('inspector');
-    for (const name of ['Inspector', 'Layers', 'Brand', 'AI']) {
+    for (const name of ['Inspector', 'Layers', 'Elements', 'Brand', 'AI']) {
       expect(screen.getAllByRole('tab', { name, exact: true }).length).toBeGreaterThan(0);
     }
-    fireEvent.click(screen.getAllByRole('tab', { name: 'Brand', exact: true })[0]);
-    expect(props.onTabChange).toHaveBeenCalledWith('brand');
+    fireEvent.click(screen.getAllByRole('tab', { name: 'Elements', exact: true })[0]);
+    expect(props.onTabChange).toHaveBeenCalledWith('elements');
   });
 
   it('mounts AI and Brand on first activation and keeps them hidden afterwards', async () => {
@@ -89,6 +102,23 @@ describe('DesktopWorkspacePanel', () => {
     rerender(<DesktopWorkspacePanel {...props} activeTab="ai" />);
     expect((await screen.findByText('AI panel content')).closest('[hidden]')).toBeNull();
     expect(screen.getByText('Brand panel content').closest('[hidden]')).not.toBeNull();
+  });
+
+  it('lazy-mounts Elements and preserves its search and pending request across tabs and collapse', async () => {
+    const { rerender, props } = renderPanel('inspector');
+    expect(screen.queryByText('Elements panel content')).toBeNull();
+
+    rerender(<DesktopWorkspacePanel {...props} activeTab="elements" />);
+    const search = await screen.findByRole('textbox', { name: 'Elements search' });
+    fireEvent.change(search, { target: { value: 'free mountains' } });
+    expect(screen.getByText('Stock request pending')).toBeDefined();
+
+    rerender(<DesktopWorkspacePanel {...props} activeTab="brand" />);
+    expect(screen.getByText('Elements panel content').closest('[hidden]')).not.toBeNull();
+    rerender(<DesktopWorkspacePanel {...props} activeTab="brand" collapsed />);
+    rerender(<DesktopWorkspacePanel {...props} activeTab="elements" />);
+    expect(screen.getByRole('textbox', { name: 'Elements search' })).toHaveProperty('value', 'free mountains');
+    expect(screen.getByText('Stock request pending')).toBeDefined();
   });
 
   it('does not mount a saved active heavy panel until the collapsed workspace expands', async () => {
@@ -158,6 +188,15 @@ describe('desktop workspace preferences', () => {
     });
     expect(readDesktopWorkspacePreference(localStorage, 'other')).toEqual({
       activeTab: 'inspector', collapsed: false,
+    });
+  });
+
+  it('persists Elements as the active tab', () => {
+    writeDesktopWorkspacePreference(localStorage, 'org', {
+      activeTab: 'elements', collapsed: false,
+    });
+    expect(readDesktopWorkspacePreference(localStorage, 'org')).toEqual({
+      activeTab: 'elements', collapsed: false,
     });
   });
 

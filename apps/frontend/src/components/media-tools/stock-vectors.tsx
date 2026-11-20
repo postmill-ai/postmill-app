@@ -4,7 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useDebounce } from 'use-debounce';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { StockPreviewModal } from './stock-preview-modal';
-import { StockVectorItem, stockSourceLabel } from './stock.types';
+import { StockMediaSelection, StockVectorItem, stockSourceLabel } from './stock.types';
 import { useStockSearch } from './use-stock-search';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -51,19 +51,12 @@ const SUGGESTED_SEARCHES = ['Business', 'Nature', 'Abstract', 'Technology', 'Peo
 interface StockVectorsProps {
   mode?: 'browse' | 'select';
   onSelect?: (item: { url: string; width: number; height: number; thumbnail?: string; type: 'image' | 'video' | 'audio' }) => void;
-  onSelectFull?: (item: {
-    url: string;
-    width: number;
-    height: number;
-    thumbnail?: string;
-    type: 'image' | 'video' | 'audio';
-    source?: string;
-    attribution?: Record<string, unknown>;
-    name?: string;
-  }) => void;
+  onSelectFull?: (item: StockMediaSelection) => void;
+  onDragStart?: (item: StockMediaSelection, event: React.DragEvent<HTMLButtonElement>) => void;
+  compact?: boolean;
 }
 
-export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect, onSelectFull }) => {
+export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect, onSelectFull, onDragStart, compact = false }) => {
   const t = useT();
   const modal = useModals();
   const [query, setQuery] = useState('');
@@ -135,7 +128,7 @@ export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect,
 
   return (
     <div className="flex flex-col gap-[15px]">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-[12px]">
+      <div className={compact ? 'flex flex-col gap-[12px]' : 'flex flex-col sm:flex-row sm:items-center gap-[12px]'}>
         <div className="relative flex-1">
           <svg className="absolute left-[14px] top-1/2 -translate-y-1/2 w-[16px] h-[16px] text-newTextColor/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
@@ -230,7 +223,7 @@ export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect,
           </button>
         </div>
       ) : initialLoading ? (
-        <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]">
+        <div className={compact ? 'columns-2 gap-[10px]' : 'columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]'}>
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="mb-[12px] break-inside-avoid rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner">
               <div
@@ -292,23 +285,23 @@ export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect,
         </div>
       ) : (
         <>
-          <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]">
+          <div className={compact ? 'columns-2 gap-[10px]' : 'columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]'}>
             {items.map((vector) => {
               // Plain container tile; the media area is the single interactive
               // control (a real <button>) so the author-credit <a> below stays a
               // sibling — never nested inside another interactive element.
+              const payload = {
+                url: vector.url,
+                width: vector.width,
+                height: vector.height,
+                thumbnail: vector.thumbUrl,
+                type: 'image' as const,
+                source: vector.source,
+                attribution: vector.attribution,
+                name: vector.description || undefined,
+              };
               const activate = () => {
                 if (mode === 'select' && (onSelect || onSelectFull)) {
-                  const payload = {
-                    url: vector.url,
-                    width: vector.width,
-                    height: vector.height,
-                    thumbnail: vector.thumbUrl,
-                    type: 'image' as const,
-                    source: vector.source,
-                    attribution: vector.attribution,
-                    name: vector.description || undefined,
-                  };
                   onSelectFull?.(payload);
                   onSelect?.(payload);
                 } else {
@@ -323,6 +316,8 @@ export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect,
                 <button
                   type="button"
                   onClick={activate}
+                  draggable={!!onDragStart}
+                  onDragStart={(event) => onDragStart?.(payload, event)}
                   aria-label={vector.description || t('open_preview', 'Open preview')}
                   className="block w-full relative overflow-hidden cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-btnPrimary"
                   style={{ aspectRatio: vector.width && vector.height ? `${vector.width} / ${vector.height}` : '4 / 3' }}
@@ -366,7 +361,7 @@ export const StockVectors: FC<StockVectorsProps> = ({ mode = 'browse', onSelect,
           {hasMore && (
             <div ref={sentinelRef}>
               {!isFirstFetch && isValidating && (
-                <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]">
+                <div className={compact ? 'columns-2 gap-[10px]' : 'columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]'}>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="mb-[12px] break-inside-avoid rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner">
                       <div
