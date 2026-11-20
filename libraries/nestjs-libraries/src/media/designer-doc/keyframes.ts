@@ -50,6 +50,14 @@ export interface Keyframe {
   animationPreset?: {
     name: string;
     category: 'entrance' | 'emphasis' | 'exit';
+    base?: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+      fontSize: number;
+    };
   };
 }
 
@@ -274,12 +282,14 @@ const interpolateComposedKeyframes = (
     const frames = kfs.filter((frame) => frame.animationPreset?.category === category);
     if (!frames.length) continue;
     const props = interpolateKeyframeGroup(frames, relativeMs);
+    const snapshot = frames[0].animationPreset?.base;
+    const presetBase = snapshot ? { ...defaults, ...snapshot } : defaults;
     for (const prop of ['x', 'y', 'rotation'] as const) {
-      if (props[prop] !== undefined) result[prop] += props[prop]! - defaults[prop];
+      if (props[prop] !== undefined) result[prop] += props[prop]! - presetBase[prop];
     }
     for (const prop of ['width', 'height', 'fontSize'] as const) {
       if (props[prop] !== undefined) {
-        result[prop] = defaults[prop] === 0 ? 0 : result[prop] * props[prop]! / defaults[prop];
+        result[prop] = presetBase[prop] === 0 ? 0 : result[prop] * props[prop]! / presetBase[prop];
       }
     }
     if (props.opacity !== undefined) {

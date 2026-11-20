@@ -187,6 +187,30 @@ describe('interpolateClipKeyframes', () => {
     });
   });
 
+  it('uses a preset base snapshot after the clip base changes', () => {
+    const base = { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 20 };
+    const combined = {
+      x: 110, y: 205, width: 220, height: 110, rotation: 5,
+      opacity: 1, fontSize: 22, volume: 1,
+      keyframes: [{
+        tMs: 0,
+        props: { x: 40, y: 220, width: 100, height: 50, rotation: -10, fontSize: 10 },
+        animationPreset: { name: 'Entrance', category: 'entrance' as const, base },
+      }],
+    };
+
+    expect(interpolateClipKeyframes(combined, 0)).toEqual({
+      x: 50,
+      y: 225,
+      width: 110,
+      height: 55,
+      rotation: -5,
+      opacity: 1,
+      fontSize: 11,
+      volume: 1,
+    });
+  });
+
   it('handles two keyframes at the same time without dividing by zero', () => {
     const degenerate = {
       ...clip,
@@ -305,6 +329,7 @@ describe('keyframesSource', () => {
       `${keyframesSource()}
       return { interpolateClipKeyframes };`
     ) as () => { interpolateClipKeyframes: typeof interpolateClipKeyframes };
+    const base = { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 20 };
     const clip = {
       x: 100, y: 200, width: 200, height: 100, rotation: 0,
       opacity: 1, fontSize: 20, volume: 0.4,
@@ -313,16 +338,16 @@ describe('keyframesSource', () => {
         {
           tMs: 0, props: { x: 40, width: 100, opacity: 0 },
           ease: 'easeOut' as const,
-          animationPreset: { name: 'Entrance', category: 'entrance' as const },
+          animationPreset: { name: 'Entrance', category: 'entrance' as const, base },
         },
         {
           tMs: 500, props: { x: 100, width: 200, opacity: 1 },
           ease: 'easeOut' as const,
-          animationPreset: { name: 'Entrance', category: 'entrance' as const },
+          animationPreset: { name: 'Entrance', category: 'entrance' as const, base },
         },
         {
           tMs: 100, props: { x: 110, width: 220, opacity: 0.8 },
-          animationPreset: { name: 'Emphasis', category: 'emphasis' as const },
+          animationPreset: { name: 'Emphasis', category: 'emphasis' as const, base },
         },
       ],
     };

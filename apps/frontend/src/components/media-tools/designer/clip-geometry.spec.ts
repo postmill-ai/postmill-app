@@ -180,6 +180,33 @@ describe('clipGeometryUpdate', () => {
       .toEqual(entrance.keyframes);
   });
 
+  it('moves a combined clip by exactly the base-drag delta between keyframes', () => {
+    const preset = (name: string) => TEXT_ANIMATION_PRESETS.find((item) => item.name === name)!;
+    for (const names of [
+      ['Fade Up', 'Pulse', 'Fade Out'],
+      ['Slide In Left', 'Shake', 'Slide Out Left'],
+    ]) {
+      const base = clip({ startMs: 0, endMs: 5000, x: 100, y: 200, width: 200, height: 100 });
+      const combined = names.reduce(
+        (current, name) => ({ ...current, ...buildTextAnimationUpdate(preset(name), current) }),
+        base
+      );
+      for (const tMs of [250, 3000]) {
+        const before = interpolateKeyframes(combined, tMs);
+        const update = clipGeometryUpdate(
+          combined,
+          before,
+          { ...before, x: before.x + 5, y: before.y + 5 },
+          tMs
+        );
+        const updated = { ...combined, ...update };
+        const after = interpolateKeyframes(updated, tMs);
+        expect(after.x, `${names.join(' + ')} at ${tMs}ms`).toBeCloseTo(before.x + 5, 6);
+        expect(after.y, `${names.join(' + ')} at ${tMs}ms`).toBeCloseTo(before.y + 5, 6);
+      }
+    }
+  });
+
   it('prefers the manual frame at a shared playhead timestamp', () => {
     const preset = TEXT_ANIMATION_PRESETS.find((item) => item.name === 'Fade Up')!;
     const base = clip({

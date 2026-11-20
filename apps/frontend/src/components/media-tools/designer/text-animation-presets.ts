@@ -254,7 +254,18 @@ const buildPresetKeyframes = (
   return (preset.keyframes ?? [])
     .map((kf) => ({
       ...kf,
-      animationPreset: { name: preset.name, category: preset.category },
+      animationPreset: {
+        name: preset.name,
+        category: preset.category,
+        base: {
+          x: base.x,
+          y: base.y,
+          width: base.width,
+          height: base.height,
+          rotation: base.rotation,
+          fontSize: base.fontSize,
+        },
+      },
       tMs: preset.category === 'exit' ? Math.max(0, durationMs + kf.tMs) : kf.tMs,
       props: (() => {
         const props: Record<string, number> = {};
@@ -338,7 +349,12 @@ export const matchTextAnimationPreset = (
       frame.animationPreset?.name !== identity.name ||
       frame.animationPreset?.category !== identity.category
     )) return null;
-    const expected = buildPresetKeyframes(preset, clip, scaleText, durationMs);
+    const expected = buildPresetKeyframes(
+      preset,
+      identity.base ? { ...clip, ...identity.base } : clip,
+      scaleText,
+      durationMs
+    );
     const actual = [...tagged].sort((a, b) => a.tMs - b.tMs);
     if (expected.length !== actual.length) return null;
     return expected.every((frame, index) =>

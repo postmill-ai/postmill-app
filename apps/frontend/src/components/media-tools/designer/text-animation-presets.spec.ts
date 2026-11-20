@@ -120,9 +120,14 @@ describe('buildTextAnimationUpdate', () => {
       startMs: 0,
       endMs: 5000,
     });
+    const animationPreset = {
+      name: 'Fade Up',
+      category: 'entrance' as const,
+      base: { x: 100, y: 200, width: 1, height: 1, rotation: 0, fontSize: 16 },
+    };
     expect(update.keyframes).toEqual([
-      { tMs: 0, props: { y: 220, opacity: 0 }, ease: 'easeOut', animationPreset: { name: 'Fade Up', category: 'entrance' } },
-      { tMs: 500, props: { y: 200, opacity: 1 }, ease: 'easeOut', animationPreset: { name: 'Fade Up', category: 'entrance' } },
+      { tMs: 0, props: { y: 220, opacity: 0 }, ease: 'easeOut', animationPreset },
+      { tMs: 500, props: { y: 200, opacity: 1 }, ease: 'easeOut', animationPreset },
     ]);
     // A keyframe preset clears any reveal the clip carried.
     expect(update.textReveal).toBeUndefined();

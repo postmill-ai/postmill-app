@@ -367,7 +367,11 @@ describe('DesignerDoc schema', () => {
     doc.outputs[0].tracks[0].clips[0].keyframes = [{
       tMs: 0,
       props: { opacity: 0 },
-      animationPreset: { name: 'Fade Up', category: 'entrance' },
+      animationPreset: {
+        name: 'Fade Up',
+        category: 'entrance',
+        base: { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 24 },
+      },
     }];
 
     for (const schema of [DesignerDocStrictSchema, DesignerDocLenientSchema]) {
@@ -375,6 +379,7 @@ describe('DesignerDoc schema', () => {
       expect(parsed.outputs[0].tracks[0].clips[0].keyframes?.[0].animationPreset).toEqual({
         name: 'Fade Up',
         category: 'entrance',
+        base: { x: 100, y: 200, width: 200, height: 100, rotation: 0, fontSize: 24 },
       });
     }
   });

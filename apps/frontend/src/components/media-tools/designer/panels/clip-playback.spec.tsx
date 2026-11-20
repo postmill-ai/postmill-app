@@ -208,6 +208,24 @@ describe('ClipInspector combined keyframe editing', () => {
     expect(frames(store).some((frame) => frame.animationPreset?.category === 'emphasis' && frame.tMs === 0)).toBe(true);
   });
 
+  it('moves the composed result exactly once when Inspector base X/Y changes', () => {
+    const store = renderCombined();
+    fireEvent.click(screen.getByRole('button', { name: 'Fade Out', exact: true }));
+    const beforeClip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    const before = interpolateKeyframes(beforeClip, 3000);
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'X', exact: true }), { target: { value: '105' } });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Y', exact: true }), { target: { value: '205' } });
+
+    const updated = store.getState().doc.outputs[0].tracks[0].clips[0];
+    const after = interpolateKeyframes(updated, 3000);
+    expect(after.x).toBeCloseTo(before.x + 5, 6);
+    expect(after.y).toBeCloseTo(before.y + 5, 6);
+    for (const name of ['Fade Up', 'Pulse', 'Fade Out']) {
+      expect(screen.getByRole('button', { name, exact: true }).getAttribute('aria-pressed')).toBe('true');
+    }
+  });
+
   it('re-eases only the selected frame at a shared timestamp', () => {
     const store = renderCombined();
     const row = document.getElementById('clip-kf-row-opacity')!;
