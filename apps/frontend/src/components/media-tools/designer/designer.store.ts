@@ -370,6 +370,7 @@ export interface DesignerActions {
   duplicateOutput: (index: number, opts?: { linkContent?: boolean }) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
+  renameOutput: (index: number, name: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
   // pages within an image output (doc v8). pageNumber is 0-based; 0 = page 1.
   setCurrentPage: (pageNumber: number) => void;
@@ -579,6 +580,24 @@ const sharedUpdates = (updates: Partial<DesignerElement>): Partial<DesignerEleme
 };
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+
+const uniqueOutputName = (
+  outputs: DesignerDoc['outputs'],
+  requestedName: string,
+  excludeIndex = -1
+) => {
+  const base = requestedName.trim().slice(0, 200);
+  if (!base) return '';
+  const taken = new Set(
+    outputs.filter((_, index) => index !== excludeIndex).map((output) => output.name)
+  );
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; ; suffix++) {
+    const tail = ` ${suffix}`;
+    const candidate = `${base.slice(0, 200 - tail.length)}${tail}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+};
 
 export const createDesignerStore = (
   width?: number,
@@ -1658,10 +1677,7 @@ export const createDesignerStore = (
         const { doc, currentOutput } = get();
         if (doc.outputs.length >= MAX_OUTPUTS) return false;
         const linkContent = opts?.linkContent ?? true;
-        let name = preset.name;
-        for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
-          name = `${preset.name} ${suffix}`;
-        }
+        const name = uniqueOutputName(doc.outputs, preset.name);
         const namedPreset = { ...preset, name };
         if (isVideoMode()) {
           const source = doc.outputs[currentOutput] as VideoOutput;
@@ -1833,17 +1849,32 @@ export const createDesignerStore = (
           selectedIds: [],
           isDirty: true,
         });
-        get().pushHistory();
+        get().pushHistory('Remove format');
+      },
+
+      renameOutput: (index, name) => {
+        const { doc } = get();
+        const output = doc.outputs[index];
+        if (!output || isOutputFrozen(output)) return;
+        const trimmed = uniqueOutputName(doc.outputs, name, index);
+        if (!trimmed || output.name === trimmed) return;
+        const outputs = [...doc.outputs];
+        outputs[index] = { ...output, name: trimmed };
+        mutate({ doc: { ...doc, outputs }, isDirty: true });
+        get().pushHistory('Rename format');
       },
 
       resizeOutput: (index, width, height, formatId, name) => {
         const { doc } = get();
         const out = doc.outputs[index];
         if (!out || isOutputFrozen(out)) return;
+        const resolvedName = name === undefined
+          ? undefined
+          : uniqueOutputName(doc.outputs, name, index);
         if ('tracks' in out) {
           // Video outputs resize in place: ids stay, every clip's geometry
           // smart-reflows onto the new canvas (timing/fps/duration untouched).
-          const resized = reflowVideoOutputInPlace(out as VideoOutput, width, height, formatId, name);
+          const resized = reflowVideoOutputInPlace(out as VideoOutput, width, height, formatId, resolvedName);
           const outs = [...doc.outputs]; outs[index] = resized;
           mutate({ doc: { ...doc, outputs: outs }, isDirty: true });
           get().pushHistory('Resize format');
@@ -1851,7 +1882,7 @@ export const createDesignerStore = (
         }
         if (isVideoMode()) return;
         const imgOut = out as DesignerOutput;
-        const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: name ?? imgOut.name };
+        const resized: DesignerOutput = { ...imgOut, width, height, formatId: formatId ?? imgOut.formatId, name: resolvedName ?? imgOut.name };
         const groupBoxes = computeGroupBoxes(imgOut.children, imgOut);
         const stackBoxes = computeTextStackBoxes(imgOut.children, imgOut);
         const containerBoxes = computeContainerBoxes(imgOut.children);

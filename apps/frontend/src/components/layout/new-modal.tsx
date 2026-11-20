@@ -565,6 +565,7 @@ export const PromptModal: FC<{
       <Input
         name="prompt-modal-value"
         label={label}
+        aria-label={label || undefined}
         disableForm={true}
         removeError={true}
         autoFocus={true}

@@ -776,6 +776,102 @@ test('canvas-aware text defaults and auto-fit survive variants, reload, and expo
   );
 });
 
+test('format card controls stay separated and custom format actions survive removal Undo and reload', async ({ page }) => {
+  const doc = {
+    version: 13,
+    mode: 'image',
+    outputs: [{
+      id: 'format-first', formatId: 'ig-post', name: 'First', width: 400, height: 400,
+      background: '#ffffff', children: [{
+        id: 'first-copy', originId: 'shared-copy', type: 'text', text: 'First',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }, {
+      id: 'format-second', formatId: 'x-post', name: 'Second', width: 600, height: 400,
+      background: '#ffffff', children: [{
+        id: 'second-copy', originId: 'shared-copy', type: 'text', text: 'Second',
+        x: 20, y: 20, width: 200, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false,
+      }],
+    }],
+  };
+  const state = await installMocks(page, doc);
+  await openDesigner(page);
+
+  const firstCard = page.locator('[data-format-card="format-first"]');
+  const secondCard = page.locator('[data-format-card="format-second"]');
+  await expect(firstCard).toBeVisible();
+  await expect(secondCard.getByRole('button', { name: 'Remove format' })).toBeHidden();
+  await secondCard.hover();
+  await expect(secondCard.getByRole('button', { name: 'Remove format' })).toBeVisible();
+
+  const boxesInside = async (card: Locator) => {
+    const cardBox = await card.boundingBox();
+    if (!cardBox) throw new Error('Format card has no bounding box');
+    const controls = card.locator('button[aria-label="Freeze format"], button[aria-label^="Format actions for"], button[aria-label="Remove format"]');
+    for (const control of await controls.all()) {
+      const box = await control.boundingBox();
+      if (!box) throw new Error('Format control has no bounding box');
+      expect(box.width).toBeGreaterThanOrEqual(28);
+      expect(box.height).toBeGreaterThanOrEqual(28);
+      expect(box.x).toBeGreaterThanOrEqual(cardBox.x);
+      expect(box.y).toBeGreaterThanOrEqual(cardBox.y);
+      expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+    }
+  };
+  await boxesInside(firstCard);
+  await boxesInside(secondCard);
+  const firstRemove = await firstCard.getByRole('button', { name: 'Remove format' }).boundingBox();
+  const secondFreeze = await secondCard.getByRole('button', { name: 'Freeze format' }).boundingBox();
+  if (!firstRemove || !secondFreeze) throw new Error('Adjacent format controls are missing');
+  expect(firstRemove.x + firstRemove.width).toBeLessThan(secondFreeze.x);
+
+  await secondCard.getByRole('button', { name: 'Format actions for Second' }).click();
+  await page.getByRole('button', { name: /Unlink edits between formats/ }).click();
+  await expect(page.getByRole('button', { name: 'Resume linked editing' })).toBeVisible();
+  await secondCard.getByRole('button', { name: 'Format actions for Second' }).click();
+  await expect(page.getByRole('button', { name: /Link edits across formats/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Unlink edits between formats' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Add format', exact: true }).click();
+  await page.getByPlaceholder('W', { exact: true }).fill('1920');
+  await page.getByPlaceholder('H', { exact: true }).fill('1080');
+  await page.getByRole('button', { name: 'Add custom size', exact: true }).click();
+  let customCard = page.locator('[data-format-card]', { hasText: 'Custom size' });
+  await expect(customCard).toBeVisible();
+  await expect(customCard.getByText('1920×1080', { exact: true })).toHaveCount(1);
+
+  await customCard.getByRole('button', { name: 'Format actions for Custom size' }).click();
+  await page.getByRole('button', { name: 'Rename format', exact: true }).click();
+  const renameDialog = page.getByRole('dialog', { name: 'Rename format' });
+  await renameDialog.getByRole('textbox', { name: 'Format name' }).fill('Landscape campaign');
+  await renameDialog.getByRole('button', { name: 'Save', exact: true }).click();
+  customCard = page.locator('[data-format-card]', { hasText: 'Landscape campaign' });
+  await expect(customCard).toBeVisible();
+
+  await customCard.getByRole('button', { name: 'Remove format' }).click();
+  await expect(page.locator('[role="status"]', { hasText: 'Format “Landscape campaign” removed' })).toBeVisible();
+  await expect(page.locator('[data-format-card]')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.locator('[data-format-card]')).toHaveCount(3);
+  await expect(page.locator('[data-format-card]', { hasText: 'Landscape campaign' })).toBeVisible();
+
+  const savesBefore = state.saveDocs.length;
+  await page.keyboard.press('Control+s');
+  await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
+  const saved = state.saveDocs.at(-1) as any;
+  expect(saved.outputs.map((output: any) => output.name)).toEqual([
+    'First', 'Second', 'Landscape campaign',
+  ]);
+  expect(saved.outputs[2]).toMatchObject({ formatId: 'custom', width: 1920, height: 1080 });
+  expect(saved.outputs[0].children[0].originId).toBe('shared-copy');
+  expect(saved.outputs[1].children[0].originId).toBe('shared-copy');
+
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
+  await expect(page.locator('[data-format-card]', { hasText: 'Landscape campaign' })).toBeVisible();
+});
+
 test('shape insertion stays on an independent format through save, reload, and export', async ({ page }) => {
   const independentDoc = structuredClone(initialDoc) as any;
   Object.assign(independentDoc.outputs[0], {
@@ -799,7 +895,7 @@ test('shape insertion stays on an independent format through save, reload, and e
     expect(doc.outputs[0].contentLinkGroup).not.toBe(doc.outputs[1].contentLinkGroup);
   };
   await openDesigner(page);
-  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
+  await page.locator('[data-format-select="independent-output"]').click();
 
   const stage = page.locator('.konva-stage').first();
   // The canvas menu opens only on the bare stage: right of the 20px ruler,
@@ -814,7 +910,7 @@ test('shape insertion stays on an independent format through save, reload, and e
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
   await expect(page.locator('.konva-stage').first()).toBeVisible();
-  await page.getByRole('button', { name: /^Independent(?! actions)/ }).click();
+  await page.locator('[data-format-select="independent-output"]').click();
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Save to Files' }).click();
   await page.getByRole('button', { name: 'Next: Choose Folder' }).click();
@@ -881,7 +977,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
   // Shortcuts are canvas-focus-scoped, so the keys go to the canvas itself.
   const canvasRegion = page.getByRole('application', { name: 'Design canvas' });
   await canvasRegion.press('Control+c');
-  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
+  await page.locator('[data-format-select="paste-target"]').click();
 
   // Keyboard paste retains its offset behavior and remains one atomic edit.
   await canvasRegion.press('Control+v');
@@ -982,7 +1078,7 @@ test('cross-format Paste centers a complete group at the pointer through reload 
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');
-  await page.getByRole('button', { name: /^Paste Target(?! actions)/ }).click();
+  await page.locator('[data-format-select="paste-target"]').click();
   expect((state.doc as any).outputs[1].children).toHaveLength(9);
   const reloadedRuns = (state.doc as any).outputs[1].children
     .filter((child: any) => child.text === 'Pointer pasted headline')
@@ -1076,7 +1172,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
     return cloned;
   };
 
-  await page.getByRole('button', { name: /^Source(?! actions)/ }).click();
+  await page.locator('[data-format-select="source-output"]').click();
   await page.getByRole('menuitem', { name: 'View', exact: true }).click();
   await page.getByRole('menuitem', { name: /Fit to Screen/ }).click();
   const stage = page.locator('.konva-stage').first();
@@ -1132,7 +1228,7 @@ test('grouped mixed media survives Undo, independent clone, reload, and export',
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX', { timeout: 60_000 });
-  await page.getByRole('button', { name: /^Instagram Story(?! actions)/ }).click();
+  await page.locator(`[data-format-select="${cloned.id}"]`).click();
   assertClone(state.doc);
   const rendersBeforeExport = state.renderDocs.length;
   await page.getByRole('button', { name: 'Export', exact: true }).click();

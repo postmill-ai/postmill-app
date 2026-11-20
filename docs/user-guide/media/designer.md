@@ -23,15 +23,17 @@ saved.
 
 ## Formats, pages and versions
 
-- **Output tabs** — a design can carry several formats (sizes) at once. **Add format** adds another
-  size; linked elements stay in sync across formats unless you choose **Unlink** beside the tabs.
-  **Link** resumes shared edits without changing any existing element links. Choose **Independent
-  copies** when adding repeated dimensions that should be edited separately. Right-click a format or
-  use its three-dot menu to resize, remove, **Duplicate linked**, or **Duplicate independently**.
-  Duplication keeps the same dimensions and every page or timeline clip without reflow, and one Undo
-  removes the copy. A new element on page
-  1 is added to the linked formats; it stays on the current format when **Unlink** is on or the
-  format is an independent copy. Linked formats remain
+- **Output tabs** — a design can carry several formats (sizes) at once. The **Add format** card adds
+  another size; linked elements stay in sync across formats unless you choose **Unlink edits between
+  formats** in a card's **⋮** menu. This is a global mode for whichever format is active. A
+  **Format-only editing** status stays visible beside Add format while it is on; select it to resume
+  linked editing without changing any existing element links. The card menu also renames or resizes
+  the format. Custom sizes start with a **Custom size** name, numbered when needed, and show their
+  dimensions underneath. Remove is available on the selected or hovered card and shows an **Undo**
+  action immediately after removal. Choose **Independent
+  copies** when adding repeated dimensions that should be edited separately. A new element on page
+  1 is added to the linked formats; it stays on the current format while **Format-only editing** is
+  on or the format is an independent copy. Linked formats remain
   the default. Grouped presets include 1080×1350 portraits for Instagram, Facebook, LinkedIn, and
   Threads, plus Facebook and LinkedIn squares. **View → Safe Zones** shows approximate platform UI
   regions scaled to the active format: shaded areas may be covered, so keep important content outside
@@ -41,10 +43,9 @@ saved.
   visual guides only and do not change layout; a side without an actual overlay retains its generic margin.
 - **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
   timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
-  still switch to a frozen output, export it, and copy clips, audio keyframes, or visual animation
-  for use elsewhere; pasting into the frozen output remains blocked. Frozen tabs show a tinted
-  background and **Frozen** label. Duplicating a frozen format creates an editable copy. Select the
-  snowflake again to unfreeze; this is separate from locking an individual layer or timeline track.
+  still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting
+  into the frozen output remains blocked. Select the snowflake again to unfreeze; this is separate
+  from locking an individual layer or timeline track.
 - **Copy and paste** — copying a group includes its contents. Paste into another format scales the
   selection with the target's text and layout rules while preserving crops, focal points, rotation,
   and relative ordering. Right-click **Paste** centers the selection at the clicked canvas point,
@@ -56,11 +57,8 @@ saved.
   such as Minus Front cutting through the middle of a shape) becomes one compound path with that hole.
   If the shapes cannot be combined, a warning appears and the design is left unchanged.
 - **Pages and Carousel** — image outputs can hold multiple pages (up to 20 per output). Open **View
-  → Pages / Carousel** and choose a view; adding or duplicating a page opens the strip automatically
-  without making it always visible on later single-page designs.
-  Right-click a page or use its three-dot menu to duplicate, rename, or delete it. Both use the same
-  slides, with selection, reorder, duplicate, delete, and one Undo per operation. **Carousel** shows a
-  side-by-side filmstrip with an
+  → Pages / Carousel** and choose a view. Both use the same slides, with selection, reorder,
+  duplicate, delete, and one Undo per operation. **Carousel** shows a side-by-side filmstrip with an
   Add button after every slide; deleting slide 1 promotes the next slide. Page selection is preserved
   in the export dialog, raster exports create one file per selected slide, and PDF export combines
   an output's pages into one file.
@@ -80,24 +78,14 @@ saved.
 
 ## Workspace panels
 
-On desktop, the right panel has **Inspector**, **Layers**, **Elements**, **Brand**, and **AI** tabs.
-Elements browses Photos, Videos, Vectors, Icons, Stickers, and Audio: click an asset to center it on the
-canvas, or drag it onto the canvas to center it on the drop point. Video and audio require a video design;
-in an image design, animated stickers insert their static thumbnail instead of changing the design mode.
-Your explicit tab choice stays active during selection, multi-select, and rename. Elements, AI, and Brand
-mount when first opened, then stay mounted while hidden so searches, generated results, and in-flight work
-survive tab changes and collapse. Your active tab and collapsed state are remembered per organization, and
-Expand restores that tab. On phones and tablets, Inspector starts closed so the canvas stays visible. The tool rail's Brand button
+On desktop, the right panel has **Inspector**, **Layers**, **Brand**, and **AI** tabs. Your explicit tab
+choice stays active during selection, multi-select, and rename. AI and Brand mount when first opened,
+then stay mounted while hidden so generated results and in-flight work survive tab changes and collapse.
+Your active tab and collapsed state are remembered per organization, and Expand restores that tab. On
+phones and tablets, Inspector starts closed so the canvas stays visible. The tool rail's Brand button
 and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions** are beside Undo/Redo,
 **Templates** is beside Save, and View is reserved for zoom and display settings. History, Versions,
 and Template Fields retain their movable floating panels.
-
-With no layer or clip selected, the Inspector shows the active canvas settings. Image and video
-designs both offer **Background** color presets and a **Custom color** picker, including the active
-Brand Kit palette when brand enforcement allows it. Video canvases default to black. Background
-changes are undoable, saved with the design, included in previews and exports, and preserved when
-adding another format. Image designs also offer canvas dimensions and gradient, image, and texture
-backgrounds; video designs keep the output duration beside the solid-color controls.
 
 ## Video timeline
 
@@ -106,31 +94,14 @@ sticker**, up to 40 tracks, with a composition limit of **180 seconds**. Audio w
 filmstrips are drawn client-side so you can see content while trimming. Rendering runs server-side
 via headless Chromium + FFmpeg.
 
-- **Workspace layout** — **Compact** reduces track heights, gives the reclaimed space to the
-  canvas, and widens the label column for its controls; Comfortable keeps the original time width.
-  Use a track's chevron to collapse or restore it, or **Collapse all** / **Expand all** to
-  change every track together. Collapsing never deletes, hides, or deselects a clip. The timeline's
-  top separator resizes it by dragging, or focus it and use **Arrow Up/Down**; **Home** and **End**
-  select its minimum and maximum sizes. Density, collapsed tracks, panel collapse, and height are
-  remembered per organization. On mobile, the timeline starts collapsed and uses the existing
-  wrapping controls rather than the desktop splitter.
 - **Tracks** — add tracks with **+ Track**, or drag a clip below the last track to create a new one.
-  Tracks can be renamed, muted, locked, hidden, and collapsed. A dropped clip snaps into the nearest free gap on
+  Tracks can be renamed, muted, locked, and hidden. A dropped clip snaps into the nearest free gap on
   the target track; if there is no room it is rejected rather than overlapping (hold **Alt** to keep
   an intentional overlap).
 - **Editing** — use the transport's **Split clip**, **Duplicate clip**, and **Delete clip** icons,
   or split at the playhead (**S**), trim, freeze frame (**Ctrl+F**), and ripple delete
   (**Shift+Delete**). Split is enabled only inside a selected, unlocked clip with room on both
-  sides. The duration stepper beside the timecode sets 1–180 seconds. **Motion Path** in the clip
-  Inspector records a custom route by dragging the clip through the canvas. Drag its points to edit,
-  click a segment to insert a point, or right-click a point to delete it. For touch or keyboard
-  editing, select a point on the canvas or with the Inspector's **Path point** menu, then choose
-  **Delete selected point**. Path easing and optional
-  **Rotate with path** share the clip's duration; recording and each edit are one Undo, and paths save,
-  reload, and export with the clip. Changing clip duration rescales path-point timestamps, while
-  ordinary existing keyframe timestamps stay unchanged (except the existing exit-preset behavior).
-  Split preserves the rendered path, including its easing and rotation, on both sides of the cut.
-  Multi-select (Shift/Ctrl/Cmd-click
+  sides. The duration stepper beside the timecode sets 1–180 seconds. Multi-select (Shift/Ctrl/Cmd-click
   or marquee, on both canvas and timeline), copy/paste, timeline markers, zoom, and loop playback are
   also available. Canvas drag, resize, rotation, arrow-key nudge, and Delete apply to all selected
   visible clips as one undo step. **Ctrl/Cmd+G** groups selected clips and **Ctrl/Cmd+Shift+G** ungroups
@@ -144,25 +115,12 @@ via headless Chromium + FFmpeg.
   group directly below the timing fields with a **Reverse** switch; video clips also get an
   **Original audio** switch that mutes or restores the clip's own sound. Image clips can be replaced
   through the media picker, have their background removed, or use **Magic Grab / Select Subject**
-  when the required providers are configured. Shape clips have solid or gradient fills, stroke
-  color and 0–40 px width controls, and uniform or per-corner radius controls. Width **0** hides
-  the outline without losing its color. Text clips have Normal, Bold, Italic, and Bold Italic styles.
+  when the required providers are configured. Shape clips have uniform or
+  per-corner radius controls; text clips have Normal, Bold, Italic, and Bold Italic styles.
   **Animations** presets apply to text, shape, image, and sticker clips and are grouped into
   **Entrance** (such as Pop, Fade Up, Slide In Left, Zoom In), **Emphasis** (Pulse, Shake, Swing), and
   **Exit** (such as Fade Out, Slide Out Left, Spin Out) presets; text clips also get a **Typewriter**
-  reveal. You can combine one preset from each category on the same clip. Click a selected preset again
-  to remove only that category, leaving the others intact. When animations overlap, movement and rotation
-  offsets add together, while scale and opacity factors multiply. Manual keyframes keep their existing
-  behavior and take precedence over preset contributions to the same property. Audio clips can detect beats.
-- **Animation clipboard** — **Copy Animation** captures visual position, size, rotation, opacity, and
-  font-size keyframes with their easing, plus motion paths and text reveal. It does not copy content,
-  assets or file references, IDs, base geometry, crop/focal state, clip placement or duration, speed,
-  transitions, motion blur, or volume. **Paste Animation** replaces the target's compatible visual
-  animation rather than merging with it, while preserving the target's content, base properties, and
-  existing volume keyframes and fades. Keyframe, path, and reveal timing scales from the source clip's
-  duration to the target's. Right-click inside a multi-selection to paste to every compatible selected
-  clip as one Undo step. Source volume is reported as skipped. On audio clips, use **Copy keyframes**
-  and **Paste keyframes** instead to copy and merge a volume envelope at the same clip-relative times.
+  reveal. Audio clips can detect beats.
 - **Captions** — **CC** auto-generates captions from every audio-bearing clip (needs a
   speech-to-text provider such as Deepgram), imports `.srt`/`.vtt` files, and exports the caption
   tracks as `.srt`.
@@ -223,8 +181,7 @@ timeline as an image clip.
 Choose a Brand Kit in **Brand Mode** to prioritize its colors, fonts, logos, reference images,
 preferred formats, and associated templates, with optional enforcement against that kit. Associated
 templates are prioritized before pagination, including libraries larger than one page. **General
-Mode — No brand rules** leaves the design unrestricted and disables enforcement without changing any
-layers. The organization-selected default brand is labelled **Default**. General Mode's custom
+Mode** leaves the design unrestricted and disables enforcement without changing any layers. Its custom
 font list includes all kits, with duplicate family/weight/style faces resolved in the same default-first
 order in the editor and exported files. The choice is saved in the design and survives versions,
 exports, and `.pdesign` reimports. Saving a logo to the Brand Kit and adding it to the canvas are
@@ -236,33 +193,22 @@ Manage kits in **Brand Studio** (`/brands`).
 The mouse wheel zooms by default. Laptop users can enable **View → Touchpad mode** to pan with a
 two-finger swipe and zoom with a pinch (or **Ctrl/Cmd+scroll**). The preference is remembered per
 organization. While editing text, the color control above the text box colors only the selected
-characters, so one text box can contain multiple colors. New text uses a font size and starting box
-scaled to the active canvas. Existing designs keep their previous fitting behavior, and newly added
-text starts with **Auto-fit text** off so its explicit size is preserved.
-
-Enable **Auto-fit text** in the Inspector to shrink flat or mixed-style text only as needed to fit
-both the width and height of its box, including a long unbroken word. **Minimum font size** sets the
-lower bound (8px by default); text never grows above its authored size, and auto-fit never changes
-the box. If content still does not fit at that bound, export Preflight reports the overflow. This is
-especially useful for long Bulk Create values. Side handles change only the wrapping frame, while a
-corner resize intentionally scales the box, authored size, and minimum together. With auto-fit on,
-changing **Size** or using the font-size shortcuts changes the authored ceiling without growing the
-box; with it off, the existing intentional box-growth behavior remains.
-
+characters, so one text box can contain multiple colors. Ordinary text edits retain the box's existing
+shrink-to-fit behavior. The Inspector's **Size** control can grow the box for wrapping or one long word,
+within the output bounds and without shrinking a manually resized box. With text selected,
 **Ctrl/Cmd+>** and **Ctrl/Cmd+<** (with or without Shift, including ISO keyboard layouts) increase or
 decrease font size across the selection as one undoable edit, starting from the size painted on canvas.
-Mixed rich-text sizes adjust independently, and the shortcuts also work in the inline editor without
-running in ordinary fields.
+An already shrunk box keeps its geometry; an unshrunk box grows within the output as needed so each
+increase remains visible. Mixed rich-text sizes adjust independently, and the shortcuts also work in
+the inline editor without running in ordinary fields.
 
-Drag an image from your computer, **Insert → Image…** (My Files or stock photos), or **Elements** onto
-an unlocked static image or still-image/sticker clip. The compatible target is outlined at its own
-bounds with **Drop to replace**; drop directly, or hold **Alt/Option**, to replace it without adding a
-duplicate layer. Hold **Shift** instead to insert a new image over that target. Drops on blank canvas
-or unsupported targets still insert, and an OS SVG drop imports editable paths. The frame, fit mode, and focal point are retained; a cross-aspect source gets a cover
-crop centered on the old crop's relative center, so the frame never gains empty bands. The new source's
-intrinsic dimensions are adopted and linked formats update in one Undo step. Locked targets, video
-clips, and audio clips are not replacement targets, and images that cannot be decoded leave the old
-target unchanged. Existing File Library sources are never deleted after a failed replacement.
+A normal image-file drop always inserts a new image, and an SVG drop imports editable paths. Hold
+**Alt/Option** while dropping onto an unlocked static image or still-image clip to show the distinct
+**Replace image** indicator and replace that target. The frame, fit mode, and focal point are retained;
+a cross-aspect source gets a cover crop centered on the old crop's relative center, so the frame never
+gains empty bands. The new file's intrinsic dimensions are adopted and linked formats update in one
+Undo step. Locked targets, video clips, and audio clips are not replacement targets, and files that the
+browser cannot decode are rejected.
 
 With a text element selected, the Inspector's **Text Effects** presets apply **Arc text**, **Wave
 text**, **Circle text**, **Gradient text**, **Text outline**, **Text shadow**, or **3D Extrusion** in

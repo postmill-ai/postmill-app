@@ -1,14 +1,22 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import React from 'react';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
-import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 const toasterShow = vi.hoisted(() => vi.fn());
+const promptOpen = vi.hoisted(() => vi.fn());
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: toasterShow }),
 }));
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
+  usePromptModal: () => ({ open: promptOpen }),
+}));
+
+beforeEach(() => {
+  toasterShow.mockClear();
+  promptOpen.mockReset();
+});
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
@@ -198,20 +206,10 @@ describe('OutputTabs format workflows', () => {
     const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
     fireEvent.click(freeze);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
-    expect(screen.getByText('Frozen').className).toContain('bg-studioBorder/20');
     expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
-
-    act(() => store.getState().setCurrentOutput(1));
-    const frozenTile = document.querySelector('[data-output-index="0"] > button')!;
-    const selectedTile = document.querySelector('[data-output-index="1"] > button')!;
-    expect(frozenTile.className).not.toContain('border-designerAccent');
-    expect(frozenTile.className).not.toContain('bg-designerAccent/10');
-    expect(selectedTile.className).toContain('border-designerAccent');
-    expect(selectedTile.className).toContain('bg-designerAccent/10');
 
     fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
-    expect(screen.queryByText('Frozen')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /X 1200×675/ }));
     expect(store.getState().currentOutput).toBe(1);
   });
@@ -255,118 +253,315 @@ describe('OutputTabs format workflows', () => {
     expect(toasterShow).toHaveBeenCalledWith('Something went wrong', 'warning');
   });
 
-  it('Link/Unlink changes edit scope without rewriting element links', () => {
+  it('moves Link/Unlink into the targeted card menu without rewriting element links', () => {
     const store = createDesignerStore();
     store.getState().addElement({
       id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
       rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
     });
     store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
     const origins = store.getState().doc.outputs.map((out: any) => out.children[0].originId);
+    const historyIndex = store.getState().historyIndex;
     render(<OutputTabs store={store} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink edits between formats' }));
-    expect(store.getState().editFormatOnly).toBe(true);
-    expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
-    fireEvent.click(screen.getByRole('button', { name: 'Link edits across formats' }));
-    expect(store.getState().editFormatOnly).toBe(false);
-  });
-});
-
-
-describe('OutputTabs duplication actions', () => {
-  beforeAll(() => {
-    Element.prototype.scrollIntoView = vi.fn();
-  });
-
-  it('duplicates a page-bearing format from its three-dot menu and reopens Pages', () => {
-    const store = createDesignerStore();
-    store.getState().addElement({
-      id: 'headline', type: 'text', text: 'Linked', x: 0, y: 0, width: 200, height: 40,
-      rotation: 0, opacity: 1, locked: false, hidden: false,
-    });
-    store.getState().addPage();
-    const onPagesContentAdded = vi.fn();
-    const historyLength = store.getState().history.length;
-    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Instagram Post actions' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate linked' }));
-
-    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Unlink edits between formats' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: /Unlink edits between formats/ }));
     expect(store.getState().currentOutput).toBe(1);
-    expect(store.getState().doc.outputs[1].children[0].originId)
-      .toBe(store.getState().doc.outputs[0].children[0].originId);
-    expect(store.getState().history).toHaveLength(historyLength + 1);
-    expect(onPagesContentAdded).toHaveBeenCalledTimes(1);
-    act(() => store.getState().undo());
-    expect(store.getState().doc.outputs).toHaveLength(1);
-  });
+    expect(store.getState().editFormatOnly).toBe(true);
+    expect(screen.getByRole('button', { name: 'Resume linked editing' })).toBeTruthy();
+    expect(store.getState().historyIndex).toBe(historyIndex);
+    expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
 
-  it('duplicates a video format independently from right-click without reflow', () => {
-    const store = createDesignerStore();
-    store.getState().setMode('video');
-    const track = store.getState().doc.outputs[0].tracks[0];
-    store.getState().addClip(0, track.id, {
-      id: 'clip', startMs: 100, endMs: 2000, src: '/movie.mp4', x: 12, y: 24, width: 320, height: 180,
-    } as never);
-    const historyLength = store.getState().history.length;
-    render(<OutputTabs store={store} />);
-
-    fireEvent.contextMenu(screen.getAllByRole('button', { name: /Instagram Post/ })[0], {
-      clientX: 30, clientY: 40,
-    });
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate independently' }));
-
-    const outputs = store.getState().doc.outputs;
-    expect(outputs).toHaveLength(2);
-    const sourceClip = outputs[0].tracks[0].clips[0];
-    const copyClip = outputs[1].tracks[0].clips[0];
-    expect(copyClip).toMatchObject({ x: 12, y: 24, width: 320, height: 180, startMs: 100, endMs: 2000 });
-    expect(copyClip.id).not.toBe(sourceClip.id);
-    expect(copyClip.originId).toBeUndefined();
-    expect(store.getState().history).toHaveLength(historyLength + 1);
-  });
-
-  it('opens the existing resize popover from the format action menu', () => {
-    const store = createDesignerStore();
-    render(<OutputTabs store={store} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Instagram Post actions' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Resize or change format' }));
-
-    expect(screen.getByText('Resize Format')).toBeTruthy();
+    fireEvent.click(document.querySelector('[data-format-select]')!);
+    expect(store.getState().currentOutput).toBe(0);
+    expect(store.getState().editFormatOnly).toBe(true);
+    expect(screen.getByRole('button', { name: 'Resume linked editing' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    expect(screen.getByRole('button', { name: /Link edits across formats/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume linked editing' }));
+    expect(store.getState().editFormatOnly).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Resume linked editing' })).toBeNull();
+    expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
   });
 });
 
 
-describe('OutputTabs menu guards', () => {
+describe('OutputTabs safe format actions', () => {
   beforeAll(() => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it('disables Resize and Remove for a frozen format', () => {
+  const card = (store: ReturnType<typeof createDesignerStore>, index: number) => {
+    const id = store.getState().doc.outputs[index].id;
+    const element = document.querySelector(`[data-format-card="${id}"]`);
+    if (!element) throw new Error(`Missing format card ${id}`);
+    return element as HTMLElement;
+  };
+
+  it('uses a default custom name and renames through the card prompt', async () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.change(screen.getByPlaceholderText('W'), { target: { value: '1920' } });
+    fireEvent.change(screen.getByPlaceholderText('H'), { target: { value: '1080' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(store.getState().doc.outputs[1]).toMatchObject({
+      name: 'Custom size', width: 1920, height: 1080,
+    });
+    expect(screen.getByText('Custom size')).toBeTruthy();
+    expect(screen.getByText('1920×1080')).toBeTruthy();
+    expect(screen.queryByText('1920×1080 1920×1080')).toBeNull();
+
+    promptOpen.mockResolvedValue('Landscape campaign');
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Custom size' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename format' }));
+
+    await waitFor(() => expect(store.getState().doc.outputs[1].name).toBe('Landscape campaign'));
+    expect(promptOpen).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Rename format', label: 'Format name', initialValue: 'Custom size',
+    }));
+    expect(store.getState().historyLabels.at(-1)).toBe('Rename format');
+  });
+
+  it('does not rename when the prompt is cancelled', async () => {
+    const store = createDesignerStore();
+    const before = store.getState().doc;
+    const historyIndex = store.getState().historyIndex;
+    promptOpen.mockResolvedValue(null);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename format' }));
+
+    await waitFor(() => expect(promptOpen).toHaveBeenCalled());
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().historyIndex).toBe(historyIndex);
+  });
+
+  it('keeps resize anchored to the intended non-active card', () => {
     const store = createDesignerStore();
     store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
-    store.getState().setOutputFrozen(0, true);
+    store.getState().setCurrentOutput(0);
     render(<OutputTabs store={store} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Instagram Post actions' }));
-    expect(screen.getByRole('menuitem', { name: 'Resize or change format' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('menuitem', { name: 'Remove format' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resize / change format' }));
+    fireEvent.change(screen.getByPlaceholderText('W'), { target: { value: '800' } });
+    fireEvent.change(screen.getByPlaceholderText('H'), { target: { value: '600' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(store.getState().doc.outputs[0]).toMatchObject({ width: 1080, height: 1080 });
+    expect(store.getState().doc.outputs[1]).toMatchObject({
+      formatId: 'custom', name: 'Custom size', width: 800, height: 600,
+    });
   });
 
-  it('disables both duplication choices at the format limit', () => {
+  it('shows Remove for selection or hover and restores the same format with Undo', () => {
     const store = createDesignerStore();
-    const source = store.getState().doc.outputs[0];
-    store.getState().replaceDocTrusted({
-      ...store.getState().doc,
-      outputs: Array.from({ length: MAX_OUTPUTS }, (_, index) => ({ ...source, id: `output-${index}` })),
-    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
     render(<OutputTabs store={store} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Instagram Post actions' })[0]);
-    expect(screen.getByRole('menuitem', { name: 'Duplicate linked' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('menuitem', { name: 'Duplicate independently' })).toHaveProperty('disabled', true);
+    expect(within(card(store, 0)).getByRole('button', { name: 'Remove format' }).className).toContain('visible');
+    expect(within(card(store, 1)).getByRole('button', { name: 'Remove format' }).className).toContain('invisible');
+    expect(within(card(store, 1)).getByRole('button', { name: 'Remove format' }).className).toContain('group-hover:visible');
+
+    fireEvent.mouseOver(card(store, 1));
+    fireEvent.click(within(card(store, 1)).getByRole('button', { name: 'Remove format' }));
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    expect(screen.getByRole('status').textContent).toContain('Format “X” removed');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().doc.outputs[1]).toMatchObject({ formatId: 'x-post', name: 'X' });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('invalidates the removal Undo after a later edit instead of reverting it', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(within(card(store, 1)).getByRole('button', { name: 'Remove format' }));
+    expect(screen.getByRole('status')).toBeTruthy();
+    act(() => {
+      store.getState().addOutput({ formatId: 'custom', name: 'Later edit', width: 800, height: 600 });
+    });
+
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo', exact: true })).toBeNull();
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Instagram Post', 'Later edit',
+    ]);
+  });
+});
+
+
+describe('OutputTabs rename identity', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('renames by output id when collaboration reorders outputs while the prompt is open', async () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    const targetId = store.getState().doc.outputs[1].id;
+    const otherId = store.getState().doc.outputs[0].id;
+    let resolvePrompt!: (value: string | null) => void;
+    const pendingName = new Promise<string | null>((resolve) => {
+      resolvePrompt = resolve;
+    });
+    promptOpen.mockReturnValue(pendingName);
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename format' }));
+    await waitFor(() => expect(promptOpen).toHaveBeenCalled());
+
+    act(() => {
+      const doc = store.getState().doc;
+      store.getState().replaceDocTrusted({
+        ...doc,
+        outputs: [doc.outputs[1], doc.outputs[0]],
+      });
+    });
+    await act(async () => {
+      resolvePrompt('Renamed X');
+      await pendingName;
+    });
+
+    await waitFor(() => {
+      expect(store.getState().doc.outputs.find((output) => output.id === targetId)?.name)
+        .toBe('Renamed X');
+    });
+    expect(store.getState().doc.outputs.find((output) => output.id === otherId)?.name)
+      .toBe('Instagram Post');
+  });
+});
+
+
+describe('OutputTabs follow-up regressions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('turns linking back on from a non-current card menu', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    store.getState().setEditFormatOnly(true);
+    const origins = store.getState().doc.outputs.map((output: any) => output.children[0].originId);
+    const historyIndex = store.getState().historyIndex;
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for X' }));
+    fireEvent.click(screen.getByRole('button', { name: /Link edits across formats/ }));
+
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().editFormatOnly).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Resume linked editing' })).toBeNull();
+    expect(store.getState().historyIndex).toBe(historyIndex);
+    expect(store.getState().doc.outputs.map((output: any) => output.children[0].originId)).toEqual(origins);
+  });
+
+  it('keeps Remove Undo available when a save adopts a materialized document', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    render(<OutputTabs store={store} />);
+    const outputId = store.getState().doc.outputs[1].id;
+    const card = document.querySelector(`[data-format-card="${outputId}"]`) as HTMLElement;
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
+    const sentDoc = store.getState().doc;
+    const removalHistory = store.getState().history;
+    const persistedDoc = {
+      ...sentDoc,
+      outputs: sentDoc.outputs.map((output) => ({ ...output })),
+    };
+    act(() => {
+      expect(store.getState().adoptPersistedDoc(sentDoc, persistedDoc)).toBe(true);
+    });
+
+    expect(store.getState().doc).not.toBe(sentDoc);
+    expect(store.getState().history).toBe(removalHistory);
+    expect(screen.getByRole('status')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo', exact: true }));
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().doc.outputs[1].name).toBe('X');
+  });
+
+  it('invalidates Remove Undo for a silent edit before a history commit', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    render(<OutputTabs store={store} />);
+    const outputId = store.getState().doc.outputs[1].id;
+    const card = document.querySelector(`[data-format-card="${outputId}"]`) as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
+    const removalHistoryIndex = store.getState().historyIndex;
+
+    act(() => {
+      expect(store.getState().updateElementEphemeral('headline', { x: 25 })).toBe(true);
+    });
+
+    expect(store.getState().historyIndex).toBe(removalHistoryIndex);
+    expect(store.getState().doc).not.toBe(store.getState().history[removalHistoryIndex]);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
+
+describe('OutputTabs capped removal history', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('invalidates Remove Undo when a later edit reuses index 49 at the history cap', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Linked',
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setCurrentOutput(0);
+    for (let index = 0; store.getState().history.length < 50; index++) {
+      store.getState().updateElement('headline', { x: index + 1 });
+      store.getState().pushHistory('Move');
+    }
+    expect(store.getState().history).toHaveLength(50);
+    expect(store.getState().historyIndex).toBe(49);
+    store.getState().setCurrentOutput(1);
+    render(<OutputTabs store={store} />);
+    const outputId = store.getState().doc.outputs[1].id;
+    const card = document.querySelector(`[data-format-card="${outputId}"]`) as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove format' }));
+    const removalHistory = store.getState().history;
+    expect(store.getState().historyIndex).toBe(49);
+    expect(screen.getByRole('status')).toBeTruthy();
+
+    act(() => {
+      store.getState().updateElement('headline', { x: 999 });
+      store.getState().pushHistory('Move');
+    });
+
+    expect(store.getState().history).toHaveLength(50);
+    expect(store.getState().historyIndex).toBe(49);
+    expect(store.getState().history).not.toBe(removalHistory);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo', exact: true })).toBeNull();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    expect((store.getState().doc.outputs[0] as any).children[0].x).toBe(999);
   });
 });

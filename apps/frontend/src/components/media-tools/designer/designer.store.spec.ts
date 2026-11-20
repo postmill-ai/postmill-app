@@ -4060,3 +4060,92 @@ describe('Bulk Create batch identity', () => {
     expect(store.getState()).toMatchObject({ batchId: null, batchName: null });
   });
 });
+
+describe('format rename and removal history', () => {
+  it('renames an image output immutably with bounded guarded edits and one Undo', () => {
+    const store = createDesignerStore();
+    const before = store.getState().doc;
+    const historyLength = store.getState().history.length;
+
+    store.getState().renameOutput(0, '   ');
+    store.getState().renameOutput(0, 'Instagram Post');
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyLength);
+
+    store.getState().renameOutput(0, '  Campaign  ');
+    expect(store.getState().doc).not.toBe(before);
+    expect(store.getState().doc.outputs[0].name).toBe('Campaign');
+    expect(before.outputs[0].name).toBe('Instagram Post');
+    expect(store.getState().historyLabels.at(-1)).toBe('Rename format');
+
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].name).toBe('Instagram Post');
+    store.getState().redo();
+    expect(store.getState().doc.outputs[0].name).toBe('Campaign');
+
+    store.getState().renameOutput(0, `  ${'a'.repeat(250)}  `);
+    expect(store.getState().doc.outputs[0].name).toHaveLength(200);
+
+    store.getState().setOutputFrozen(0, true);
+    const frozenDoc = store.getState().doc;
+    const frozenHistoryLength = store.getState().history.length;
+    store.getState().renameOutput(0, 'Rejected');
+    expect(store.getState().doc).toBe(frozenDoc);
+    expect(store.getState().history).toHaveLength(frozenHistoryLength);
+  });
+
+  it('renames a video output without replacing its tracks', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const output = store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+    store.getState().renameOutput(0, 'Video campaign');
+
+    const renamed = store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+    expect(renamed.name).toBe('Video campaign');
+    expect(renamed.tracks).toBe(output.tracks);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].name).toBe(output.name);
+  });
+
+  it('labels format removal and restores the complete output with one Undo', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    const before = store.getState().doc;
+
+    store.getState().removeOutput(1);
+
+    expect(store.getState().historyLabels.at(-1)).toBe('Remove format');
+    expect(store.getState().doc.outputs).toHaveLength(1);
+    store.getState().undo();
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().doc.outputs[1].name).toBe('X');
+  });
+});
+
+
+describe('unique output names', () => {
+  it('deduplicates custom add, resize, and rename names while preserving the length cap', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'custom', name: 'Custom size', width: 1920, height: 1080 });
+    store.getState().addOutput({ formatId: 'custom', name: 'Custom size', width: 1280, height: 720 });
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Instagram Post', 'Custom size', 'Custom size 2',
+    ]);
+
+    store.getState().renameOutput(2, 'Instagram Post');
+    expect(store.getState().doc.outputs[2].name).toBe('Instagram Post 2');
+
+    store.getState().resizeOutput(0, 800, 600, 'custom', 'Custom size');
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Custom size 2', 'Custom size', 'Instagram Post 2',
+    ]);
+
+    const longName = 'a'.repeat(200);
+    store.getState().addOutput({ formatId: 'custom', name: longName, width: 400, height: 400 });
+    store.getState().addOutput({ formatId: 'custom', name: longName, width: 500, height: 500 });
+    const duplicateLongName = store.getState().doc.outputs.at(-1)?.name;
+    expect(duplicateLongName).toHaveLength(200);
+    expect(duplicateLongName?.endsWith(' 2')).toBe(true);
+  });
+});
