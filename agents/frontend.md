@@ -451,6 +451,16 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   growth cannot move an active clip drag; without a sheet, the canvas retains its flexible sizing. Long sheet
   bodies scroll independently and Brand mounts only in its active mobile layout. Mobile keeps design rename
   and timeline collapse/zoom-to-fit available.
+  The video timeline also has organization-scoped local preferences for comfortable/compact density,
+  per-track/all-track collapse, whole-panel collapse, and height. These are editor-only store fields,
+  never document/history data. Compact mode subtracts the reclaimed row height from the panel so the
+  canvas actually grows. `timeline-workspace.ts` owns density constants, preference validation, and
+  responsive height bounds; `timeline-geometry.ts` and `timeline-marquee.ts` share cumulative row tops
+  so cross-track drops, the new-track zone, and marquee selection remain correct with collapsed rows.
+  The splitter supports pointer drag plus Arrow Up/Down and Home/End; it is hidden on mobile, where the
+  wrapping toolbar and selected-clip timing fields remain available beside the Inspector sheet. Desktop
+  keeps a 240 px minimum canvas; when that and the minimum timeline cannot both fit, the workspace column
+  scrolls instead of collapsing the canvas. Existing mobile canvas/sheet minimums stay unchanged.
 - **Inspector is task-tabbed per element category** (`panels/inspector-tabs.tsx`): image gets
   Layout | Style | AI Tools, text gets Layout | Text | Effects, shape/path/raster/icon/symbol/fill/group/mixed
   get Layout | Style, and adjustment gets Layout | Adjust. `inspector-panel.tsx` owns the sticky

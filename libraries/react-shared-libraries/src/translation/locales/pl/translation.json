@@ -4980,5 +4980,16 @@
   "designer_carousel": "Karuzela",
   "designer_add_slide_after": "Dodaj slajd po {{number}}",
   "designer_frozen_read_only": "Ten format jest zablokowany. Odblokuj go, aby go edytować.",
-  "designer_bulk_no_variables": "Przed utworzeniem wariantów dodaj edytowalny element tekstu, obrazu lub koloru."
+  "designer_bulk_no_variables": "Przed utworzeniem wariantów dodaj edytowalny element tekstu, obrazu lub koloru.",
+  "compact_tracks": "Kompaktowe ścieżki",
+  "compact": "Kompaktowy",
+  "collapse_all_tracks": "Zwiń wszystkie ścieżki",
+  "expand_all_tracks": "Rozwiń wszystkie ścieżki",
+  "collapse_all": "Zwiń wszystko",
+  "expand_all": "Rozwiń wszystko",
+  "collapse_track": "Zwiń ścieżkę",
+  "expand_track": "Rozwiń ścieżkę",
+  "collapse_track_for": "Zwiń ścieżkę: {{name}}",
+  "expand_track_for": "Rozwiń ścieżkę: {{name}}",
+  "timeline_tracks": "Ścieżki osi czasu"
 }

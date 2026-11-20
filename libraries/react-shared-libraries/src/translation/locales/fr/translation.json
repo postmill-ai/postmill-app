@@ -4937,5 +4937,16 @@
   "designer_carousel": "Carrousel",
   "designer_add_slide_after": "Ajouter une diapositive après {{number}}",
   "designer_frozen_read_only": "Ce format est figé. Libérez-le pour le modifier.",
-  "designer_bulk_no_variables": "Ajoutez un élément modifiable de texte, d’image ou de couleur avant de créer des variations."
+  "designer_bulk_no_variables": "Ajoutez un élément modifiable de texte, d’image ou de couleur avant de créer des variations.",
+  "compact_tracks": "Pistes compactes",
+  "compact": "Compact",
+  "collapse_all_tracks": "Réduire toutes les pistes",
+  "expand_all_tracks": "Développer toutes les pistes",
+  "collapse_all": "Tout réduire",
+  "expand_all": "Tout développer",
+  "collapse_track": "Réduire la piste",
+  "expand_track": "Développer la piste",
+  "collapse_track_for": "Réduire la piste : {{name}}",
+  "expand_track_for": "Développer la piste : {{name}}",
+  "timeline_tracks": "Pistes de la timeline"
 }

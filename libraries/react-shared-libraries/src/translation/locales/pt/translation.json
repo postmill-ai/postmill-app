@@ -4937,5 +4937,16 @@
   "designer_carousel": "Carrossel",
   "designer_add_slide_after": "Adicionar slide após {{number}}",
   "designer_frozen_read_only": "Este formato está congelado. Descongele-o para editá-lo.",
-  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações."
+  "designer_bulk_no_variables": "Adicione um elemento editável de texto, imagem ou cor antes de criar variações.",
+  "compact_tracks": "Faixas compactas",
+  "compact": "Compacto",
+  "collapse_all_tracks": "Recolher todas as faixas",
+  "expand_all_tracks": "Expandir todas as faixas",
+  "collapse_all": "Recolher tudo",
+  "expand_all": "Expandir tudo",
+  "collapse_track": "Recolher faixa",
+  "expand_track": "Expandir faixa",
+  "collapse_track_for": "Recolher faixa: {{name}}",
+  "expand_track_for": "Expandir faixa: {{name}}",
+  "timeline_tracks": "Faixas da linha do tempo"
 }

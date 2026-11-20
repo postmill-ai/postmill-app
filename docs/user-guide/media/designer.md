@@ -96,8 +96,16 @@ sticker**, up to 40 tracks, with a composition limit of **180 seconds**. Audio w
 filmstrips are drawn client-side so you can see content while trimming. Rendering runs server-side
 via headless Chromium + FFmpeg.
 
+- **Workspace layout** — **Compact** reduces track heights, gives the reclaimed space to the
+  canvas, and widens the label column for its controls; Comfortable keeps the original time width.
+  Use a track's chevron to collapse or restore it, or **Collapse all** / **Expand all** to
+  change every track together. Collapsing never deletes, hides, or deselects a clip. The timeline's
+  top separator resizes it by dragging, or focus it and use **Arrow Up/Down**; **Home** and **End**
+  select its minimum and maximum sizes. Density, collapsed tracks, panel collapse, and height are
+  remembered per organization. On mobile, the timeline starts collapsed and uses the existing
+  wrapping controls rather than the desktop splitter.
 - **Tracks** — add tracks with **+ Track**, or drag a clip below the last track to create a new one.
-  Tracks can be renamed, muted, locked, and hidden. A dropped clip snaps into the nearest free gap on
+  Tracks can be renamed, muted, locked, hidden, and collapsed. A dropped clip snaps into the nearest free gap on
   the target track; if there is no room it is rejected rather than overlapping (hold **Alt** to keep
   an intentional overlap).
 - **Editing** — use the transport's **Split clip**, **Duplicate clip**, and **Delete clip** icons,

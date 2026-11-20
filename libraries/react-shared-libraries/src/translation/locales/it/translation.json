@@ -4937,5 +4937,16 @@
   "designer_carousel": "Carosello",
   "designer_add_slide_after": "Aggiungi diapositiva dopo {{number}}",
   "designer_frozen_read_only": "Questo formato è bloccato. Sbloccalo per modificarlo.",
-  "designer_bulk_no_variables": "Aggiungi un elemento modificabile di testo, immagine o colore prima di creare varianti."
+  "designer_bulk_no_variables": "Aggiungi un elemento modificabile di testo, immagine o colore prima di creare varianti.",
+  "compact_tracks": "Tracce compatte",
+  "compact": "Compatto",
+  "collapse_all_tracks": "Comprimi tutte le tracce",
+  "expand_all_tracks": "Espandi tutte le tracce",
+  "collapse_all": "Comprimi tutto",
+  "expand_all": "Espandi tutto",
+  "collapse_track": "Comprimi traccia",
+  "expand_track": "Espandi traccia",
+  "collapse_track_for": "Comprimi traccia: {{name}}",
+  "expand_track_for": "Espandi traccia: {{name}}",
+  "timeline_tracks": "Tracce della timeline"
 }

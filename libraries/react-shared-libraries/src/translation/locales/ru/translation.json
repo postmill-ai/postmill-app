@@ -4939,5 +4939,16 @@
   "designer_carousel": "Карусель",
   "designer_add_slide_after": "Добавить слайд после {{number}}",
   "designer_frozen_read_only": "Этот формат заморожен. Разморозьте его, чтобы редактировать.",
-  "designer_bulk_no_variables": "Перед созданием вариантов добавьте редактируемый текст, изображение или элемент цвета."
+  "designer_bulk_no_variables": "Перед созданием вариантов добавьте редактируемый текст, изображение или элемент цвета.",
+  "compact_tracks": "Компактные дорожки",
+  "compact": "Компактный",
+  "collapse_all_tracks": "Свернуть все дорожки",
+  "expand_all_tracks": "Развернуть все дорожки",
+  "collapse_all": "Свернуть все",
+  "expand_all": "Развернуть все",
+  "collapse_track": "Свернуть дорожку",
+  "expand_track": "Развернуть дорожку",
+  "collapse_track_for": "Свернуть дорожку: {{name}}",
+  "expand_track_for": "Развернуть дорожку: {{name}}",
+  "timeline_tracks": "Дорожки временной шкалы"
 }

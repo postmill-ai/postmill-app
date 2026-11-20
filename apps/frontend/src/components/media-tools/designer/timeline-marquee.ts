@@ -1,13 +1,13 @@
 import type { VideoTrack } from './designer.store';
+import { timelineRowTops, type TimelineRowGeometry } from './timeline-geometry';
 
 /**
  * Rubber-band (marquee) selection on the video timeline.
  *
  * The marquee rect lives in SCROLL-CONTENT coordinates (x grows with the
  * timeline width, y grows down past the ruler), so it is immune to scrolling
- * mid-drag. Hit-testing mirrors the layout in video-timeline.tsx: the ruler
- * occupies the first `rulerHeight` pixels, then each track row is
- * `trackHeight + trackGap` tall, and a clip spans
+ * mid-drag. Hit-testing shares `timelineRowTops` with video-timeline.tsx,
+ * including compact and collapsed row heights. A clip spans
  * `labelWidth + [startMs, effectiveEnd] * pixelsPerMs` horizontally
  * (effectiveEnd includes the freeze-hold extension).
  */
@@ -19,11 +19,9 @@ export interface MarqueeRect {
   bottom: number;
 }
 
-export interface MarqueeGeometry {
-  rulerHeight: number;
-  trackHeight: number;
-  trackGap: number;
+export interface MarqueeGeometry extends TimelineRowGeometry {
   labelWidth: number;
+  collapsedTrackIds?: ReadonlySet<string>;
 }
 
 export const normalizeMarquee = (
@@ -52,10 +50,11 @@ export const marqueeHitClips = (
   geom: MarqueeGeometry
 ): { trackId: string; clipId: string }[] => {
   const hits: { trackId: string; clipId: string }[] = [];
-  const rowStride = geom.trackHeight + geom.trackGap;
+  const rowTops = timelineRowTops(tracks.length, geom);
   tracks.forEach((track, ti) => {
-    const rowTop = geom.rulerHeight + ti * rowStride;
-    const rowBottom = rowTop + rowStride;
+    if (geom.collapsedTrackIds?.has(track.id)) return;
+    const rowTop = rowTops[ti];
+    const rowBottom = rowTop + (geom.trackHeights?.[ti] ?? geom.trackHeight) + geom.trackGap;
     if (rect.bottom < rowTop || rect.top > rowBottom) return;
     for (const clip of track.clips) {
       const left = geom.labelWidth + clip.startMs * pixelsPerMs;

@@ -4937,5 +4937,16 @@
   "designer_carousel": "轮播",
   "designer_add_slide_after": "在 {{number}} 后添加幻灯片",
   "designer_frozen_read_only": "此格式已冻结。请取消冻结后再编辑。",
-  "designer_bulk_no_variables": "请先添加可编辑的文本、图像或颜色元素，再创建变体。"
+  "designer_bulk_no_variables": "请先添加可编辑的文本、图像或颜色元素，再创建变体。",
+  "compact_tracks": "紧凑轨道",
+  "compact": "紧凑",
+  "collapse_all_tracks": "折叠所有轨道",
+  "expand_all_tracks": "展开所有轨道",
+  "collapse_all": "全部折叠",
+  "expand_all": "全部展开",
+  "collapse_track": "折叠轨道",
+  "expand_track": "展开轨道",
+  "collapse_track_for": "折叠轨道：{{name}}",
+  "expand_track_for": "展开轨道：{{name}}",
+  "timeline_tracks": "时间轴轨道"
 }
