@@ -134,6 +134,7 @@ export interface ColorSwatchProps {
   label?: string;
   brandColors?: string[];
   brandEnforcement?: boolean;
+  triggerRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
 export const ColorSwatch: React.FC<ColorSwatchProps> = ({
@@ -142,6 +143,7 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
   label,
   brandColors,
   brandEnforcement,
+  triggerRef,
 }) => {
   const t = useT();
   const user = useUser();
@@ -241,6 +243,7 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
       )}
       <div className="relative">
         <button
+          ref={triggerRef}
           type="button"
           aria-haspopup="dialog"
           aria-expanded={open}

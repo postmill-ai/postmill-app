@@ -195,6 +195,7 @@ const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
 
 interface TextFormatPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
+  colorTriggerRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
 const isValidHex = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value);
@@ -216,7 +217,7 @@ export const buildFontSizeUpdate = (
   ...growBoxFor(element, fontSize, measure, bounds),
 });
 
-export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
+export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store, colorTriggerRef }) => {
   const t = useT();
   const selectedIds = store((s) => s.selectedIds);
   const out = store(
@@ -475,6 +476,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
         <FillSection
           element={element}
           set={update}
+          colorTriggerRef={colorTriggerRef}
           label={t('color', 'Color')}
           defaultColor="#000000"
           brandColors={brandColors}

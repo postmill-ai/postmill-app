@@ -21,7 +21,8 @@ export const FillSection: FC<{
   defaultColor?: string;
   brandColors?: string[];
   brandEnforcement?: boolean;
-}> = ({ element, set, label, defaultColor = '#2B5CD3', brandColors, brandEnforcement }) => {
+  colorTriggerRef?: React.RefObject<HTMLButtonElement | null>;
+}> = ({ element, set, label, defaultColor = '#2B5CD3', brandColors, brandEnforcement, colorTriggerRef }) => {
   const t = useT();
   const isGradient = !!element.fillGradient?.stops?.length;
 
@@ -59,6 +60,7 @@ export const FillSection: FC<{
         />
       ) : (
         <ColorSwatch
+          triggerRef={colorTriggerRef}
           label={label || t('fill_button', 'Fill')}
           value={element.fill || defaultColor}
           onChange={(hex) => set({ fill: hex })}
