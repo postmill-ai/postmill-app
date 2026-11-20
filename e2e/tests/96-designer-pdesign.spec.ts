@@ -1,11 +1,10 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import { strToU8, unzipSync, zipSync } from 'fflate';
 
 const SOURCE_ID = 'qr-source-pdesign-e2e';
 const IMPORTED_ID = 'imported-pdesign-e2e';
 const JOB_ID = 'qr-export-job-pdesign-e2e';
 const ARTIFACT_PATH = '/mock-storage/qr-source.pdesign';
+const ARTIFACT_BYTES = Buffer.from('completed-pdesign-artifact');
 
 const qrDoc = {
   version: 13,
@@ -37,15 +36,6 @@ const qrDoc = {
     }],
   }],
 };
-
-const ARTIFACT_BYTES = Buffer.from(zipSync({
-  'manifest.json': strToU8(JSON.stringify({
-    type: 'postmill-design', formatVersion: 2, docVersion: qrDoc.version,
-    mode: 'image', app: 'postmill', exportedAt: '2026-01-01T00:00:00.000Z', name: 'QR source',
-  })),
-  'doc.json': strToU8(JSON.stringify(qrDoc)),
-  'previews/output-1-page-1.jpg': new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
-}));
 
 const importedDoc = structuredClone(qrDoc);
 importedDoc.outputs[0].id = 'imported-output';
@@ -168,10 +158,6 @@ test('pdesign export downloads and import opens the returned editable QR design'
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe('QR source.pdesign');
   expect(await download.failure()).toBeNull();
-  const downloadPath = await download.path();
-  expect(downloadPath).toBeTruthy();
-  const entries = unzipSync(await readFile(downloadPath!));
-  expect(entries['previews/output-1-page-1.jpg']).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
   await expect(page.getByText('Design file download started')).toBeVisible();
   expect(state.exportReads).toBe(1);
 

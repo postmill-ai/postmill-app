@@ -95,6 +95,15 @@ a full-size JPG for every output and carousel page under `previews/`, so **Downl
 ready-to-use images alongside the editable source. Existing archives are not rewritten. Video
 archives keep their current contents. In the library a design shows its thumbnail and a
 label such as **Image design**, **Video design**, **Image template**, or **Video template**.
+
+To get the JPGs from a new image archive:
+
+1. Select **Download** and save the `.pdesign` file.
+2. Open the file with your ZIP/archive extraction tool. If the tool does not recognise `.pdesign`,
+   first rename the file extension to `.zip`, then extract it.
+3. Open the extracted `previews/` folder. `output-1-page-1.jpg` is the first page of the first
+   format; the remaining names use the same output/page numbering for other formats and slides.
+
 **Open in Designer** on a `.pdesign` imports it as a **new design** in your organisation
 (`POST /media/designs/import-library`) and opens it; the library file is left as is. To bring in a
 `.pdesign` from outside the library, use the Designer's own import (`POST /media/designs/import`).
