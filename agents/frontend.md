@@ -185,6 +185,15 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
   timeout when image/document IDs are present (10 seconds otherwise) so pre-session extraction cannot enable
   a duplicate Start click while validation is still running.
 
+## Designer galleries
+
+File → Open design and File → Browse templates share `gallery-toolbar.tsx`, `gallery-card.tsx`, and an
+org-scoped local S/M/L preference. Search, Newest/Name/Recently opened sorting, folder/category filters,
+facets, and totals are server-driven across the full result set; never sort or filter only downloaded pages.
+`useSWRInfinite` pages reconcile by id. `DesignerRecentOpen` tracks design opens and successful template
+applies per user/org; template apply passes `sourceTemplateId` through design creation. Card actions appear
+on hover/focus and coarse pointers, and missing/broken thumbnails use the shared preview fallback.
+
 ## Designer: four renderers, one document
 
 `/media/designer` draws every document **four times**:

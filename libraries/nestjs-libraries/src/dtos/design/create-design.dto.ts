@@ -3,6 +3,7 @@ import {
   IsString,
   IsNumber,
   IsOptional,
+  IsNotEmpty,
 } from 'class-validator';
 
 export class CreateDesignDto {
@@ -33,4 +34,9 @@ export class CreateDesignDto {
   @IsOptional()
   @IsString()
   campaignId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sourceTemplateId?: string;
 }

@@ -1,72 +1,67 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import useSWR from 'swr';
+import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
+import useSWRInfinite from 'swr/infinite';
+import { useDebounce } from 'use-debounce';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals, useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Button } from '@postmill-ai/react/form/button';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { ContextMenu } from '@postmill-ai/frontend/components/ui/context-menu';
 import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import {
+  DesignerGallerySort,
+  templateCategoryKey,
+  templateCategoryLabel,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/template-category';
 import type { DesignerDoc } from '../designer.store';
 import { captureStageThumbnail } from '../stage-thumbnail';
 import { readErrorMessage } from '../read-error-message';
+import { useBrandKit } from '../brand-kit-context';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { DesignPreviewImage } from './design-preview-image';
-import {
-  ALL_CATEGORIES_KEY,
-  VIDEO_CATEGORY_KEY,
-  VIDEO_CATEGORY_LABEL,
-  groupTemplatesByCategory,
-  type TemplateSection,
-} from './template-categories';
+import { ALL_CATEGORIES_KEY, groupTemplatesByCategory } from './template-categories';
 import { needsModeConfirm, templateModeOf } from './template-mode';
-import {
-  UNFILED_FOLDER_KEY,
-  filterTemplatesByFolder,
-  unfiledTemplates,
-  type FolderSelection,
-} from './template-folders';
+import { UNFILED_FOLDER_KEY, type FolderSelection } from './template-folders';
 import { TemplateFolderTree, useTemplateFolders } from './template-folder-tree';
 import { MoveTemplateModal } from './move-template-modal';
 import { SaveTemplateModal } from './save-template-modal';
-import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { useBrandKit } from '../brand-kit-context';
+import { DesignerGalleryToolbar } from './gallery-toolbar';
+import { designerGalleryGridStyle, useDesignerGallerySize } from './gallery-preferences';
+import { GalleryCardActions, GalleryPreviewFallback } from './gallery-card';
 
-interface DesignTemplate {
+export interface DesignTemplate {
   id: string;
   name: string;
-  /** List payloads carry only `{ mode }` (badge/bucketing/confirm); the full
-   *  doc arrives with the per-template GET on apply. */
   doc: { mode?: 'image' | 'video' } | DesignerDoc;
   isSystem: boolean;
   category?: string | null;
   folderId?: string | null;
   brandProfileId?: string | null;
   thumbnail?: string;
+  createdAt?: string;
 }
 
-interface TemplatesPanelProps {
-  store: ReturnType<typeof import('../designer.store').createDesignerStore>;
-  onClose?: () => void;
-  /** Resolves false to abort applying (unsaved-changes guard). */
-  guard?: () => Promise<boolean>;
-  /** Hide the "Save current as template" button (e.g. the start modal, where
-   *  there is no design worth templating yet). Defaults to shown. */
-  showSaveCurrent?: boolean;
-}
-
-interface TemplatePage {
+export interface TemplatePage {
   templates: DesignTemplate[];
   total: number;
   page: number;
   limit: number;
+  categories?: { key: string; label: string }[];
+  unfiledCount?: number;
 }
 
 const PAGE_LIMIT = 24;
 
-export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard, showSaveCurrent = true }) => {
+export const TemplatesPanel: FC<{
+  store: ReturnType<typeof import('../designer.store').createDesignerStore>;
+  onClose?: () => void;
+  guard?: () => Promise<boolean>;
+  showSaveCurrent?: boolean;
+}> = ({ store, onClose, guard, showSaveCurrent = true }) => {
   const fetch = useFetch();
   const user = useUser();
   const toaster = useToaster();
@@ -74,67 +69,63 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
   const decision = useDecisionModal();
   const t = useT();
   const { activeBrand } = useBrandKit();
-
-  const brandQuery = activeBrand ? `&brandId=${encodeURIComponent(activeBrand.id)}` : '';
-
-  // Page 1 stays on SWR (cache + revalidate-on-focus); pages 2+ accumulate in
-  // local state behind "Load more" (same pattern as my-designs-panel).
-  const { data, error, isLoading, mutate } = useSWR(
-    `design-templates-${user.orgId}-${activeBrand?.id || 'general'}`,
-    async () => {
-      const res = await fetch(`/media/design-templates?page=1&limit=${PAGE_LIMIT}${brandQuery}`);
-      if (!res.ok) throw new Error('Failed to load templates');
-      return res.json() as Promise<TemplatePage>;
-    },
-    { keepPreviousData: true }
-  );
-
-  const [extraTemplates, setExtraTemplates] = useState<DesignTemplate[]>([]);
-  const [page, setPage] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  // A paged list is only meaningful for the org and brand it was fetched under.
-  useEffect(() => {
-    setExtraTemplates([]);
-    setPage(1);
-  }, [user.orgId, activeBrand?.id]);
-
-  const templates: DesignTemplate[] = useMemo(() => {
-    const seen = new Map<string, DesignTemplate>();
-    for (const template of [...(data?.templates || []), ...extraTemplates]) {
-      seen.set(template.id, template);
-    }
-    return [...seen.values()];
-  }, [data, extraTemplates]);
-  const total: number = data?.total ?? templates.length;
-  const hasMore = templates.length < total;
-
-  const loadMore = useCallback(async () => {
-    setLoadingMore(true);
-    try {
-      const next = page + 1;
-      const res = await fetch(`/media/design-templates?page=${next}&limit=${PAGE_LIMIT}${brandQuery}`);
-      if (!res.ok) return;
-      const json = (await res.json()) as TemplatePage;
-      setExtraTemplates((cur) => [...cur, ...((json?.templates || []) as DesignTemplate[])]);
-      setPage(next);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [fetch, page, brandQuery]);
-
-  const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
+  const [search, setSearch] = useState('');
+  const [query] = useDebounce(search.trim(), 250);
+  const [sort, setSort] = useState<DesignerGallerySort>('newest');
+  const { size, setSize } = useDesignerGallerySize(user.orgId);
   const [selection, setSelection] = useState<FolderSelection>(null);
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORIES_KEY);
+  const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
   const { menu: cardMenu, openAt: openCardMenu, close: closeCardMenu } = useContextMenu<DesignTemplate>();
 
-  // A move changes folderId, which the accumulated pages snapshot — drop them
-  // and refetch from page 1.
+  const getKey = useCallback((pageIndex: number, previousPage: TemplatePage | null) => {
+    if (previousPage && previousPage.templates.length === 0) return null;
+    const params = new URLSearchParams({
+      page: String(pageIndex + 1),
+      limit: String(PAGE_LIMIT),
+      sort,
+    });
+    if (activeBrand) params.set('brandId', activeBrand.id);
+    if (query) params.set('query', query);
+    if (selection) params.set('folderId', selection === UNFILED_FOLDER_KEY ? 'none' : selection);
+    if (activeCategory !== ALL_CATEGORIES_KEY) params.set('category', activeCategory);
+    return `/media/design-templates?${params.toString()}`;
+  }, [activeBrand, activeCategory, query, selection, sort]);
+  const { data, error, isLoading, isValidating, size: pageCount, setSize: setPageCount, mutate } =
+    useSWRInfinite<TemplatePage>(getKey, async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to load templates');
+      return res.json() as Promise<TemplatePage>;
+    }, { revalidateOnFocus: false, revalidateFirstPage: false });
+
+  const templates = useMemo(() => {
+    const byId = new Map<string, DesignTemplate>();
+    for (const page of data || []) {
+      for (const template of page.templates) byId.set(template.id, template);
+    }
+    return [...byId.values()];
+  }, [data]);
+  const lastPage = data?.[data.length - 1];
+  const hasMore = !!lastPage && lastPage.templates.length === PAGE_LIMIT &&
+    pageCount * PAGE_LIMIT < (data?.[0]?.total || 0);
+  const loadingMore = isValidating && pageCount > (data?.length || 0);
+  const categories = useMemo(() => {
+    const fromServer = data?.[0]?.categories;
+    if (fromServer) return fromServer;
+    return groupTemplatesByCategory(templates).map((section) => ({
+      key: section.key,
+      label: section.label || 'Other',
+    }));
+  }, [data, templates]);
+  const categoryLabels = useMemo(
+    () => categories.map((category) => category.label).filter(Boolean),
+    [categories],
+  );
+
   const refreshTemplates = useCallback(() => {
-    setExtraTemplates([]);
-    setPage(1);
-    mutate();
-  }, [mutate]);
+    setPageCount(1);
+    void mutate();
+  }, [mutate, setPageCount]);
 
   const systemCantBeFiled = useCallback(() => {
     toaster.show(t('templates_panel_system_cant_be_filed', "System templates can't be filed"), 'warning');
@@ -151,12 +142,11 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     }
     toaster.show(t('template_folder_moved', 'Template moved'), 'success');
     refreshTemplates();
-    mutateFolders();
+    void mutateFolders();
     return true;
   }, [fetch, toaster, refreshTemplates, mutateFolders, t]);
 
   const openMoveToFolder = useCallback((template: DesignTemplate) => {
-    // System templates are shared across orgs and never folder-able.
     if (template.isSystem) {
       systemCantBeFiled();
       return;
@@ -180,57 +170,39 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     });
   }, [modal, folders, moveTemplateToFolder, systemCantBeFiled, t]);
 
-  // Folders organize (org templates only); the phase-1 category sections and
-  // filter chips then group/filter inside the current folder view.
-  const folderTemplates = useMemo(
-    () => filterTemplatesByFolder(templates, selection),
-    [templates, selection]
-  );
-  const unfiledCount = useMemo(() => unfiledTemplates(templates).length, [templates]);
-
-  // Sections drive both the filter chips and the grouped grid.
-  const sections = useMemo(() => groupTemplatesByCategory(folderTemplates), [folderTemplates]);
-  const visibleSections = useMemo(
-    () =>
-      activeCategory === ALL_CATEGORIES_KEY
-        ? sections
-        : sections.filter((section) => section.key === activeCategory),
-    [sections, activeCategory]
-  );
-  // Category suggestions for the save modal stay global — picking a folder
-  // shouldn't shrink the vocabulary of existing category names.
-  const categoryLabels = useMemo(
-    () =>
-      groupTemplatesByCategory(templates)
-        .map((s) => s.label)
-        .filter((label): label is string => !!label),
-    [templates]
-  );
+  const previewTemplate = useCallback((template: DesignTemplate) => {
+    modal.openModal({
+      title: template.name,
+      size: 900,
+      children: (
+        <div className="w-full min-w-0 overflow-hidden rounded-[8px] border border-studioBorder bg-studioBorder/10">
+          <DesignPreviewImage
+            src={template.thumbnail}
+            alt={t('gallery_template_preview', '{{name}} preview', { name: template.name, interpolation: { escapeValue: false } })}
+            className="max-h-[70vh] w-full object-contain"
+            fallback={<GalleryPreviewFallback className="aspect-[16/9]" />}
+          />
+        </div>
+      ),
+    });
+  }, [modal, t]);
 
   const applyTemplate = useCallback(async (template: DesignTemplate) => {
-    // The list is meta-only (doc carries just the mode) — fetch the full
-    // template on apply to get its doc.
     const fullRes = await fetch(`/media/design-templates/${template.id}`);
     if (!fullRes.ok) {
       toaster.show(t('templates_panel_failed_to_create_from_template', 'Failed to create design from template'), 'warning');
       return;
     }
     const full = (await fullRes.json()) as DesignTemplate;
-    // Cross-mode applies swap the whole doc (loadDesign takes the template's
-    // mode), so they get their own confirm — which also covers the dirty
-    // guard's "replaces your design" warning, hence the else-if. An empty
-    // canvas converts without asking.
     if (needsModeConfirm(full, store.getState().doc)) {
       const target = templateModeOf(full);
       const ok = await decision.open({
-        title:
-          target === 'video'
-            ? t('templates_panel_apply_video_template', 'Apply video template')
-            : t('templates_panel_apply_image_template', 'Apply image template'),
-        description:
-          target === 'video'
-            ? t('templates_panel_apply_video_template_confirm', 'This is a video template — applying it converts your design to video mode and replaces the current design.')
-            : t('templates_panel_apply_image_template_confirm', 'This is an image template — applying it converts your design to image mode and replaces the current design.'),
+        title: target === 'video'
+          ? t('templates_panel_apply_video_template', 'Apply video template')
+          : t('templates_panel_apply_image_template', 'Apply image template'),
+        description: target === 'video'
+          ? t('templates_panel_apply_video_template_confirm', 'This is a video template — applying it converts your design to video mode and replaces the current design.')
+          : t('templates_panel_apply_image_template_confirm', 'This is an image template — applying it converts your design to image mode and replaces the current design.'),
         approveLabel: t('apply', 'Apply'),
       });
       if (!ok) return;
@@ -241,19 +213,17 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     } as DesignerDoc;
     const res = await fetch('/media/designs', {
       method: 'POST',
-      body: JSON.stringify({
-        name: full.name,
-        doc,
-      }),
+      body: JSON.stringify({ name: full.name, doc, sourceTemplateId: template.id }),
     });
     if (!res.ok) {
       toaster.show(t('templates_panel_failed_to_create_from_template', 'Failed to create design from template'), 'warning');
       return;
     }
-    const data = await res.json();
-    store.getState().loadDesign(doc, data.id, full.name, full.id);
+    const created = await res.json();
+    store.getState().loadDesign(doc, created.id, full.name, full.id);
+    await mutate();
     onClose?.();
-  }, [activeBrand?.id, store, onClose, fetch, toaster, guard, decision, t]);
+  }, [activeBrand?.id, store, onClose, fetch, toaster, guard, decision, t, mutate]);
 
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
@@ -280,13 +250,8 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       brandProfileId: activeBrand?.id || null,
     };
     if (thumbnailFileId) payload.thumbnailFileId = thumbnailFileId;
-    // The thumbnail upload already minted a File row — if the template save
-    // fails or aborts, that row is referenced by nothing and would orphan in
-    // the library. Trash it (same endpoint the file manager uses).
     const trashOrphanThumbnail = () => {
-      if (thumbnailFileId) {
-        fetch(`/files/${thumbnailFileId}/trash`, { method: 'POST' }).catch(() => {});
-      }
+      if (thumbnailFileId) void fetch(`/files/${thumbnailFileId}/trash`, { method: 'POST' }).catch(() => {});
     };
     try {
       if (state.templateId) {
@@ -296,11 +261,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
         });
         if (res.ok) {
           toaster.show(t('templates_panel_template_updated', 'Template updated'), 'success');
-          // A rename/category change shifts the sort order, so the accumulated
-          // pages are stale — drop them and refetch from page 1.
-          setExtraTemplates([]);
-          setPage(1);
-          mutate();
+          refreshTemplates();
           return true;
         }
         trashOrphanThumbnail();
@@ -310,19 +271,14 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       const res = await fetch('/media/design-templates', {
         method: 'POST',
         body: JSON.stringify(
-          // Saving while a folder is selected files the new template there.
-          selection && selection !== UNFILED_FOLDER_KEY
-            ? { ...payload, folderId: selection }
-            : payload
+          selection && selection !== UNFILED_FOLDER_KEY ? { ...payload, folderId: selection } : payload,
         ),
       });
       if (res.ok) {
-        const data = await res.json();
-        state.setTemplateId(data.id);
+        const created = await res.json();
+        state.setTemplateId(created.id);
         toaster.show(t('templates_panel_saved_as_template', 'Saved as template'), 'success');
-        setExtraTemplates([]);
-        setPage(1);
-        mutate();
+        refreshTemplates();
         return true;
       }
       trashOrphanThumbnail();
@@ -333,20 +289,16 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
       toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
       return false;
     }
-  }, [activeBrand?.id, store, fetch, mutate, toaster, selection, t]);
+  }, [activeBrand?.id, store, fetch, refreshTemplates, toaster, selection, t]);
 
   const saveAsTemplate = useCallback(() => {
     const state = store.getState();
-    // On update, pre-fill the template's current category; on first save the
-    // default is 'Video' for video docs, else the historical default (current
-    // output format, else 'custom').
     const currentCategory = state.templateId
       ? templates.find((template) => template.id === state.templateId)?.category?.trim()
       : undefined;
-    const fallbackCategory =
-      state.doc.mode === 'video'
-        ? VIDEO_CATEGORY_LABEL
-        : state.doc.outputs[0]?.formatId || 'custom';
+    const fallbackCategory = state.doc.mode === 'video'
+      ? 'Video'
+      : state.doc.outputs[0]?.formatId || 'custom';
     modal.openModal({
       title: state.templateId
         ? t('templates_panel_update_template', 'Update template')
@@ -368,53 +320,52 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
     });
   }, [store, templates, modal, categoryLabels, persistTemplate, t]);
 
-  // Section labels: the video bucket and the uncategorized bucket get
-  // translated chrome labels; everything else is user/seed data shown as-is.
-  const sectionLabel = useCallback(
-    (section: TemplateSection<DesignTemplate>): string =>
-      section.key === VIDEO_CATEGORY_KEY
-        ? t('templates_panel_video_category', 'Video')
-        : section.label ?? t('other', 'Other'),
-    [t]
-  );
+  const translatedCategory = useCallback((key: string, label: string) => {
+    if (key === 'video') return t('templates_panel_video_category', 'Video');
+    if (key === 'custom') return t('templates_panel_custom_category', 'Custom');
+    if (key === 'ig-post') return t('templates_panel_ig_post_category', 'IG Post');
+    if (key === 'other') return t('other', 'Other');
+    return label;
+  }, [t]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-[12px]">
       {showSaveCurrent && (
-        <button
-          onClick={saveAsTemplate}
-          className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
-        >
+        <Button onClick={saveAsTemplate} className="self-start">
           {t('templates_panel_save_current_as_template', 'Save current as template')}
-        </button>
+        </Button>
       )}
-
       <TemplateFolderTree
         folders={folders ?? []}
-        unfiledCount={unfiledCount}
+        unfiledCount={data?.[0]?.unfiledCount || 0}
         selection={selection}
         onSelect={setSelection}
         onRefresh={() => mutateFolders()}
         onTemplateMoved={refreshTemplates}
       />
-
+      <DesignerGalleryToolbar
+        search={search}
+        onSearchChange={setSearch}
+        sort={sort}
+        onSortChange={setSort}
+        size={size}
+        onSizeChange={setSize}
+        searchLabel={t('templates_panel_search', 'Search templates')}
+        searchPlaceholder={t('templates_panel_search_placeholder', 'Search templates...')}
+      />
       {isLoading && !data ? (
-        <PanelSkeletonGrid count={4} />
+        <PanelSkeletonGrid count={10} columnsClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
       ) : error && !data ? (
-        (toaster.show(t('templates_panel_couldnt_load_templates', "Couldn't load templates"), 'warning'), <PanelError message={t('templates_panel_couldnt_load_templates', "Couldn't load templates")} onRetry={() => mutate()} />)
-      ) : !templates.length ? (
-        <div className="text-[12px] text-newTextColor/60 text-center py-4">
-          {t('templates_panel_no_templates_yet', 'No templates yet')}
-        </div>
+        <PanelError message={t('templates_panel_couldnt_load_templates', "Couldn't load templates")} onRetry={() => mutate()} />
       ) : (
         <>
-          {sections.length > 1 && (
+          {categories.length > 0 && (
             <OverflowTabs
               items={[
                 { key: ALL_CATEGORIES_KEY, label: t('all', 'All') },
-                ...sections.map((section) => ({
-                  key: section.key,
-                  label: sectionLabel(section),
+                ...categories.map((category) => ({
+                  key: category.key,
+                  label: translatedCategory(category.key, category.label),
                 })),
               ]}
               activeKey={activeCategory}
@@ -425,62 +376,52 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard,
               listAriaLabel={t('templates_panel_filter_by_category', 'Filter by category')}
             />
           )}
-          {visibleSections.length === 0 ? (
-            <div className="text-[12px] text-newTextColor/60 text-center py-4">
-              {selection
-                ? t('templates_panel_no_templates_in_folder', 'No templates in this folder')
-                : t('templates_panel_no_templates_in_category', 'No templates in this category')}
+          {error && (
+            <div role="alert" className="text-[12px] text-dangerText">
+              {t('gallery_refresh_failed', 'Some results could not be refreshed. Try again.')}
+            </div>
+          )}
+          {!templates.length ? (
+            <div className="py-8 text-center text-[12px] text-newTextColor/60">
+              {query
+                ? t('templates_panel_no_search_results', 'No templates match “{{query}}”.', { query, interpolation: { escapeValue: false } })
+                : selection
+                  ? t('templates_panel_no_templates_in_folder', 'No templates in this folder')
+                  : activeCategory !== ALL_CATEGORIES_KEY
+                    ? t('templates_panel_no_templates_in_category', 'No templates in this category')
+                    : t('templates_panel_no_templates_yet', 'No templates yet')}
             </div>
           ) : (
-            visibleSections.map((section) => (
-              <section key={section.key} className="flex flex-col gap-2">
-                <h3 className="text-[11px] font-[600] uppercase tracking-wide text-newTextColor/60">
-                  {sectionLabel(section)}
-                </h3>
-                <div className="grid grid-cols-2 gap-2" role="list">
-                  {section.templates.map((template) => (
-                    <TemplateCard
-                      key={template.id}
-                      template={template}
-                      onApply={applyTemplate}
-                      onSystemFileAttempt={systemCantBeFiled}
-                      onMenu={openCardMenu}
-                      t={t}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))
+            <div className="grid gap-[10px]" style={designerGalleryGridStyle(size)} role="list">
+              {templates.map((template) => (
+                <TemplateCard
+                  key={template.id}
+                  template={template}
+                  onApply={applyTemplate}
+                  onPreview={previewTemplate}
+                  onSystemFileAttempt={systemCantBeFiled}
+                  onMenu={openCardMenu}
+                />
+              ))}
+            </div>
           )}
           {hasMore && (
-            <div className="flex justify-center mt-1">
-              <button
-                type="button"
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="px-[18px] py-[9px] rounded-[8px] border border-newTableBorder bg-newBgColorInner text-[13px] text-textColor hover:bg-boxHover transition-colors disabled:opacity-60"
-              >
-                {loadingMore
-                  ? t('loading', 'Loading...')
-                  : t('templates_panel_load_more', 'Load more')}
-              </button>
-            </div>
+            <Button secondary loading={loadingMore} onClick={() => setPageCount((current) => current + 1)} className="self-center">
+              {t('templates_panel_load_more', 'Load more')}
+            </Button>
           )}
         </>
       )}
-
       {cardMenu && (
         <ContextMenu
           x={cardMenu.x}
           y={cardMenu.y}
           onClose={closeCardMenu}
           ariaLabel={t('templates_panel_template_actions', 'Template actions')}
-          items={[
-            {
-              label: t('templates_panel_move_to_folder_menu', 'Move to folder…'),
-              onClick: () => openMoveToFolder(cardMenu.target),
-            },
-          ]}
+          items={[{
+            label: t('templates_panel_move_to_folder_menu', 'Move to folder…'),
+            onClick: () => openMoveToFolder(cardMenu.target),
+          }]}
         />
       )}
     </div>
@@ -492,144 +433,115 @@ const DRAG_THRESHOLD_PX = 5;
 const TemplateCard: FC<{
   template: DesignTemplate;
   onApply: (template: DesignTemplate) => void;
+  onPreview: (template: DesignTemplate) => void;
   onSystemFileAttempt: () => void;
-  onMenu: (e: React.MouseEvent, template: DesignTemplate) => void;
-  t: ReturnType<typeof useT>;
-}> = ({ template, onApply, onSystemFileAttempt, onMenu, t }) => {
-  // Whole-card drag, same arming pattern as FileTile in the Files library:
-  // `draggable` only switches on after the pointer has travelled past a small
-  // threshold, so a plain click still applies the template. System templates
-  // arm too — their dragStart is vetoed with a toast, which is the only way to
-  // surface "can't be filed" (draggable=false would fail silently).
+  onMenu: (event: React.MouseEvent, template: DesignTemplate) => void;
+}> = ({ template, onApply, onPreview, onSystemFileAttempt, onMenu }) => {
+  const t = useT();
   const [dragArmed, setDragArmed] = useState(false);
   const pressPos = useRef<{ x: number; y: number } | null>(null);
-  // Firefox dispatches a click on the drag source after dragend; swallowing it
-  // in capture (before the card's apply buttons see it) keeps "drag to a
-  // folder" from also applying the template. Reset on pointerdown so a genuine
-  // later click is never eaten.
   const justDragged = useRef(false);
   const disarmDrag = useCallback(() => {
     pressPos.current = null;
     setDragArmed(false);
   }, []);
+  const category = templateCategoryLabel(template.category, templateModeOf(template));
 
   return (
     <div
       role="listitem"
+      data-template-id={template.id}
       draggable={dragArmed}
-      onDragStart={(e) => {
+      onDragStart={(event) => {
         if (template.isSystem) {
-          e.preventDefault();
+          event.preventDefault();
           disarmDrag();
           onSystemFileAttempt();
           return;
         }
-        // The shared useFolderDropTarget hook reads the dragged id as text/plain.
-        e.dataTransfer.setData('text/plain', template.id);
-        e.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', template.id);
+        event.dataTransfer.effectAllowed = 'move';
       }}
       onDragEnd={() => {
         justDragged.current = true;
         disarmDrag();
       }}
-      onPointerDown={(e) => {
-        if (e.button === 0) {
+      onPointerDown={(event) => {
+        if (event.button === 0) {
           justDragged.current = false;
-          pressPos.current = { x: e.clientX, y: e.clientY };
+          pressPos.current = { x: event.clientX, y: event.clientY };
         }
       }}
-      onPointerMove={(e) => {
+      onPointerMove={(event) => {
         const start = pressPos.current;
-        if (
-          start &&
-          !dragArmed &&
-          Math.hypot(e.clientX - start.x, e.clientY - start.y) >= DRAG_THRESHOLD_PX
-        ) {
+        if (start && !dragArmed && Math.hypot(event.clientX - start.x, event.clientY - start.y) >= DRAG_THRESHOLD_PX) {
           setDragArmed(true);
         }
       }}
-      // A real HTML5 drag suppresses pointerup on the source (dragend handles
-      // the reset), so releasing here always means "no drag happened".
       onPointerUp={disarmDrag}
-      onPointerCancel={() => {
-        pressPos.current = null;
-      }}
-      onClickCapture={(e) => {
+      onPointerCancel={() => { pressPos.current = null; }}
+      onClickCapture={(event) => {
         if (justDragged.current) {
           justDragged.current = false;
-          e.preventDefault();
-          e.stopPropagation();
+          event.preventDefault();
+          event.stopPropagation();
         }
       }}
-      onContextMenu={(e) => onMenu(e, template)}
-      className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group select-none"
+      onContextMenu={(event) => onMenu(event, template)}
+      className="group min-w-0 select-none overflow-hidden rounded-[8px] border border-studioBorder bg-newBgColorInner transition-colors hover:border-designerAccent/60"
     >
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={t('templates_panel_apply_template', 'Apply template {{name}}', { name: template.name })}
-        onClick={() => onApply(template)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onApply(template);
-          }
-        }}
-        className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20 cursor-pointer hover:ring-2 hover:ring-designerAccent/60 focus-visible:ring-2 focus-visible:ring-designerAccent"
-      >
+      <div className="relative aspect-[4/3] bg-studioBorder/10">
         <DesignPreviewImage
           src={template.thumbnail}
-          alt={template.name}
-          className="w-full h-full object-cover"
+          alt={t('gallery_template_preview', '{{name}} preview', { name: template.name, interpolation: { escapeValue: false } })}
+          className="h-full w-full object-cover"
           draggable={false}
-          fallback={template.isSystem ? '◧' : '▣'}
+          fallback={<GalleryPreviewFallback />}
         />
-        {templateModeOf(template) === 'video' ? (
-          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
-            {t('templates_panel_video_badge', 'VIDEO')}
-          </span>
-        ) : (
-          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
-            {t('templates_panel_image_badge', 'IMAGE')}
-          </span>
-        )}
+        <span className="absolute start-[6px] top-[6px] rounded-full bg-newBgColorInner/90 px-[6px] py-[3px] text-[9px] font-[500] leading-none text-btnPrimaryAccent">
+          {templateModeOf(template) === 'video'
+            ? t('templates_panel_video_badge', 'VIDEO')
+            : t('templates_panel_image_badge', 'IMAGE')}
+        </span>
         {!template.isSystem && (
-          // Discoverability hint for the whole-card drag (the card itself is
-          // the drag surface; drop onto a folder row in the tree to file).
-          <span
-            aria-hidden={true}
-            className="absolute top-1 end-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner/80 text-newTextColor/60 opacity-0 group-hover:opacity-100 transition-opacity text-[11px] leading-none"
-          >
+          <span aria-hidden="true" className="absolute end-[6px] top-[6px] rounded-sm bg-newBgColorInner/90 px-[5px] py-[3px] text-[11px] leading-none text-newTextColor/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             ⠿
           </span>
         )}
+        <GalleryCardActions
+          primaryLabel={t('apply', 'Apply')}
+          primaryAriaLabel={t('templates_panel_apply_template', 'Apply template {{name}}', { name: template.name, interpolation: { escapeValue: false } })}
+          onPrimary={() => onApply(template)}
+          onPreview={() => onPreview(template)}
+          previewAriaLabel={t('templates_panel_preview_template', 'Preview {{name}}', { name: template.name, interpolation: { escapeValue: false } })}
+        />
       </div>
-      <div className="p-2">
-        <button
-          type="button"
-          onClick={() => onApply(template)}
-          className="block w-full text-left text-[11px] text-textColor truncate cursor-pointer hover:underline"
+      <div className="p-[8px]">
+        <div
+          className="truncate text-[11px] font-[500] text-textColor"
+          title={template.name}
+          data-tooltip-id="tooltip"
+          data-tooltip-content={template.name}
         >
           {template.name}
-        </button>
-        <div className="flex items-center justify-between gap-1">
-          <div className="text-[10px] text-newTextColor/60">
-            {template.isSystem ? t('system', 'System') : t('templates_panel_org', 'Org')}
-          </div>
-          <span className="px-1.5 py-0.5 rounded-full bg-btnPrimary/15 text-btnPrimaryAccent text-[9px] font-[500] truncate max-w-[90px]">
-            {template.category?.trim() ||
-              (templateModeOf(template) === 'video'
-                ? t('templates_panel_video_category', 'Video')
-                : t('other', 'Other'))}
-          </span>
         </div>
-        <button
-          onClick={() => onApply(template)}
-          className="mt-1 w-full px-2 py-1 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80"
-        >
-          {t('apply', 'Apply')}
-        </button>
+        <div className="mt-[2px] truncate text-[10px] text-newTableText" title={template.category || category}>
+          {translatedCardCategory(t, templateCategoryKey(template.category, templateModeOf(template)), category)}
+          {template.isSystem ? ` · ${t('system', 'System')}` : ''}
+        </div>
       </div>
     </div>
   );
+};
+
+const translatedCardCategory = (
+  t: ReturnType<typeof useT>,
+  key: string,
+  fallback: string,
+) => {
+  if (key === 'video') return t('templates_panel_video_category', 'Video');
+  if (key === 'custom') return t('templates_panel_custom_category', 'Custom');
+  if (key === 'ig-post') return t('templates_panel_ig_post_category', 'IG Post');
+  if (key === 'other') return t('other', 'Other');
+  return fallback;
 };

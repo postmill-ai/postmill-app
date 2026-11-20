@@ -1231,6 +1231,8 @@ const DesignerContent: FC<
       onOpenDesigns: () =>
         modals.openModal({
           title: translate('open_design', 'Open design'),
+          size: 1200,
+          maxSize: 'calc(100vw - 24px)',
           children: (close: () => void) => (
             <MyDesignsPanel
               onOpen={async (d) => {
@@ -1247,6 +1249,8 @@ const DesignerContent: FC<
       onBrowseTemplates: () =>
         modals.openModal({
           title: translate('browse_templates', 'Browse templates'),
+          size: 1200,
+          maxSize: 'calc(100vw - 24px)',
           children: (close: () => void) => (
             <BrandKitModalProvider store={store}>
               <TemplatesPanel store={store as any} onClose={close} guard={confirmDiscardIfDirty} />

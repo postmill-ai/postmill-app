@@ -229,7 +229,9 @@ Invariants:
   `brands:update`, reads require `brands:read`, and the expected disabled state is a 4xx, not a
   Sentry-worthy 500. Disabled brands still allow Knowledge list/delete. Brand deletion cascades its
   chunks; template associations use `SetNull`. `GET /media/design-templates?scope=org` excludes
-  system templates from both results and count while retaining brand-first SQL ordering. Brand Studio
+  system templates from both results and count while retaining brand-first SQL ordering. Designer gallery
+  query/sort/folder/category parameters use the same scoped list/count predicates; recent ordering joins only
+  the current user and organization through `DesignerRecentOpen`, never shared template rows. Brand Studio
   resolves displayed assets through bounded `GET /files/by-ids` lookups rather than library scans.
 - Brand-kit billing limits only `create`: reads, updates, deletes, and existing custom fonts continue
   to work on Starter and at the plan cap. Repository writes use `BrandProfileInput` normalization

@@ -1,17 +1,97 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import {
+  DesignerGallerySort,
+  templateCategoryKey,
+  templateCategorySearchAliases,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/template-category';
 
-const templateSearchWhere = (query?: string) => {
+export interface DesignGalleryOptions {
+  query?: string;
+  sort?: DesignerGallerySort;
+  userId?: string;
+}
+
+export interface TemplateGalleryOptions extends DesignGalleryOptions {
+  folderId?: string | null;
+  category?: string;
+}
+
+interface QueryWhere {
+  sql: string;
+  params: any[];
+}
+
+const templateCategoryIsBlank = 'TRIM(COALESCE(t."category", \'\')) = \'\'';
+const templateModeForCategory = `CASE WHEN ${templateCategoryIsBlank} THEN COALESCE(t.doc->>'mode', 'image') ELSE 'image' END`;
+
+const designWhere = (orgId: string, query?: string): QueryWhere => {
+  const params: any[] = [orgId];
+  const clauses = ['d."organizationId" = $1', 'd."deletedAt" IS NULL'];
   const search = query?.trim();
-  if (!search) return {};
-  return {
-    AND: [{
-      OR: [
-        { name: { contains: search, mode: 'insensitive' as const } },
-        { category: { contains: search, mode: 'insensitive' as const } },
-      ],
-    }],
-  };
+  if (search) {
+    params.push(search);
+    clauses.push(`POSITION(LOWER($${params.length}) IN LOWER(d."name")) > 0`);
+  }
+  return { sql: clauses.join(' AND '), params };
+};
+
+const templateWhere = (
+  orgId: string,
+  scope: 'org' | undefined,
+  options: TemplateGalleryOptions,
+  includeCategory = true,
+): QueryWhere => {
+  const params: any[] = [orgId];
+  const clauses = ['t."deletedAt" IS NULL'];
+  if (scope === 'org' || options.folderId !== undefined) {
+    clauses.push('t."organizationId" = $1');
+  } else {
+    clauses.push('(t."organizationId" = $1 OR t."isSystem" = true)');
+  }
+
+  const search = options.query?.trim();
+  if (search) {
+    const searchClauses: string[] = [];
+    params.push(search);
+    searchClauses.push(`POSITION(LOWER($${params.length}) IN LOWER(t."name")) > 0`);
+    for (const alias of templateCategorySearchAliases(search)) {
+      params.push(alias);
+      searchClauses.push(`POSITION(LOWER($${params.length}) IN LOWER(COALESCE(t."category", ''))) > 0`);
+    }
+    clauses.push(`(${searchClauses.join(' OR ')})`);
+  }
+
+  if (options.folderId) {
+    params.push(options.folderId);
+    clauses.push(`t."folderId" = $${params.length}`);
+  } else if (options.folderId === null) {
+    clauses.push('t."folderId" IS NULL');
+  }
+
+  if (includeCategory && options.category) {
+    const key = templateCategoryKey(options.category);
+    if (key === 'other') {
+      clauses.push(`(LOWER(TRIM(COALESCE(t."category", ''))) = 'other' OR (${templateCategoryIsBlank} AND ${templateModeForCategory} <> 'video'))`);
+    } else if (key === 'video') {
+      clauses.push(`(LOWER(TRIM(COALESCE(t."category", ''))) = 'video' OR (${templateCategoryIsBlank} AND ${templateModeForCategory} = 'video'))`);
+    } else {
+      const aliases = key === 'custom'
+        ? ['custom', 'custom-video', 'custom video']
+        : key === 'ig-post'
+          ? ['ig-post', 'instagram-post', 'instagram post', 'ig post']
+          : [key];
+      params.push(...aliases);
+      clauses.push(`LOWER(TRIM(COALESCE(t."category", ''))) IN (${aliases.map((_, index) => `$${params.length - aliases.length + index + 1}`).join(', ')})`);
+    }
+  }
+  return { sql: clauses.join(' AND '), params };
+};
+
+const paginationSql = (params: any[], page?: number, limit?: number) => {
+  if (page === undefined || limit === undefined) return '';
+  params.push(limit, (page - 1) * limit);
+  return `LIMIT $${params.length - 1} OFFSET $${params.length}`;
 };
 
 @Injectable()
@@ -21,7 +101,8 @@ export class DesignRepository {
     private readonly _designTemplate: PrismaRepository<'designTemplate'>,
     private readonly _designTemplateFolder: PrismaRepository<'designTemplateFolder'>,
     private readonly _designVersion: PrismaRepository<'designVersion'>,
-    private readonly _file: PrismaRepository<'file'>
+    private readonly _file: PrismaRepository<'file'>,
+    private readonly _recentOpen: PrismaRepository<'designerRecentOpen'>
   ) {}
 
   findById(orgId: string, id: string) {
@@ -30,19 +111,63 @@ export class DesignRepository {
     });
   }
 
-  findByOrg(orgId: string, page: number = 1, limit: number = 20) {
-    return this._design.model.design.findMany({
-      where: { organizationId: orgId, deletedAt: null },
-      orderBy: { updatedAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
+  async findByOrg(
+    orgId: string,
+    page: number = 1,
+    limit: number = 20,
+    options: DesignGalleryOptions = {},
+  ) {
+    const where = designWhere(orgId, options.query);
+    const params = [...where.params];
+    const recentJoin = options.sort === 'recent' && options.userId;
+    if (recentJoin) params.push(options.userId!);
+    const join = recentJoin
+      ? `LEFT JOIN "DesignerRecentOpen" r ON r."designId" = d."id" AND r."organizationId" = d."organizationId" AND r."userId" = $${params.length}`
+      : '';
+    const order = options.sort === 'name'
+      ? 'LOWER(d."name") ASC, d."name" ASC'
+      : options.sort === 'recent'
+        ? `${recentJoin ? 'r."openedAt" DESC NULLS LAST,' : ''} d."createdAt" DESC`
+        : options.sort === 'newest'
+          ? 'd."createdAt" DESC'
+          : 'd."updatedAt" DESC';
+    const ordered = await (this._design.model as any).$queryRawUnsafe(
+      `SELECT d."id" FROM "Design" d ${join}
+       WHERE ${where.sql}
+       ORDER BY ${order}, d."id" ASC ${paginationSql(params, page, limit)}`,
+      ...params,
+    ) as Array<{ id: string }>;
+    if (!ordered.length) return [];
+    const designs = await this._design.model.design.findMany({
+      where: { id: { in: ordered.map((row) => row.id) }, organizationId: orgId, deletedAt: null },
       include: { previewFile: { select: { path: true } } },
+    });
+    const byId = new Map(designs.map((design) => [design.id, design]));
+    return ordered.map((row) => byId.get(row.id)!).filter(Boolean);
+  }
+
+  async countByOrg(orgId: string, query?: string) {
+    const where = designWhere(orgId, query);
+    const rows = await (this._design.model as any).$queryRawUnsafe(
+      `SELECT COUNT(*)::int AS total FROM "Design" d WHERE ${where.sql}`,
+      ...where.params,
+    ) as Array<{ total: number }>;
+    return rows[0]?.total || 0;
+  }
+
+  markDesignOpened(orgId: string, userId: string, designId: string) {
+    return this._recentOpen.model.designerRecentOpen.upsert({
+      where: { organizationId_userId_designId: { organizationId: orgId, userId, designId } },
+      create: { organizationId: orgId, userId, designId, openedAt: new Date() },
+      update: { openedAt: new Date() },
     });
   }
 
-  countByOrg(orgId: string) {
-    return this._design.model.design.count({
-      where: { organizationId: orgId, deletedAt: null },
+  markTemplateOpened(orgId: string, userId: string, templateId: string) {
+    return this._recentOpen.model.designerRecentOpen.upsert({
+      where: { organizationId_userId_templateId: { organizationId: orgId, userId, templateId } },
+      create: { organizationId: orgId, userId, templateId, openedAt: new Date() },
+      update: { openedAt: new Date() },
     });
   }
 
@@ -156,63 +281,74 @@ export class DesignRepository {
     return r.count;
   }
 
-  // DesignTemplate methods
-  // No page/limit = the historical full list (callers that group/bucket the
-  // whole gallery in memory). Both present = one page plus a count via
-  // countTemplatesByOrg.
-  async findTemplatesByOrg(orgId: string, page?: number, limit?: number, brandProfileId?: string, scope?: 'org', query?: string) {
-    const search = query?.trim();
+  // No page/limit = the historical full list. Both present = one bounded page;
+  // the same filters drive list, count, and category facets.
+  async findTemplatesByOrg(
+    orgId: string,
+    page?: number,
+    limit?: number,
+    brandProfileId?: string,
+    scope?: 'org',
+    options: TemplateGalleryOptions = {},
+  ) {
+    const where = templateWhere(orgId, scope, options);
+    const params = [...where.params];
+    const recentJoin = options.sort === 'recent' && options.userId;
+    if (recentJoin) params.push(options.userId!);
+    const join = recentJoin
+      ? `LEFT JOIN "DesignerRecentOpen" r ON r."templateId" = t."id" AND r."organizationId" = $1 AND r."userId" = $${params.length}`
+      : '';
+    let brandOrder = '';
     if (brandProfileId) {
-      const paginated = page !== undefined && limit !== undefined;
-      const searchParameter = paginated ? 5 : 3;
-      const ordered = await (this._designTemplate.model as any).$queryRawUnsafe(
-        `SELECT "id"
-         FROM "DesignTemplate"
-         WHERE "deletedAt" IS NULL
-           AND ${scope === 'org' ? '"organizationId" = $1' : '("organizationId" = $1 OR "isSystem" = true)'}
-           ${search ? `AND (POSITION(LOWER($${searchParameter}) IN LOWER("name")) > 0 OR POSITION(LOWER($${searchParameter}) IN LOWER(COALESCE("category", ''))) > 0)` : ''}
-         ORDER BY CASE WHEN "brandProfileId" = $2 THEN 0 ELSE 1 END,
-                  "isSystem" DESC, "name" ASC, "id" ASC
-         ${paginated ? 'LIMIT $3 OFFSET $4' : ''}`,
-        orgId,
-        brandProfileId,
-        ...(paginated ? [limit, (page - 1) * limit] : []),
-        ...(search ? [search] : []),
-      ) as Array<{ id: string }>;
-      if (!ordered.length) return [];
-      const templates = await this._designTemplate.model.designTemplate.findMany({
-        where: { id: { in: ordered.map((row) => row.id) } },
-        include: { thumbnailFile: { select: { path: true } } },
-      });
-      const byId = new Map(templates.map((template) => [template.id, template]));
-      return ordered.map((row) => byId.get(row.id)!);
+      params.push(brandProfileId);
+      brandOrder = `CASE WHEN t."brandProfileId" = $${params.length} THEN 0 ELSE 1 END,`;
     }
-    return this._designTemplate.model.designTemplate.findMany({
+    const order = options.sort === 'name'
+      ? 'LOWER(t."name") ASC, t."name" ASC'
+      : options.sort === 'recent'
+        ? `${recentJoin ? 'r."openedAt" DESC NULLS LAST,' : ''} t."createdAt" DESC`
+        : options.sort === 'newest'
+          ? 't."createdAt" DESC'
+          : 't."isSystem" DESC, t."name" ASC';
+    const ordered = await (this._designTemplate.model as any).$queryRawUnsafe(
+      `SELECT t."id" FROM "DesignTemplate" t ${join}
+       WHERE ${where.sql}
+       ORDER BY ${brandOrder} ${order}, t."id" ASC ${paginationSql(params, page, limit)}`,
+      ...params,
+    ) as Array<{ id: string }>;
+    if (!ordered.length) return [];
+    const templates = await this._designTemplate.model.designTemplate.findMany({
       where: {
+        id: { in: ordered.map((row) => row.id) },
         deletedAt: null,
-        ...(scope === 'org'
-          ? { organizationId: orgId }
-          : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
-        ...templateSearchWhere(search),
+        ...(scope === 'org' ? { organizationId: orgId } : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
       },
-      orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
-      ...(page !== undefined && limit !== undefined
-        ? { skip: (page - 1) * limit, take: limit }
-        : {}),
       include: { thumbnailFile: { select: { path: true } } },
     });
+    const byId = new Map(templates.map((template) => [template.id, template]));
+    return ordered.map((row) => byId.get(row.id)!).filter(Boolean);
   }
 
-  countTemplatesByOrg(orgId: string, scope?: 'org', query?: string) {
-    return this._designTemplate.model.designTemplate.count({
-      where: {
-        deletedAt: null,
-        ...(scope === 'org'
-          ? { organizationId: orgId }
-          : { OR: [{ organizationId: orgId }, { isSystem: true }] }),
-        ...templateSearchWhere(query),
-      },
-    });
+  async countTemplatesByOrg(orgId: string, scope?: 'org', options: TemplateGalleryOptions = {}) {
+    const where = templateWhere(orgId, scope, options);
+    const rows = await (this._designTemplate.model as any).$queryRawUnsafe(
+      `SELECT COUNT(*)::int AS total FROM "DesignTemplate" t WHERE ${where.sql}`,
+      ...where.params,
+    ) as Array<{ total: number }>;
+    return rows[0]?.total || 0;
+  }
+
+  async listTemplateCategories(
+    orgId: string,
+    scope?: 'org',
+    options: TemplateGalleryOptions = {},
+  ) {
+    const where = templateWhere(orgId, scope, options, false);
+    return (this._designTemplate.model as any).$queryRawUnsafe(
+      `SELECT DISTINCT t."category", ${templateModeForCategory} AS mode
+       FROM "DesignTemplate" t WHERE ${where.sql}`,
+      ...where.params,
+    ) as Promise<Array<{ category: string | null; mode: string }>>;
   }
 
   // Preview-regen maintenance scan. Org-owned templates plus system templates:

@@ -62,7 +62,7 @@ export const findTemplateFolder = (
   return null;
 };
 
-/** Org templates not filed anywhere — the "Unfiled" row count. */
+/** Org templates not filed anywhere — the "No folder" row count. */
 export const unfiledTemplates = <T extends FolderedTemplate>(templates: T[]): T[] =>
   templates.filter((template) => !template.isSystem && !template.folderId);
 

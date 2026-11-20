@@ -7576,6 +7576,20 @@ paths:
         - name: limit
           required: false
           in: query
+          description: Maximum number of designs to return (1–100). Values above 100 are capped at 100. Defaults to 20.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: query
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
           schema:
             type: string
       responses:
@@ -7595,6 +7609,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
   /media/designs/{id}:
@@ -7643,35 +7661,6 @@ paths:
           description: ""
       tags:
         - Design
-  /media/designs/{id}/convert-to-video:
-    post:
-      operationId: DesignController_convertToVideo
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: x-idempotency-key
-          required: true
-          in: header
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConvertDesignToVideoDto"
-      responses:
-        "201":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - Design
   /media/designs/import:
     post:
       operationId: DesignController_import
@@ -7679,6 +7668,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       summary: |-
         Import a `.pdesign` (zip, format v1 or v2) or raw `.json` DesignerDoc as a
         NEW design. Static segment declared before the parameterized `/:id` routes
@@ -7701,6 +7694,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Design
   /media/designs/{id}/export:
@@ -8138,8 +8135,12 @@ paths:
         - name: limit
           required: false
           in: query
+          description: Maximum number of templates to return (1–100). Values above 100 are capped at 100. Defaults to 24.
           schema:
-            type: string
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 24
         - name: brandId
           required: false
           in: query
@@ -8151,6 +8152,21 @@ paths:
           schema:
             type: string
         - name: query
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: folderId
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: category
           required: false
           in: query
           schema:
@@ -12815,19 +12831,11 @@ components:
           type: string
         campaignId:
           type: string
+        sourceTemplateId:
+          type: string
       required:
         - name
         - doc
-    ConvertDesignToVideoDto:
-      type: object
-      properties:
-        pageDurationMs:
-          type: number
-          minimum: 100
-          maximum: 180000
-          example: 5000
-      required:
-        - pageDurationMs
     ImportLibraryDesignDto:
       type: object
       properties:

@@ -165,6 +165,8 @@ the GitHub runner, and executes this config with the skip flag and mocked routes
 uses separate source/video design ids to verify the conversion summary, source immutability, timed
 save/reopen, and resized video variants without a backend. Never use the mock cookie or
 skip flag for unmocked/live tests, and never start the server or Playwright on the production host.
+Its gallery cases cover full-library search/sort/pagination, S/M/L density, recent open/apply ordering,
+keyboard/touch-safe actions, and preview fallbacks against the production frontend build with mocked APIs.
 
 ### Opt-in live provider playback (never default CI)
 
