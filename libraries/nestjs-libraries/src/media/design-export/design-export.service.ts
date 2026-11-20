@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Zip, ZipDeflate, ZipPassThrough, strToU8 } from 'fflate';
+import sharp from 'sharp';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
@@ -11,6 +12,8 @@ import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { NO_CREDIT } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import { DesignPreviewService } from '@postmill-ai/nestjs-libraries/media/design-render/design-preview.service';
+import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
+import { pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
   collectDocFileIds,
   collectDocFontFamilies,
@@ -34,6 +37,7 @@ import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-d
  * The artifact is a self-contained zip: every referenced media file (read via
  * the folder-resolved storage adapter — unmounted folders resolve to LOCAL)
  * plus the org's custom fonts the doc uses (fonts are local-adapter-only).
+ * Image documents also carry full-size JPGs of every output/page.
  */
 
 export const DESIGN_EXPORT_PROVIDER = 'design-export';
@@ -75,6 +79,23 @@ interface ZipEntry {
   /** Media/fonts are already compressed (or CPU-heavy to deflate) — store them. */
   compress?: boolean;
 }
+
+export interface DesignExportPreviewEntry {
+  name: string;
+  data: Uint8Array;
+}
+
+export const designExportPreviewName = (outputIndex: number, pageNumber: number) =>
+  `previews/output-${outputIndex + 1}-page-${pageNumber + 1}.jpg`;
+
+export const designExportPreviewFromPng = async (
+  outputIndex: number,
+  pageNumber: number,
+  png: Buffer,
+): Promise<DesignExportPreviewEntry> => ({
+  name: designExportPreviewName(outputIndex, pageNumber),
+  data: await sharp(png).jpeg({ quality: 92 }).toBuffer(),
+});
 
 export interface DesignExportBundleCache {
   assets: Map<string, { manifest: PostmillAssetEntry; data: Uint8Array }>;
@@ -155,6 +176,7 @@ export class DesignExportService {
     private _fileService: FileService,
     private _storageService: StorageService,
     private _brandsService: BrandsService,
+    private _designRenderService: DesignRenderService,
     private _designPreviewService: DesignPreviewService,
   ) {}
 
@@ -368,7 +390,7 @@ export class DesignExportService {
 
   /**
    * Bundle the doc + every referenced asset + the used custom fonts into the
-   * v2 zip. Referenced files that no longer resolve in the org are SKIPPED
+   * v2 zip, with full-size JPGs of static outputs/pages under `previews/`. Referenced files that no longer resolve in the org are SKIPPED
    * (the doc already renders them broken); the byte ceiling is enforced on
    * recorded sizes up front and re-checked against actual bytes read.
    */
@@ -390,6 +412,30 @@ export class DesignExportService {
     return this.buildBundleForDoc(orgId, jobId, name, doc, previewPath);
   }
 
+  private async _renderPreviewEntries(
+    orgId: string,
+    doc: DesignerDoc,
+  ): Promise<DesignExportPreviewEntry[]> {
+    const entries: DesignExportPreviewEntry[] = [];
+    for (const [outputIndex, output] of (doc.outputs ?? []).entries()) {
+      if (!('children' in output)) continue;
+      for (let pageNumber = 0; pageNumber < pageCount(output); pageNumber++) {
+        const rendered = await this._designRenderService.renderPageToFormat(
+          doc,
+          outputIndex,
+          { orgId },
+          pageNumber,
+          'jpeg',
+        );
+        entries.push({
+          name: designExportPreviewName(outputIndex, pageNumber),
+          data: rendered.bytes,
+        });
+      }
+    }
+    return entries;
+  }
+
   async buildBundleForDoc(
     orgId: string,
     jobId: string,
@@ -397,6 +443,7 @@ export class DesignExportService {
     doc: DesignerDoc,
     previewPath: string | null = null,
     cache: DesignExportBundleCache = createDesignExportBundleCache(),
+    suppliedPreviews?: DesignExportPreviewEntry[],
   ): Promise<{
     name: string;
     bytes: Buffer;
@@ -502,10 +549,12 @@ export class DesignExportService {
       }
     }
 
+    const previews = suppliedPreviews ?? await this._renderPreviewEntries(orgId, doc);
     const manifest = buildPostmillManifest(doc, name, manifestAssets, manifestFonts);
     const bytes = await zipEntries([
       { name: 'manifest.json', data: strToU8(JSON.stringify(manifest, null, 2)), compress: true },
       { name: 'doc.json', data: strToU8(JSON.stringify(doc)), compress: true },
+      ...previews,
       ...assetEntries,
     ]);
     let previewBuffer: Buffer | undefined;

@@ -919,7 +919,11 @@ anchor; its blob object URL is revoked only after a 60-second start window, neve
 `click()`. A successful standalone import loads the returned doc and replaces
 the current URL's `designId` through the native History API without a full-page navigation; the
 search-param effect skips that load when the store already has the same ID. Embedded Designers keep
-the import in memory and leave the host route alone. The export activity
+the import in memory and leave the host route alone. Image archives additionally contain a
+full-size 1× JPG for every output/page at `previews/output-N-page-M.jpg`; these convenience entries
+are ignored by import. A static JPG rendering failure fails the job rather than silently omitting
+previews. Bulk Create supplies JPGs encoded from its existing row PNG renders, avoiding a second
+render of every row. The export activity
 (`media/design-export/design-export.service.ts`) pre-flights summed asset bytes against a 1 GB
 ceiling, reads each file through its folder-resolved adapter, streams the zip (never `zipSync`)
 and lands the artifact via `writeBuffer` + `saveGeneratedMedia`. The media-jobs sweep routes

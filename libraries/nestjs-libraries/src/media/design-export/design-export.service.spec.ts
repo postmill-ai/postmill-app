@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { unzipSync } from 'fflate';
+import sharp from 'sharp';
 
 const h = vi.hoisted(() => ({ enabled: true, send: vi.fn() }));
 
@@ -17,6 +19,7 @@ vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
 }));
 
 import { DesignExportService, DESIGN_EXPORT_MAX_ASSET_BYTES } from './design-export.service';
+import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { parsePostmillFile, POSTMILL_FORMAT_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/postmill-file';
@@ -83,6 +86,7 @@ const makeService = (over: {
   job?: any;
   payload?: any;
   claimed?: boolean;
+  designRenderService?: any;
 } = {}) => {
   const lifecycle = { createPendingJob: vi.fn(async (p: any) => ({ id: 'job-1', status: 'pending', ...p })) };
   const aiSettings = {
@@ -117,6 +121,13 @@ const makeService = (over: {
       throw new Error('No preview fixture');
     }),
   };
+  const designRenderService = over.designRenderService ?? {
+    renderPageToFormat: vi.fn(async () => ({
+      bytes: await sharp(PNG_BYTES).jpeg({ quality: 92 }).toBuffer(),
+      mime: 'image/jpeg',
+      extension: 'jpg',
+    })),
+  };
 
   const service = new DesignExportService(
     lifecycle as any,
@@ -126,10 +137,11 @@ const makeService = (over: {
     fileService as any,
     storageService as any,
     brandsService as any,
+    designRenderService as any,
     designPreviewService as any
   );
 
-  return { service, lifecycle, aiSettings, designService, fileService, assetAdapter, localAdapter, brandsService, storageService, designPreviewService };
+  return { service, lifecycle, aiSettings, designService, fileService, assetAdapter, localAdapter, brandsService, storageService, designRenderService, designPreviewService };
 };
 
 const pendingExportJob = {
@@ -230,7 +242,7 @@ describe('DesignExportService.processExport', () => {
   });
 
   it('bundles assets + fonts and completes with the artifact path', async () => {
-    const { service, aiSettings, localAdapter, fileService } = makeService({
+    const { service, aiSettings, localAdapter, fileService, designRenderService } = makeService({
       job: pendingExportJob,
       design: { id: 'd1', name: 'Hero', doc: docWithMedia() },
       files: {
@@ -288,6 +300,17 @@ describe('DesignExportService.processExport', () => {
     expect(Buffer.from(parsed.assets.get('assets/file-1.png')!)).toEqual(PNG_BYTES);
     expect(Buffer.from(parsed.assets.get('assets/fonts/Acme-700i.ttf')!)).toEqual(TTF_BYTES);
     expect((parsed.doc as any).outputs[0].children[0].fileId).toBe('file-1'); // verbatim on export
+    const entries = unzipSync(artifact);
+    const jpeg = Buffer.from(entries['previews/output-1-page-1.jpg']);
+    expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(await sharp(jpeg).metadata()).toMatchObject({ width: 1, height: 1, format: 'jpeg' });
+    expect(designRenderService.renderPageToFormat).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'image' }),
+      0,
+      { orgId: 'org-1' },
+      0,
+      'jpeg',
+    );
   });
 
   it('fails the job with a clear message when assets exceed the 1 GB ceiling', async () => {
@@ -337,6 +360,58 @@ describe('DesignExportService.processExport', () => {
     );
   });
 
+  it('includes a full-size JPG for every static output and carousel page', async () => {
+    const designRenderService = new DesignRenderService({
+      loadOrgFonts: vi.fn(async () => undefined),
+      loadCuratedFonts: vi.fn(async () => undefined),
+    } as any);
+    const { service } = makeService({ files: {}, customFonts: [], designRenderService });
+    const doc = {
+      version: DESIGNER_DOC_VERSION,
+      mode: 'image',
+      outputs: [{
+        id: 'out-1', name: 'Square', width: 32, height: 48,
+        background: '#ffffff', children: [],
+        pages: [{ id: 'page-2', children: [] }],
+      }, {
+        id: 'out-2', name: 'Landscape', width: 64, height: 24,
+        background: '#ff0000', children: [], pages: [],
+      }],
+    } as any;
+
+    const bundle = await service.buildBundleForDoc('org-1', 'job-1', 'Campaign', doc);
+    const entries = unzipSync(bundle.bytes);
+    const previewNames = [
+      'previews/output-1-page-1.jpg',
+      'previews/output-1-page-2.jpg',
+      'previews/output-2-page-1.jpg',
+    ];
+
+    expect(Object.keys(entries).filter((name) => name.startsWith('previews/'))).toEqual(previewNames);
+    for (const [index, name] of previewNames.entries()) {
+      const dimensions = index === 2 ? { width: 64, height: 24 } : { width: 32, height: 48 };
+      expect(await sharp(entries[name]).metadata()).toMatchObject({ ...dimensions, format: 'jpeg' });
+    }
+  });
+
+  it('fails an image export instead of silently omitting a requested JPG', async () => {
+    const { service, aiSettings, localAdapter, designRenderService } = makeService({
+      job: pendingExportJob,
+      design: { id: 'd1', name: 'Hero', doc: docWithMedia() },
+      files: {},
+    });
+    designRenderService.renderPageToFormat.mockRejectedValueOnce(new Error('JPEG renderer unavailable'));
+    primePayload({ organizationId: 'org-1', kind: 'design', sourceId: 'd1' });
+
+    await service.processExport('job-1');
+
+    expect(localAdapter.writeBuffer).not.toHaveBeenCalled();
+    expect(aiSettings.updateMediaJob).toHaveBeenLastCalledWith('org-1', 'job-1', {
+      status: 'failed',
+      error: 'JPEG renderer unavailable',
+    });
+  });
+
   it('exports a template source', async () => {
     const { service, designService, aiSettings } = makeService({
       job: pendingExportJob,
@@ -370,7 +445,7 @@ describe('DesignExportService.processExport', () => {
         tracks: [],
       }],
     };
-    const { service, fileService } = makeService({
+    const { service, fileService, designRenderService } = makeService({
       job: pendingExportJob,
       design: { id: 'd1', name: 'Video', doc },
       files: {},
@@ -391,6 +466,7 @@ describe('DesignExportService.processExport', () => {
         }),
       })
     );
+    expect(designRenderService.renderPageToFormat).not.toHaveBeenCalled();
   });
 
   it('copies the design preview as the artifact thumbnail and links the metadata to the source', async () => {
