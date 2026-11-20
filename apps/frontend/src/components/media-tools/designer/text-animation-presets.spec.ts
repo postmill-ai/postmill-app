@@ -3,10 +3,12 @@ import {
   TEXT_ANIMATION_PRESETS,
   TYPEWRITER_MS_PER_CHAR,
   buildTextAnimationUpdate,
+  clearTextAnimationCategory,
   matchTextAnimationPreset,
   matchTextAnimationPresets,
 } from './text-animation-presets';
 import { createDesignerStore } from './designer.store';
+import { interpolateKeyframes } from './video-preview';
 
 const presetByName = (name: string) => {
   const preset = TEXT_ANIMATION_PRESETS.find((p) => p.name === name);
@@ -71,6 +73,13 @@ describe('matchTextAnimationPreset', () => {
     expect(
       matchTextAnimationPreset([{ tMs: 0, props: { opacity: 0.5 } }], 0, 0)
     ).toBeNull();
+    expect(
+      matchTextAnimationPreset([{
+        tMs: 0,
+        props: { opacity: 0 },
+        animationPreset: { name: 'Unknown', category: 'entrance' },
+      }], 0, 0)
+    ).toBeNull();
   });
 
   it('distinguishes presets that share tMs but differ in props', () => {
@@ -112,8 +121,8 @@ describe('buildTextAnimationUpdate', () => {
       endMs: 5000,
     });
     expect(update.keyframes).toEqual([
-      { tMs: 0, props: { y: 220, opacity: 0 }, ease: 'easeOut' },
-      { tMs: 500, props: { y: 200, opacity: 1 }, ease: 'easeOut' },
+      { tMs: 0, props: { y: 220, opacity: 0 }, ease: 'easeOut', animationPreset: { name: 'Fade Up', category: 'entrance' } },
+      { tMs: 500, props: { y: 200, opacity: 1 }, ease: 'easeOut', animationPreset: { name: 'Fade Up', category: 'entrance' } },
     ]);
     // A keyframe preset clears any reveal the clip carried.
     expect(update.textReveal).toBeUndefined();
@@ -250,7 +259,7 @@ describe('buildTextAnimationUpdate', () => {
       emphasis: 'Pulse',
       exit: 'Fade Out',
     });
-    expect(combined.keyframes.map((frame) => frame.tMs)).toEqual([0, 300, 500, 600, 4500, 5000]);
+    expect(combined.keyframes.map((frame) => frame.tMs)).toEqual([0, 0, 300, 500, 600, 4500, 5000]);
   });
 
   it('replaces only the selected category', () => {
@@ -269,10 +278,32 @@ describe('buildTextAnimationUpdate', () => {
       emphasis: 'Pulse',
       exit: 'Fade Out',
     });
-    expect(replaced.keyframes.find((frame) => frame.tMs === 0)?.props.y).toBeUndefined();
-    expect(replaced.keyframes.find((frame) => frame.tMs === 500)?.props.y).toBeUndefined();
+    expect(replaced.keyframes.filter(
+      (frame) => frame.animationPreset?.category === 'entrance'
+    ).every((frame) => frame.animationPreset?.name === 'Slide In Right')).toBe(true);
+    expect(replaced.keyframes.some((frame) => frame.animationPreset?.name === 'Fade Up')).toBe(false);
     expect(replaced.keyframes.find((frame) => frame.tMs === 300)?.props.width).toBe(216);
     expect(replaced.keyframes.find((frame) => frame.tMs === 5000)?.props.opacity).toBe(0);
+  });
+
+  it('clears one category without removing the others', () => {
+    const base = { x: 100, y: 200, width: 200, height: 100, startMs: 0, endMs: 5000, keyframes: [] };
+    const combined = ['Fade Up', 'Pulse', 'Fade Out'].reduce(
+      (clip, name) => ({ ...clip, ...buildTextAnimationUpdate(presetByName(name), clip) }),
+      base
+    );
+    const cleared = {
+      ...combined,
+      ...clearTextAnimationCategory(combined, 'emphasis'),
+    };
+
+    expect(matchTextAnimationPresets(cleared)).toEqual({
+      entrance: 'Fade Up',
+      exit: 'Fade Out',
+    });
+    expect(cleared.keyframes.some((frame) => frame.animationPreset?.category === 'emphasis')).toBe(false);
+    expect(cleared.keyframes.filter((frame) => frame.animationPreset?.category === 'entrance')).toHaveLength(2);
+    expect(cleared.keyframes.filter((frame) => frame.animationPreset?.category === 'exit')).toHaveLength(2);
   });
 
   it('keeps emphasis and exit when switching between Typewriter and a keyframe entrance', () => {
@@ -317,6 +348,96 @@ describe('buildTextAnimationUpdate', () => {
     expect(matchTextAnimationPresets(replaced).entrance).toBe('Pop');
   });
 
+  it('preserves a legacy untagged preset when adding and replacing another category', () => {
+    const base = { x: 100, y: 200, width: 200, height: 100, startMs: 0, endMs: 5000, keyframes: [] };
+    const generated = buildTextAnimationUpdate(presetByName('Fade Up'), base);
+    const legacy = {
+      ...base,
+      keyframes: generated.keyframes.map(({ animationPreset, ...frame }) => frame),
+    };
+    const combined = {
+      ...legacy,
+      ...buildTextAnimationUpdate(presetByName('Shake'), legacy),
+    };
+
+    for (let tMs = 0; tMs <= 500; tMs += 10) {
+      const expected = interpolateKeyframes(legacy, tMs);
+      const actual = interpolateKeyframes(combined, tMs);
+      expect(actual.y).toBeCloseTo(expected.y, 6);
+      expect(actual.opacity).toBeCloseTo(expected.opacity, 6);
+    }
+    expect(matchTextAnimationPresets(combined)).toEqual({
+      entrance: 'Fade Up',
+      emphasis: 'Shake',
+    });
+
+    const replaced = {
+      ...combined,
+      ...buildTextAnimationUpdate(presetByName('Pop'), combined),
+    };
+    expect(matchTextAnimationPresets(replaced)).toEqual({
+      entrance: 'Pop',
+      emphasis: 'Shake',
+    });
+    expect(replaced.keyframes.filter((frame) => !frame.animationPreset)).toEqual([]);
+  });
+
+  it('preserves standalone playback for exclusive properties across every category combination', () => {
+    const entrances = TEXT_ANIMATION_PRESETS.filter((preset) => preset.category === 'entrance' && !preset.textReveal);
+    const emphases = TEXT_ANIMATION_PRESETS.filter((preset) => preset.category === 'emphasis');
+    const exits = TEXT_ANIMATION_PRESETS.filter((preset) => preset.category === 'exit');
+    const animatedProps = (clip: any) => new Set(
+      clip.keyframes.flatMap((frame: any) => Object.keys(frame.props))
+    );
+    const apply = (clip: any, preset: any) => ({
+      ...clip,
+      ...buildTextAnimationUpdate(preset, clip, true),
+    });
+
+    for (const duration of [5000, 400]) {
+      for (const entrance of entrances) {
+        for (const emphasis of emphases) {
+          for (const exit of exits) {
+            const base = {
+              x: 100, y: 200, width: 200, height: 100, rotation: 5,
+              text: 'Combined', fontSize: 24, startMs: 0, endMs: duration, keyframes: [],
+            };
+            const entranceOnly = apply(base, entrance);
+            const emphasisOnly = apply(base, emphasis);
+            const exitOnly = apply(base, exit);
+            const combined = [entrance, emphasis, exit].reduce(apply, base);
+            const label = `${entrance.name} + ${emphasis.name} + ${exit.name} at ${duration}ms`;
+            expect(matchTextAnimationPresets(combined, true), label).toEqual({
+              entrance: entrance.name,
+              emphasis: emphasis.name,
+              exit: exit.name,
+            });
+
+            const failures: string[] = [];
+            for (let tMs = 0; tMs <= duration; tMs += 10) {
+              const actual = interpolateKeyframes(combined, tMs) as any;
+              for (const [preset, single, others] of [
+                [entrance, entranceOnly, [emphasisOnly, exitOnly]],
+                [emphasis, emphasisOnly, [entranceOnly, exitOnly]],
+                [exit, exitOnly, [entranceOnly, emphasisOnly]],
+              ] as const) {
+                const shared = new Set(others.flatMap((clip) => [...animatedProps(clip)]));
+                for (const prop of animatedProps(single)) {
+                  if (shared.has(prop)) continue;
+                  const expected = (interpolateKeyframes(single, tMs) as any)[prop];
+                  if (Math.abs(actual[prop] - expected) > 0.0001) {
+                    failures.push(`${label}: ${preset.name} ${prop} at ${tMs}ms was ${actual[prop]}, expected ${expected}`);
+                  }
+                }
+              }
+            }
+            expect(failures.slice(0, 10), label).toEqual([]);
+          }
+        }
+      }
+    }
+  });
+
   it('re-anchors only the exit when a combined clip duration changes', () => {
     const store = createDesignerStore();
     store.getState().setMode('video');
@@ -344,6 +465,6 @@ describe('buildTextAnimationUpdate', () => {
       emphasis: 'Pulse',
       exit: 'Fade Out',
     });
-    expect(updated.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 300, 500, 600, 6500, 7000]);
+    expect(updated.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 0, 300, 500, 600, 6500, 7000]);
   });
 });

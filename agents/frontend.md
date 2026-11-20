@@ -553,12 +553,15 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   offsets from the bounded `text-extrusion.ts` module (depth ≤200), which is injected into the frame
   script and projected onto the poster as an extrusion style. Animation presets live in
   `text-animation-presets.ts`, grouped into entrance/emphasis/exit, and write only the existing
-  keyframe/reveal channels — never a parallel animation model. Entrance, emphasis and exit presets
-  compose independently: applying or replacing one category preserves the other categories and
-  unrelated manual keyframes, and Typewriter can coexist with emphasis/exit keyframes. Zoom/pulse
-  frames compensate x/y to preserve the center and scale fontSize on text/caption clips. Exit frames
-  are clamped at zero and only that exit contribution is re-anchored to the new duration by
-  `updateClipSilent` when a timing edit changes a matched exit.
+  keyframe/reveal channels — never a parallel animation model. Generated frames carry optional
+  `animationPreset` identity; applying, replacing or clicking the selected preset again affects only
+  that category and preserves unrelated manual keyframes. Typewriter coexists with emphasis/exit.
+  Untagged-only clips retain legacy interpolation. Tagged categories interpolate independently before
+  adding x/y/rotation offsets, multiplying width/height/fontSize scale factors, and multiplying shared
+  opacity factors, so one category never resets another's properties. Zoom/pulse frames compensate x/y
+  to preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
+  only that exit contribution is re-anchored to the new duration by `updateClipSilent` when a timing
+  edit changes a matched exit.
   Multi-select text effects compute each element's own path and commit one history entry.
 - **Preset previews are transient, never edits.** Text styles/effects and photo frames store scoped
   `previewPatches` outside `doc`; only the interactive canvas passes them to `CanvasElements`, which

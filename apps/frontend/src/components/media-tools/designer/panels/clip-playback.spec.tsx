@@ -133,5 +133,16 @@ describe('ClipInspector playback controls', () => {
       exit: 'Fade Out',
     });
     expect(store.getState().history.length).toBe(initialHistory + 3);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse', exact: true }));
+    expect(screen.getByRole('button', { name: 'Pulse', exact: true }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Fade Up', exact: true }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Fade Out', exact: true }).getAttribute('aria-pressed')).toBe('true');
+    const cleared = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(matchTextAnimationPresets(cleared, true)).toEqual({
+      entrance: 'Fade Up',
+      exit: 'Fade Out',
+    });
+    expect(store.getState().history.length).toBe(initialHistory + 4);
   });
 });

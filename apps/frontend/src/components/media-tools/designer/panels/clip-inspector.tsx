@@ -11,7 +11,7 @@ import {
   AlignRightIcon,
 } from '@postmill-ai/frontend/components/ui/icons';
 import type { VideoClip } from '../designer.store';
-import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, matchTextAnimationPresets } from '../text-animation-presets';
+import { TEXT_ANIMATION_PRESETS, ANIMATION_TRACK_TYPES, buildTextAnimationUpdate, clearTextAnimationCategory, matchTextAnimationPresets } from '../text-animation-presets';
 import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
 import { PROP_DOT_COLORS } from '../keyframe-props';
 import { SmartFilterList } from './smart-filter-list';
@@ -213,9 +213,9 @@ const MiniKeyframeTimeline: FC<{
         }
       }}
     >
-      {keyframes.map((kf) => (
+      {keyframes.map((kf, frameIndex) => (
         <div
-          key={`${kf.tMs}-${Object.keys(kf.props).sort().join('-')}`}
+          key={`${kf.tMs}-${frameIndex}-${Object.keys(kf.props).sort().join('-')}`}
           role="button"
           tabIndex={0}
           aria-label={t('designer_keyframe_at_ms', 'Keyframe at {{ms}}ms', { ms: Math.round(kf.tMs) })}
@@ -244,10 +244,10 @@ const MiniKeyframeTimeline: FC<{
           coloured by property. Click jumps to that property's row below.
           tabIndex -1: the bars above stay the keyboard path; the dots are a
           pointer convenience, or the tab order would gain 7 stops per frame. */}
-      {keyframes.flatMap((kf) =>
+      {keyframes.flatMap((kf, frameIndex) =>
         GRAPH_PROPS.filter((p) => kf.props[p] !== undefined).map((p) => (
           <button
-            key={`dot-${kf.tMs}-${p}`}
+            key={`dot-${frameIndex}-${p}`}
             type="button"
             tabIndex={-1}
             aria-label={t('designer_jump_to_prop_keyframes', 'Jump to {{prop}} keyframes', { prop: p })}
@@ -337,9 +337,9 @@ const KeyframePropRow: FC<{
           }
         }}
       >
-        {propKeyframes.map((kf) => (
+        {propKeyframes.map((kf, frameIndex) => (
           <div
-            key={kf.tMs}
+            key={`${kf.tMs}-${frameIndex}`}
             role="button"
             tabIndex={0}
             aria-label={t('designer_prop_keyframe_at_ms', '{{prop}} keyframe at {{ms}}ms', { prop, ms: Math.round(kf.tMs) })}
@@ -372,9 +372,9 @@ const KeyframePropRow: FC<{
       </div>
       {propKeyframes.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {propKeyframes.map((kf) => (
+          {propKeyframes.map((kf, frameIndex) => (
             <select
-              key={kf.tMs}
+              key={`${kf.tMs}-${frameIndex}`}
               // Handles have no name; the dropdown says Custom until reset.
               value={typeof kf.ease === 'string' ? kf.ease : 'custom'}
               onChange={(e) => onEase(kf.tMs, e.target.value as EasePresetName)}
@@ -717,6 +717,17 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     return Array.from(props);
   }, [keyframes]);
 
+  const activeTextAnimations = useMemo(
+    () =>
+      clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
+        ? matchTextAnimationPresets(
+            clip,
+            clipTrackType === 'text' || clipTrackType === 'caption'
+          )
+        : {},
+    [clip, clipTrackType]
+  );
+
   const handleApplyTextAnimation = useCallback((presetName: string) => {
     if (!clip || !clipTrackType || !ANIMATION_TRACK_TYPES.has(clipTrackType)) return;
     const preset = TEXT_ANIMATION_PRESETS.find((p) => p.name === presetName);
@@ -724,11 +735,12 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     // Reveal presets animate the text CONTENT — meaningless on a clip with
     // none (the section already hides them there; this is the belt-and-braces).
     if (preset.textReveal && clipTrackType !== 'text') return;
-    const update = buildTextAnimationUpdate(
-      preset,
-      clip,
-      clipTrackType === 'text' || clipTrackType === 'caption'
-    );
+    const scaleText = clipTrackType === 'text' || clipTrackType === 'caption';
+    if (activeTextAnimations[preset.category] === preset.name) {
+      updateClip(clearTextAnimationCategory(clip, preset.category, scaleText));
+      return;
+    }
+    const update = buildTextAnimationUpdate(preset, clip, scaleText);
     updateClip(update);
     const clipDuration = clip.endMs - clip.startMs;
     const animWindowMs = preset.category === 'exit'
@@ -746,18 +758,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         detail: { durationMs: Math.min(animWindowMs + 600, 3000) },
       })
     );
-  }, [clip, clipTrackType, updateClip, store]);
-
-  const activeTextAnimations = useMemo(
-    () =>
-      clip && clipTrackType && ANIMATION_TRACK_TYPES.has(clipTrackType)
-        ? matchTextAnimationPresets(
-            clip,
-            clipTrackType === 'text' || clipTrackType === 'caption'
-          )
-        : {},
-    [clip, clipTrackType]
-  );
+  }, [clip, clipTrackType, updateClip, store, activeTextAnimations]);
 
   // --- AI background removal (video clips) ---------------------------------
   // Same runClipTransform request/poll/land path the timeline clip context

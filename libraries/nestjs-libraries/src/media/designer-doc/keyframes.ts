@@ -47,6 +47,10 @@ export interface Keyframe {
   tMs: number;
   props: KeyframeProps;
   ease?: KeyframeEase;
+  animationPreset?: {
+    name: string;
+    category: 'entrance' | 'emphasis' | 'exit';
+  };
 }
 
 /** Neutral handles: the cubic through them is the straight line. */
@@ -161,25 +165,22 @@ export interface KeyframedClip extends KeyframeProps {
   keyframes?: Keyframe[];
 }
 
-/** The animated transform of a clip at `relativeMs` into its own timeline. */
-export const interpolateClipKeyframes = (
-  clip: KeyframedClip,
-  relativeMs: number
+const keyframeDefaults = (clip: KeyframedClip): InterpolatedProps => ({
+  x: clip.x == null ? 0 : clip.x,
+  y: clip.y == null ? 0 : clip.y,
+  width: clip.width == null ? 1 : clip.width,
+  height: clip.height == null ? 1 : clip.height,
+  rotation: clip.rotation == null ? 0 : clip.rotation,
+  opacity: clip.opacity == null ? 1 : clip.opacity,
+  fontSize: clip.fontSize == null ? 16 : clip.fontSize,
+  volume: clip.volume == null ? 1 : clip.volume,
+});
+
+const interpolateLegacyKeyframes = (
+  kfs: Keyframe[],
+  relativeMs: number,
+  defaults: InterpolatedProps
 ): InterpolatedProps => {
-  const defaults: InterpolatedProps = {
-    x: clip.x == null ? 0 : clip.x,
-    y: clip.y == null ? 0 : clip.y,
-    width: clip.width == null ? 1 : clip.width,
-    height: clip.height == null ? 1 : clip.height,
-    rotation: clip.rotation == null ? 0 : clip.rotation,
-    opacity: clip.opacity == null ? 1 : clip.opacity,
-    fontSize: clip.fontSize == null ? 16 : clip.fontSize,
-    volume: clip.volume == null ? 1 : clip.volume,
-  };
-
-  const kfs = clip.keyframes || [];
-  if (kfs.length === 0) return defaults;
-
   const sorted = [...kfs].sort((a, b) => a.tMs - b.tMs);
   const at = (kf: Keyframe): InterpolatedProps => ({
     x: kf.props.x == null ? defaults.x : kf.props.x,
@@ -208,7 +209,6 @@ export const interpolateClipKeyframes = (
   const range = next.tMs - prev.tMs;
   const rawT = range > 0 ? (relativeMs - prev.tMs) / range : 0;
   const t = easeSegment(rawT, prev.ease, next.ease);
-
   const a = at(prev);
   const b = at(next);
   return {
@@ -221,6 +221,89 @@ export const interpolateClipKeyframes = (
     fontSize: lerp(a.fontSize, b.fontSize, t),
     volume: lerp(a.volume, b.volume, t),
   };
+};
+
+const KEYFRAME_PROP_NAMES = [
+  'x', 'y', 'width', 'height', 'rotation', 'opacity', 'fontSize', 'volume',
+] as const;
+
+const interpolateKeyframeProperty = (
+  frames: Keyframe[],
+  prop: keyof InterpolatedProps,
+  relativeMs: number
+): number => {
+  const sorted = [...frames].sort((a, b) => a.tMs - b.tMs);
+  const valueAt = (frame: Keyframe) => frame.props[prop]!;
+  if (relativeMs <= sorted[0].tMs) return valueAt(sorted[0]);
+  if (relativeMs >= sorted[sorted.length - 1].tMs) return valueAt(sorted[sorted.length - 1]);
+  let prev = sorted[0];
+  let next = sorted[0];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (relativeMs >= sorted[i].tMs && relativeMs <= sorted[i + 1].tMs) {
+      prev = sorted[i];
+      next = sorted[i + 1];
+      break;
+    }
+  }
+  const range = next.tMs - prev.tMs;
+  const rawT = range > 0 ? (relativeMs - prev.tMs) / range : 0;
+  return lerp(valueAt(prev), valueAt(next), easeSegment(rawT, prev.ease, next.ease));
+};
+
+const interpolateKeyframeGroup = (
+  frames: Keyframe[],
+  relativeMs: number
+): Partial<InterpolatedProps> => {
+  const result: Partial<InterpolatedProps> = {};
+  for (const prop of KEYFRAME_PROP_NAMES) {
+    const own = frames.filter((frame) => frame.props[prop] !== undefined);
+    if (own.length) result[prop] = interpolateKeyframeProperty(own, prop, relativeMs);
+  }
+  return result;
+};
+
+const interpolateComposedKeyframes = (
+  kfs: Keyframe[],
+  relativeMs: number,
+  defaults: InterpolatedProps
+): InterpolatedProps => {
+  const result = { ...defaults };
+  const manual = kfs.filter((frame) => !frame.animationPreset);
+  const manualProps = interpolateKeyframeGroup(manual, relativeMs);
+  Object.assign(result, manualProps);
+  let hasOpacity = manualProps.opacity !== undefined;
+
+  for (const category of ['entrance', 'emphasis', 'exit'] as const) {
+    const frames = kfs.filter((frame) => frame.animationPreset?.category === category);
+    if (!frames.length) continue;
+    const props = interpolateKeyframeGroup(frames, relativeMs);
+    for (const prop of ['x', 'y', 'rotation'] as const) {
+      if (props[prop] !== undefined) result[prop] += props[prop]! - defaults[prop];
+    }
+    for (const prop of ['width', 'height', 'fontSize'] as const) {
+      if (props[prop] !== undefined) {
+        result[prop] = defaults[prop] === 0 ? 0 : result[prop] * props[prop]! / defaults[prop];
+      }
+    }
+    if (props.opacity !== undefined) {
+      result.opacity = hasOpacity ? result.opacity * props.opacity : props.opacity;
+      hasOpacity = true;
+    }
+  }
+  return result;
+};
+
+/** The animated transform of a clip at `relativeMs` into its own timeline. */
+export const interpolateClipKeyframes = (
+  clip: KeyframedClip,
+  relativeMs: number
+): InterpolatedProps => {
+  const defaults = keyframeDefaults(clip);
+  const kfs = clip.keyframes || [];
+  if (kfs.length === 0) return defaults;
+  return kfs.some((frame) => frame.animationPreset)
+    ? interpolateComposedKeyframes(kfs, relativeMs, defaults)
+    : interpolateLegacyKeyframes(kfs, relativeMs, defaults);
 };
 
 /** True when at least one keyframe carries `volume` — the keyframed values
@@ -260,6 +343,12 @@ export const keyframesSource = (): string => {
     decl('applyEasePreset', applyEasePreset),
     decl('cubicBezierEase', cubicBezierEase),
     decl('easeSegment', easeSegment),
+    decl('keyframeDefaults', keyframeDefaults),
+    decl('interpolateLegacyKeyframes', interpolateLegacyKeyframes),
+    `const KEYFRAME_PROP_NAMES = ${JSON.stringify(KEYFRAME_PROP_NAMES)};`,
+    decl('interpolateKeyframeProperty', interpolateKeyframeProperty),
+    decl('interpolateKeyframeGroup', interpolateKeyframeGroup),
+    decl('interpolateComposedKeyframes', interpolateComposedKeyframes),
     decl('interpolateClipKeyframes', interpolateClipKeyframes),
     decl('hasVolumeKeyframes', hasVolumeKeyframes),
     decl('volumeAtClipTime', volumeAtClipTime),

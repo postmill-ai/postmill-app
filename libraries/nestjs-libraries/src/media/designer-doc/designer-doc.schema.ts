@@ -790,6 +790,10 @@ export interface VideoClip {
      * one it arrives at; see `designer-doc/keyframes`.
      */
     ease?: KeyframeEase;
+    animationPreset?: {
+      name: string;
+      category: 'entrance' | 'emphasis' | 'exit';
+    };
   }[];
   /**
    * Progressive text reveal for text clips (optional-additive): the drawn
@@ -1680,6 +1684,10 @@ const EaseSchema = z.union([
   z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']),
   z.object({ in: easeHandle.optional(), out: easeHandle.optional() }).strict(),
 ]);
+const KeyframeAnimationPresetSchema = z.object({
+  name: z.string().min(1).max(100),
+  category: z.enum(['entrance', 'emphasis', 'exit']),
+}).strict();
 
 const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
   dualObject(
@@ -1687,6 +1695,7 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
       tMs: strictNum(0, MAX_VIDEO_DURATION_MS),
       props: z.record(z.string(), z.number().finite()),
       ease: EaseSchema.optional(),
+      animationPreset: KeyframeAnimationPresetSchema.optional(),
     },
     {
       tMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
@@ -1705,6 +1714,7 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
         z.record(z.string(), z.number().finite())
       ),
       ease: EaseSchema.optional(),
+      animationPreset: KeyframeAnimationPresetSchema.optional(),
     }
   );
 

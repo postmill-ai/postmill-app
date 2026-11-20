@@ -131,9 +131,12 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      `keyframesSource`). The Typewriter preset (`text-animation-presets.ts`) writes
      it at ~80 ms/char and replaces only the current entrance, leaving emphasis/exit keyframes intact.
      Presets are grouped into entrance, emphasis and exit, with one independently replaceable preset
-     per category. Exits are timed relative to the clip end; zoom presets scale
-     width/height from the clip base and motion presets offset x/y/rotation. All visual track types
-     share the same keyframe evaluator, while reveal stays text-only.
+     per category. Generated keyframes carry optional `animationPreset` metadata; untagged-only clips
+     keep legacy interpolation, while tagged groups interpolate per property and compose x/y/rotation
+     offsets additively, scale factors multiplicatively, and shared opacity multiplicatively. The
+     preview and injected frame renderer share that evaluator. Exits are timed relative to the clip
+     end; zoom presets scale width/height from the clip base and motion presets offset x/y/rotation.
+     All visual track types share the same keyframe evaluator, while reveal stays text-only.
    - Text extrusion (`clip.textExtrusion`, optional-additive doc v12) draws bounded far-to-near
      silhouette copies behind the original text. `designer-doc/text-extrusion.ts` owns the offsets
      (depth ≤200) and is injected with `textExtrusionSource()`; the preview uses the same helper and

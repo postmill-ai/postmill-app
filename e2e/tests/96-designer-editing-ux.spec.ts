@@ -1402,13 +1402,19 @@ test('entrance, emphasis, and exit animations remain independent through save an
     await page.getByRole('button', { name, exact: true }).click();
   }
   await expectSelected();
+  await page.getByRole('button', { name: 'Fade Out', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Fade Out', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Fade Up', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Pulse', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Fade Out', exact: true }).click();
+  await expectSelected();
 
   const savesBefore = state.saveDocs.length;
   await page.keyboard.press('Control+s');
   await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
   const savedClip = (state.saveDocs.at(-1) as any).outputs[0].tracks[1].clips[0];
   expect(savedClip.id).toBe('still-clip');
-  expect(savedClip.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 300, 500, 600, 4500, 5000]);
+  expect(savedClip.keyframes.map((frame: any) => frame.tMs)).toEqual([0, 0, 300, 500, 600, 4500, 5000]);
 
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Editing UX');

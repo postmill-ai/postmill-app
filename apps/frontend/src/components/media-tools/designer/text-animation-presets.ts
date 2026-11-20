@@ -254,6 +254,7 @@ const buildPresetKeyframes = (
   return (preset.keyframes ?? [])
     .map((kf) => ({
       ...kf,
+      animationPreset: { name: preset.name, category: preset.category },
       tMs: preset.category === 'exit' ? Math.max(0, durationMs + kf.tMs) : kf.tMs,
       props: (() => {
         const props: Record<string, number> = {};
@@ -288,6 +289,7 @@ const removePresetKeyframes = (
 ): AnimationKeyframe[] => {
   const owned = buildPresetKeyframes(preset, clip, scaleText, durationMs);
   return (keyframes ?? []).flatMap((frame) => {
+    if (frame.animationPreset) return [frame];
     const expected = owned.filter((candidate) => candidate.tMs === frame.tMs);
     if (!expected.length) return [frame];
     const props = { ...frame.props };
@@ -300,76 +302,6 @@ const removePresetKeyframes = (
   });
 };
 
-/**
- * Compose a preset with the clip's existing animation channels. Only the
- * previously matched preset in the same category is replaced; other categories
- * and manual keyframes remain intact. `previousDurationMs` lets a timing edit
- * remove an exit at its old position before writing it at the new clip end.
- */
-export const buildTextAnimationUpdate = (
-  preset: TextAnimationPreset,
-  clip: AnimationClip,
-  scaleText = false,
-  previousDurationMs?: number
-): Pick<VideoClip, 'keyframes' | 'textReveal'> => {
-  const clipDuration = clip.endMs - clip.startMs;
-  const oldDuration = previousDurationMs ?? clipDuration;
-  const previousName = matchTextAnimationPreset(
-    clip.keyframes,
-    clip.x ?? 0,
-    clip.y ?? 0,
-    clip.rotation ?? 0,
-    clip.textReveal,
-    clip.width ?? 1,
-    clip.height ?? 1,
-    oldDuration,
-    clip.fontSize ?? 16,
-    scaleText,
-    preset.category
-  );
-  const previous = TEXT_ANIMATION_PRESETS.find(
-    (candidate) => candidate.name === previousName && candidate.category === preset.category
-  );
-  const remaining = previous && !previous.textReveal
-    ? removePresetKeyframes(clip.keyframes, previous, clip, scaleText, oldDuration)
-    : [...(clip.keyframes ?? [])];
-  const generated = buildPresetKeyframes(preset, clip, scaleText, clipDuration);
-  const byTime = new Map<number, AnimationKeyframe>();
-  for (const frame of [...remaining, ...generated]) {
-    const existing = byTime.get(frame.tMs);
-    const incoming = { ...frame.props };
-    if (existing) {
-      if (frame.props.width !== undefined && existing.props.x !== undefined) delete incoming.x;
-      if (frame.props.height !== undefined && existing.props.y !== undefined) delete incoming.y;
-    }
-    byTime.set(frame.tMs, existing
-      ? { ...frame, props: { ...existing.props, ...incoming } }
-      : { ...frame, props: incoming });
-  }
-
-  let textReveal = clip.textReveal;
-  if (preset.category === 'entrance') {
-    textReveal = undefined;
-    if (preset.textReveal) {
-      const chars = (clip.text || '').length;
-      const paced = Math.max(1, Math.round(chars * TYPEWRITER_MS_PER_CHAR));
-      textReveal = {
-        mode: preset.textReveal.mode,
-        ...(chars ? { durationMs: Math.min(clipDuration, paced) } : {}),
-      };
-    }
-  }
-  return {
-    keyframes: [...byTime.values()].sort((a, b) => a.tMs - b.tMs),
-    textReveal,
-  };
-};
-
-/**
- * Match a preset's contributions within a possibly combined keyframe timeline.
- * Additional frames and properties are allowed, so each category can remain
- * active independently. Typewriter matches its reveal alongside keyframes.
- */
 export const matchTextAnimationPreset = (
   keyframes: VideoClip['keyframes'] | undefined,
   baseX: number,
@@ -390,38 +322,112 @@ export const matchTextAnimationPreset = (
     if (revealPreset) return revealPreset.name;
   }
   if (!keyframes?.length) return null;
-  let best: { name: string; specificity: number } | null = null;
+  const clip: AnimationClip = {
+    x: baseX, y: baseY, width: baseWidth, height: baseHeight,
+    rotation: baseRotation, fontSize: baseFontSize, startMs: 0, endMs: durationMs,
+  };
+  const tagged = keyframes.filter((frame) =>
+    frame.animationPreset && (!category || frame.animationPreset.category === category)
+  );
+  if (tagged.length) {
+    const identity = tagged[0].animationPreset!;
+    const preset = TEXT_ANIMATION_PRESETS.find(
+      (candidate) => candidate.name === identity.name && candidate.category === identity.category
+    );
+    if (!preset || tagged.some((frame) =>
+      frame.animationPreset?.name !== identity.name ||
+      frame.animationPreset?.category !== identity.category
+    )) return null;
+    const expected = buildPresetKeyframes(preset, clip, scaleText, durationMs);
+    const actual = [...tagged].sort((a, b) => a.tMs - b.tMs);
+    if (expected.length !== actual.length) return null;
+    return expected.every((frame, index) =>
+      frame.tMs === actual[index].tMs &&
+      Object.keys(frame.props).length === Object.keys(actual[index].props).length &&
+      Object.entries(frame.props).every(([key, value]) =>
+        matchingNumber(actual[index].props[key], value)
+      )
+    ) ? preset.name : null;
+  }
+
+  const legacy = keyframes.filter((frame) => !frame.animationPreset);
   for (const preset of TEXT_ANIMATION_PRESETS) {
     if ((category && preset.category !== category) || preset.textReveal) continue;
-    const expectedFrames = buildPresetKeyframes(preset, {
-      x: baseX,
-      y: baseY,
-      width: baseWidth,
-      height: baseHeight,
-      rotation: baseRotation,
-      fontSize: baseFontSize,
-      startMs: 0,
-      endMs: durationMs,
-    }, scaleText, durationMs);
-    if (!expectedFrames.length) continue;
-    const matches = expectedFrames.every((expected) =>
-      keyframes.some((actual) => {
-        if (actual.tMs !== expected.tMs) return false;
-        const scaled = expected.props.width !== undefined || expected.props.height !== undefined;
-        return Object.entries(expected.props).every(([key, value]) =>
-          (scaled && (key === 'x' || key === 'y')) || matchingNumber(actual.props[key], value)
-        );
-      })
+    const expected = buildPresetKeyframes(preset, clip, scaleText, durationMs);
+    const actual = [...legacy].sort((a, b) => a.tMs - b.tMs);
+    if (expected.length !== actual.length) continue;
+    const matches = expected.every((frame, index) =>
+      frame.tMs === actual[index].tMs &&
+      Object.keys(frame.props).length === Object.keys(actual[index].props).length &&
+      Object.entries(frame.props).every(([key, value]) =>
+        matchingNumber(actual[index].props[key], value)
+      )
     );
-    const specificity = expectedFrames.reduce(
-      (count, frame) => count + Object.keys(frame.props).length,
-      0
-    );
-    if (matches && specificity > (best?.specificity ?? -1)) {
-      best = { name: preset.name, specificity };
-    }
+    if (matches) return preset.name;
   }
-  return best?.name ?? null;
+  return null;
+};
+
+export const clearTextAnimationCategory = (
+  clip: AnimationClip,
+  category: AnimationPresetCategory,
+  scaleText = false,
+  previousDurationMs?: number
+): Pick<VideoClip, 'keyframes' | 'textReveal'> => {
+  const durationMs = previousDurationMs ?? clip.endMs - clip.startMs;
+  const previousName = matchTextAnimationPreset(
+    clip.keyframes,
+    clip.x ?? 0,
+    clip.y ?? 0,
+    clip.rotation ?? 0,
+    clip.textReveal,
+    clip.width ?? 1,
+    clip.height ?? 1,
+    durationMs,
+    clip.fontSize ?? 16,
+    scaleText,
+    category
+  );
+  const previous = TEXT_ANIMATION_PRESETS.find(
+    (candidate) => candidate.name === previousName && candidate.category === category
+  );
+  const hasTagged = (clip.keyframes ?? []).some(
+    (frame) => frame.animationPreset?.category === category
+  );
+  const withoutTagged = (clip.keyframes ?? []).filter(
+    (frame) => frame.animationPreset?.category !== category
+  );
+  return {
+    keyframes: previous && !previous.textReveal && !hasTagged
+      ? removePresetKeyframes(withoutTagged, previous, clip, scaleText, durationMs)
+      : withoutTagged,
+    textReveal: category === 'entrance' ? undefined : clip.textReveal,
+  };
+};
+
+/** Apply one category without merging its values into another category's frames. */
+export const buildTextAnimationUpdate = (
+  preset: TextAnimationPreset,
+  clip: AnimationClip,
+  scaleText = false,
+  previousDurationMs?: number
+): Pick<VideoClip, 'keyframes' | 'textReveal'> => {
+  const clipDuration = clip.endMs - clip.startMs;
+  const cleared = clearTextAnimationCategory(clip, preset.category, scaleText, previousDurationMs);
+  const generated = buildPresetKeyframes(preset, clip, scaleText, clipDuration);
+  let textReveal = cleared.textReveal;
+  if (preset.category === 'entrance' && preset.textReveal) {
+    const chars = (clip.text || '').length;
+    const paced = Math.max(1, Math.round(chars * TYPEWRITER_MS_PER_CHAR));
+    textReveal = {
+      mode: preset.textReveal.mode,
+      ...(chars ? { durationMs: Math.min(clipDuration, paced) } : {}),
+    };
+  }
+  return {
+    keyframes: [...(cleared.keyframes ?? []), ...generated].sort((a, b) => a.tMs - b.tMs),
+    textReveal,
+  };
 };
 
 export const matchTextAnimationPresets = (
