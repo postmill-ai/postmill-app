@@ -89,6 +89,13 @@ and **Tools ▸ Workspace** open the same surfaces. **History** and **Versions**
 **Templates** is beside Save, and View is reserved for zoom and display settings. History, Versions,
 and Template Fields retain their movable floating panels.
 
+With no layer or clip selected, the Inspector shows the active canvas settings. Image and video
+designs both offer **Background** color presets and a **Custom color** picker, including the active
+Brand Kit palette when brand enforcement allows it. Video canvases default to black. Background
+changes are undoable, saved with the design, included in previews and exports, and preserved when
+adding another format. Image designs also offer canvas dimensions and gradient, image, and texture
+backgrounds; video designs keep the output duration beside the solid-color controls.
+
 ## Video timeline
 
 The timeline supports eight track types: **video, image, text, shape, paint, caption, audio, and

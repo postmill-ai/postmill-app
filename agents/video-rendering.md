@@ -468,6 +468,12 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   completed responses in 24 hours. Never reintroduce
   the AI mapper's type-bucket ordering or clip slicing into this path, and never bypass the existing
   track/clip/180-second bounds to make a conversion succeed.
+- **Video canvas backgrounds use `VideoOutput.bg`.** The Inspector and headless `setOutputBackground`
+  op write the optional-additive structured background without adding a flat `background` field to
+  strict video outputs. The Konva canvas, poster projection and frame renderer all prefer a
+  `bg.type === 'color'` value for the solid base; the frame renderer then falls back to legacy
+  `output.background` and finally black. Image/gradient backgrounds paint over that base and textures
+  remain overlays. `seedVideoOutput` carries `bg` into added video formats.
 - Render code lives in `libraries/nestjs-libraries/src/media/design-render/` (service,
   encoder, frame capture, Podman runner, config, spec). The controller stays thin; new
   render ops extend `RenderJobSpec` + the worker CLI + `processRenderJob` routing
