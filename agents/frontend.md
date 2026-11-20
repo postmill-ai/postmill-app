@@ -564,7 +564,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Canvas geometry gestures translate the requested rendered delta into the target category's local values,
   then convert them back to stored values with the inverse of the current-base/preset-base composition.
   Each preset keeps its authoring base in `animationPreset.base`; composition uses that snapshot against
-  the current clip base, so later X/Y/size/rotation edits never reverse or amplify a gesture.
+  the current clip base, so later X/Y/size/rotation edits never reverse or amplify a gesture. Base
+  resize uses the rendered after/before ratio, not an additive pixel delta that scale factors would multiply.
   Zoom/pulse frames compensate x/y to preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
   only that exit contribution is re-anchored to the new duration by `updateClipSilent` when a timing
   edit changes a matched exit.

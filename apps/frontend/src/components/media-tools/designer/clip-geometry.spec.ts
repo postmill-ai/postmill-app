@@ -207,6 +207,35 @@ describe('clipGeometryUpdate', () => {
     }
   });
 
+  it('uses the rendered ratio for a base resize during scale presets', () => {
+    const preset = (name: string) => TEXT_ANIMATION_PRESETS.find((item) => item.name === name)!;
+    for (const names of [['Zoom Out'], ['Zoom Out', 'Pulse', 'Fade Out']]) {
+      const base = clip({ startMs: 0, endMs: 5000, x: 100, y: 200, width: 200, height: 100 });
+      const combined = names.reduce(
+        (current, name) => ({ ...current, ...buildTextAnimationUpdate(preset(name), current) }),
+        base
+      );
+      const before = interpolateKeyframes(combined, 50);
+      const update = clipGeometryUpdate(
+        combined,
+        before,
+        { ...before, width: before.width * 1.2, height: before.height * 1.1 },
+        50
+      );
+      const updated = { ...combined, ...update };
+      const after = interpolateKeyframes(updated, 50);
+
+      expect(after.width, names.join(' + ')).toBeCloseTo(before.width * 1.2, 6);
+      expect(after.height, names.join(' + ')).toBeCloseTo(before.height * 1.1, 6);
+      expect(after.x).toBeCloseTo(before.x, 6);
+      expect(after.y).toBeCloseTo(before.y, 6);
+      expect(after.rotation).toBeCloseTo(before.rotation, 6);
+      expect(updated.keyframes!.map((frame) => frame.animationPreset)).toEqual(
+        combined.keyframes!.map((frame) => frame.animationPreset)
+      );
+    }
+  });
+
   it('does not repeat an earlier base move when editing tagged frames', () => {
     const preset = (name: string) => TEXT_ANIMATION_PRESETS.find((item) => item.name === name)!;
     for (const { names, times } of [

@@ -402,8 +402,14 @@ export const clipGeometryUpdate = (
   return {
     x: (clip.x ?? 0) + dx,
     y: (clip.y ?? 0) + dy,
-    width: Math.max(1, (clip.width ?? before.width) + dw),
-    height: Math.max(1, (clip.height ?? before.height) + dh),
+    width: Math.max(
+      1,
+      (clip.width ?? before.width) * after.width / Math.max(0.0001, before.width)
+    ),
+    height: Math.max(
+      1,
+      (clip.height ?? before.height) * after.height / Math.max(0.0001, before.height)
+    ),
     rotation: (clip.rotation ?? 0) + dr,
     ...(scaleFont
       ? {
