@@ -120,6 +120,17 @@ describe('adjustmentScopeCacheKey', () => {
     );
   });
 
+  it('changes when a folded image’s focal crop moves', () => {
+    const before = adjustmentScopeCacheKey('bg-pending', [prodImage], ready, 7);
+    const focused = {
+      ...prodImage,
+      fitMode: 'cover',
+      focalPoint: { x: 0.85, y: 0.15 },
+    } as DesignerElement;
+    const after = adjustmentScopeCacheKey('bg-pending', [focused], ready, 7);
+    expect(after).not.toBe(before);
+  });
+
   it('changes when the gesture-commit geometry generation bumps', () => {
     // A committed drag/transform bumps the nonce once, which is what refreshes
     // the cached scope — Konva never repaints a cached node for a moved

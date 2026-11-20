@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "Aumente a resolução da imagem selecionada em 2× ou 4×.",
   "designer_ai_image_to_image_desc": "Transforme a imagem selecionada com um prompt usando-a como origem.",
   "designer_ai_inpaint_desc": "Pinte uma máscara e descreva o que deve substituir a área mascarada.",
-  "designer_ai_outpaint_desc": "Amplie a imagem selecionada ou toda a página além dos limites atuais."
+  "designer_ai_outpaint_desc": "Amplie a imagem selecionada ou toda a página além dos limites atuais.",
+  "designer_focal_preview": "Pré-visualização do ponto focal",
+  "designer_focal_cover_hint": "O ponto focal aplica-se quando a imagem é recortada (Cover).",
+  "designer_focal_explicit_crop_hint": "Reponha o recorte explícito abaixo para ajustar o ponto focal.",
+  "designer_focal_quick_positions": "Posições focais rápidas",
+  "designer_focal_quick_position": "Definir ponto focal: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "X focal (%)",
+  "designer_focal_y_percent": "Y focal (%)",
+  "designer_reset_focal_format": "Repor ponto focal (este formato)",
+  "designer_format_crops": "Recortes dos formatos",
+  "designer_format_crop_preview": "Pré-visualização do recorte de {{format}}",
+  "designer_reset_focal_zoom": "Repor zoom da pré-visualização"
 }

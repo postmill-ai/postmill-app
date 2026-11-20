@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "선택한 이미지 해상도를 2배 또는 4배로 높입니다.",
   "designer_ai_image_to_image_desc": "선택한 이미지를 소스로 사용하면서 프롬프트로 변환합니다.",
   "designer_ai_inpaint_desc": "마스크를 그리고 마스크 영역을 대체할 내용을 설명합니다.",
-  "designer_ai_outpaint_desc": "선택한 이미지나 전체 페이지를 현재 경계 너머로 확장합니다."
+  "designer_ai_outpaint_desc": "선택한 이미지나 전체 페이지를 현재 경계 너머로 확장합니다.",
+  "designer_focal_preview": "초점 미리보기",
+  "designer_focal_cover_hint": "초점은 이미지가 잘릴 때(Cover) 적용됩니다.",
+  "designer_focal_explicit_crop_hint": "초점을 조정하려면 아래의 명시적 자르기를 재설정하세요.",
+  "designer_focal_quick_positions": "빠른 초점 위치",
+  "designer_focal_quick_position": "초점 설정: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "초점 X(%)",
+  "designer_focal_y_percent": "초점 Y(%)",
+  "designer_reset_focal_format": "초점 재설정 (이 형식)",
+  "designer_format_crops": "형식별 자르기",
+  "designer_format_crop_preview": "{{format}} 자르기 미리보기",
+  "designer_reset_focal_zoom": "미리보기 확대/축소 재설정"
 }

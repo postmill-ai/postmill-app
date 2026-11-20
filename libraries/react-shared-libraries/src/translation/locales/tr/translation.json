@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "Seçilen görüntünün çözünürlüğünü 2× veya 4× artırın.",
   "designer_ai_image_to_image_desc": "Seçilen görüntüyü kaynak olarak kullanarak bir istemle dönüştürün.",
   "designer_ai_inpaint_desc": "Bir maske çizin ve maskeli alanın yerine ne geleceğini açıklayın.",
-  "designer_ai_outpaint_desc": "Seçilen görüntüyü veya tüm sayfayı mevcut sınırlarının ötesine genişletin."
+  "designer_ai_outpaint_desc": "Seçilen görüntüyü veya tüm sayfayı mevcut sınırlarının ötesine genişletin.",
+  "designer_focal_preview": "Odak noktası önizlemesi",
+  "designer_focal_cover_hint": "Odak noktası, görsel kırpıldığında (Cover) uygulanır.",
+  "designer_focal_explicit_crop_hint": "Odak noktasını ayarlamak için aşağıdaki açık kırpmayı sıfırlayın.",
+  "designer_focal_quick_positions": "Hızlı odak konumları",
+  "designer_focal_quick_position": "Odak noktasını ayarla: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "Odak X (%)",
+  "designer_focal_y_percent": "Odak Y (%)",
+  "designer_reset_focal_format": "Odak noktasını sıfırla (bu format)",
+  "designer_format_crops": "Format kırpmaları",
+  "designer_format_crop_preview": "{{format}} kırpma önizlemesi",
+  "designer_reset_focal_zoom": "Önizleme yakınlaştırmasını sıfırla"
 }

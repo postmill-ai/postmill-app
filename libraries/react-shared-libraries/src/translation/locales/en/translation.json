@@ -5153,5 +5153,16 @@
   "designer_ai_upscale_desc": "Increase the selected image resolution by 2× or 4×.",
   "designer_ai_image_to_image_desc": "Transform the selected image with a prompt while using it as the source.",
   "designer_ai_inpaint_desc": "Paint a mask and describe what should replace the masked area.",
-  "designer_ai_outpaint_desc": "Extend the selected image or the whole page beyond its current boundaries."
+  "designer_ai_outpaint_desc": "Extend the selected image or the whole page beyond its current boundaries.",
+  "designer_focal_preview": "Focal point preview",
+  "designer_focal_cover_hint": "Focal point applies when the image is cropped (Cover).",
+  "designer_focal_explicit_crop_hint": "Reset the explicit Crop below to adjust the focal point.",
+  "designer_focal_quick_positions": "Quick focal positions",
+  "designer_focal_quick_position": "Set focal point: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "Focal X (%)",
+  "designer_focal_y_percent": "Focal Y (%)",
+  "designer_reset_focal_format": "Reset focal point (this format)",
+  "designer_format_crops": "Format crops",
+  "designer_format_crop_preview": "{{format}} crop preview",
+  "designer_reset_focal_zoom": "Reset preview zoom"
 }

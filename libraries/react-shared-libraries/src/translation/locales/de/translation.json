@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "Erhöhe die Auflösung des ausgewählten Bildes um 2× oder 4×.",
   "designer_ai_image_to_image_desc": "Transformiere das ausgewählte Bild mit einem Prompt und verwende es als Quelle.",
   "designer_ai_inpaint_desc": "Male eine Maske und beschreibe, was den maskierten Bereich ersetzen soll.",
-  "designer_ai_outpaint_desc": "Erweitere das ausgewählte Bild oder die ganze Seite über seine aktuellen Grenzen hinaus."
+  "designer_ai_outpaint_desc": "Erweitere das ausgewählte Bild oder die ganze Seite über seine aktuellen Grenzen hinaus.",
+  "designer_focal_preview": "Fokuspunkt-Vorschau",
+  "designer_focal_cover_hint": "Der Fokuspunkt wirkt sich aus, wenn das Bild zugeschnitten wird (Cover).",
+  "designer_focal_explicit_crop_hint": "Setze den expliziten Zuschnitt unten zurück, um den Fokuspunkt anzupassen.",
+  "designer_focal_quick_positions": "Schnelle Fokuspositionen",
+  "designer_focal_quick_position": "Fokuspunkt festlegen: {{x}} %, {{y}} %",
+  "designer_focal_x_percent": "Fokus X (%)",
+  "designer_focal_y_percent": "Fokus Y (%)",
+  "designer_reset_focal_format": "Fokuspunkt zurücksetzen (dieses Format)",
+  "designer_format_crops": "Formatzuschnitte",
+  "designer_format_crop_preview": "Zuschnittvorschau für {{format}}",
+  "designer_reset_focal_zoom": "Vorschauzoom zurücksetzen"
 }

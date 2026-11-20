@@ -5153,5 +5153,16 @@
   "designer_ai_upscale_desc": "Verhoog de resolutie van de geselecteerde afbeelding 2× of 4×.",
   "designer_ai_image_to_image_desc": "Transformeer de geselecteerde afbeelding met een prompt en gebruik haar als bron.",
   "designer_ai_inpaint_desc": "Schilder een masker en beschrijf waarmee het gemaskeerde gebied moet worden vervangen.",
-  "designer_ai_outpaint_desc": "Breid de geselecteerde afbeelding of de hele pagina uit voorbij de huidige grenzen."
+  "designer_ai_outpaint_desc": "Breid de geselecteerde afbeelding of de hele pagina uit voorbij de huidige grenzen.",
+  "designer_focal_preview": "Voorbeeld van brandpunt",
+  "designer_focal_cover_hint": "Het brandpunt wordt toegepast wanneer de afbeelding wordt bijgesneden (Cover).",
+  "designer_focal_explicit_crop_hint": "Herstel de expliciete uitsnede hieronder om het brandpunt aan te passen.",
+  "designer_focal_quick_positions": "Snelle brandpuntposities",
+  "designer_focal_quick_position": "Brandpunt instellen: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "Brandpunt X (%)",
+  "designer_focal_y_percent": "Brandpunt Y (%)",
+  "designer_reset_focal_format": "Focuspunt herstellen (dit formaat)",
+  "designer_format_crops": "Formaatuitsneden",
+  "designer_format_crop_preview": "Uitsnedevoorbeeld van {{format}}",
+  "designer_reset_focal_zoom": "Voorbeeldzoom herstellen"
 }

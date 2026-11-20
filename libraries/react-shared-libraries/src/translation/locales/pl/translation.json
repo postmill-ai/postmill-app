@@ -5199,5 +5199,16 @@
   "designer_ai_upscale_desc": "Zwiększ rozdzielczość wybranego obrazu 2× lub 4×.",
   "designer_ai_image_to_image_desc": "Przekształć wybrany obraz za pomocą polecenia, używając go jako źródła.",
   "designer_ai_inpaint_desc": "Namaluj maskę i opisz, co ma zastąpić zamaskowany obszar.",
-  "designer_ai_outpaint_desc": "Rozszerz wybrany obraz lub całą stronę poza jej obecne granice."
+  "designer_ai_outpaint_desc": "Rozszerz wybrany obraz lub całą stronę poza jej obecne granice.",
+  "designer_focal_preview": "Podgląd punktu ostrości",
+  "designer_focal_cover_hint": "Punkt ostrości działa, gdy obraz jest przycinany (Cover).",
+  "designer_focal_explicit_crop_hint": "Zresetuj poniższe jawne przycięcie, aby dostosować punkt ostrości.",
+  "designer_focal_quick_positions": "Szybkie pozycje ostrości",
+  "designer_focal_quick_position": "Ustaw punkt ostrości: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "Ostrość X (%)",
+  "designer_focal_y_percent": "Ostrość Y (%)",
+  "designer_reset_focal_format": "Zresetuj punkt centralny (ten format)",
+  "designer_format_crops": "Przycięcia formatów",
+  "designer_format_crop_preview": "Podgląd przycięcia {{format}}",
+  "designer_reset_focal_zoom": "Zresetuj powiększenie podglądu"
 }

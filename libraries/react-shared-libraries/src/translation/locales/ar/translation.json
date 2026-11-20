@@ -5162,5 +5162,16 @@
   "designer_ai_upscale_desc": "زد دقة الصورة المحددة بمقدار 2× أو 4×.",
   "designer_ai_image_to_image_desc": "حوّل الصورة المحددة باستخدام موجّه مع استخدامها كمصدر.",
   "designer_ai_inpaint_desc": "ارسم قناعًا وصف ما سيحل محل المنطقة المقنّعة.",
-  "designer_ai_outpaint_desc": "وسّع الصورة المحددة أو الصفحة كاملة إلى ما بعد حدودها الحالية."
+  "designer_ai_outpaint_desc": "وسّع الصورة المحددة أو الصفحة كاملة إلى ما بعد حدودها الحالية.",
+  "designer_focal_preview": "معاينة النقطة المحورية",
+  "designer_focal_cover_hint": "تُطبق النقطة المحورية عند اقتصاص الصورة (تغطية).",
+  "designer_focal_explicit_crop_hint": "أعد تعيين الاقتصاص الصريح أدناه لضبط النقطة المحورية.",
+  "designer_focal_quick_positions": "مواضع محورية سريعة",
+  "designer_focal_quick_position": "تعيين النقطة المحورية: {{x}}%، {{y}}%",
+  "designer_focal_x_percent": "X للنقطة المحورية (%)",
+  "designer_focal_y_percent": "Y للنقطة المحورية (%)",
+  "designer_reset_focal_format": "إعادة تعيين نقطة التركيز (هذا التنسيق)",
+  "designer_format_crops": "اقتصاصات التنسيقات",
+  "designer_format_crop_preview": "معاينة اقتصاص {{format}}",
+  "designer_reset_focal_zoom": "إعادة تعيين تكبير المعاينة"
 }

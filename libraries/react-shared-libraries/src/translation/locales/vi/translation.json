@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "Tăng độ phân giải của hình ảnh đã chọn lên 2× hoặc 4×.",
   "designer_ai_image_to_image_desc": "Biến đổi hình ảnh đã chọn bằng lời nhắc trong khi dùng nó làm nguồn.",
   "designer_ai_inpaint_desc": "Vẽ mặt nạ và mô tả nội dung thay thế vùng được che.",
-  "designer_ai_outpaint_desc": "Mở rộng hình ảnh đã chọn hoặc toàn bộ trang ra ngoài ranh giới hiện tại."
+  "designer_ai_outpaint_desc": "Mở rộng hình ảnh đã chọn hoặc toàn bộ trang ra ngoài ranh giới hiện tại.",
+  "designer_focal_preview": "Xem trước điểm lấy nét",
+  "designer_focal_cover_hint": "Điểm lấy nét áp dụng khi ảnh bị cắt (Cover).",
+  "designer_focal_explicit_crop_hint": "Đặt lại phần cắt rõ ràng bên dưới để điều chỉnh điểm lấy nét.",
+  "designer_focal_quick_positions": "Vị trí lấy nét nhanh",
+  "designer_focal_quick_position": "Đặt điểm lấy nét: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "X lấy nét (%)",
+  "designer_focal_y_percent": "Y lấy nét (%)",
+  "designer_reset_focal_format": "Đặt lại điểm lấy nét (định dạng này)",
+  "designer_format_crops": "Phần cắt theo định dạng",
+  "designer_format_crop_preview": "Xem trước phần cắt {{format}}",
+  "designer_reset_focal_zoom": "Đặt lại thu phóng xem trước"
 }

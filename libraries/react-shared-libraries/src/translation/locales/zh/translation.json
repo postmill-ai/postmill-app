@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "将所选图片的分辨率提高 2 倍或 4 倍。",
   "designer_ai_image_to_image_desc": "以所选图片为源，通过提示词进行转换。",
   "designer_ai_inpaint_desc": "绘制蒙版并描述要替换蒙版区域的内容。",
-  "designer_ai_outpaint_desc": "将所选图片或整个页面扩展到当前边界之外。"
+  "designer_ai_outpaint_desc": "将所选图片或整个页面扩展到当前边界之外。",
+  "designer_focal_preview": "焦点预览",
+  "designer_focal_cover_hint": "焦点仅在裁剪图像时（Cover）应用。",
+  "designer_focal_explicit_crop_hint": "重置下方的明确裁剪以调整焦点。",
+  "designer_focal_quick_positions": "快速焦点位置",
+  "designer_focal_quick_position": "设置焦点：{{x}}%、{{y}}%",
+  "designer_focal_x_percent": "焦点 X（%）",
+  "designer_focal_y_percent": "焦点 Y（%）",
+  "designer_reset_focal_format": "重置焦点（此格式）",
+  "designer_format_crops": "格式裁剪",
+  "designer_format_crop_preview": "{{format}} 裁剪预览",
+  "designer_reset_focal_zoom": "重置预览缩放"
 }

@@ -280,6 +280,14 @@ export const useLoadedImage = (src: string | undefined) => {
 const isBitmapLayer = (el: DesignerElement): boolean =>
   (el.type === 'image' || el.type === 'raster') && !!el.src;
 
+const mediaPaintKey = (el: DesignerElement): string =>
+  JSON.stringify([
+    el.fitMode || 'fill',
+    el.focalPoint?.x ?? 0.5,
+    el.focalPoint?.y ?? 0.5,
+    el.crop ? [el.crop.x, el.crop.y, el.crop.width, el.crop.height] : null,
+  ]);
+
 /**
  * A per-layer cache-key fragment: identity for every layer, plus src and load
  * state for bitmap layers. `isReady` is injectable so specs can drive the
@@ -642,6 +650,7 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
   });
   const drawBox = geometry.destination;
   const crop = geometry.source;
+  const mediaKey = mediaPaintKey(element);
 
   useEffect(() => {
     const node = imageRef.current;
@@ -684,7 +693,7 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
       node.cache();
       node.getLayer()?.batchDraw();
     }
-  }, [filterKey, image, element.filters?.length]);
+  }, [filterKey, image, mediaKey, element.filters?.length]);
 
   const textMask = element.mask?.type === 'text' ? element.mask : undefined;
   const shapeMask = element.mask?.type === 'shape' ? element.mask : undefined;
@@ -947,18 +956,20 @@ const MaskedLeaf: FC<{
 };
 
 /**
- * One layer's geometry as a cache-key fragment.
+ * One layer's geometry and media crop as a cache-key fragment.
  *
  * Folded into a layer's OWN wrapper keys (and into the key of any cached
  * scope that folds the layer in), so a wrapper re-rasterises when the layer
- * it buffers actually moves — and only then. During a drag the ephemeral
- * store writes re-render per rAF frame, so the dragged element's own cached
- * wrappers track the frame live while every other layer's key (and buffer)
- * stays put. Mirrors `geometrySignature` in use-geometry-nonce.ts.
+ * it buffers moves or paints another source window — and only then. During
+ * a drag the ephemeral store writes re-render per rAF frame, so the dragged
+ * element's own cached wrappers track the frame live while every other
+ * layer's key (and buffer) stays put. Mirrors `geometrySignature` in
+ * use-geometry-nonce.ts.
  */
 const leafGeometryKey = (el: DesignerElement): string =>
   `${el.x},${el.y},${el.width},${el.height},${el.rotation ?? 0}` +
-  `,${el.flipX ? 1 : 0},${el.flipY ? 1 : 0}`;
+  `,${el.flipX ? 1 : 0},${el.flipY ? 1 : 0}` +
+  (isBitmapLayer(el) ? `:${mediaPaintKey(el)}` : '');
 
 /**
  * The StyledLayer cache key for a leaf.

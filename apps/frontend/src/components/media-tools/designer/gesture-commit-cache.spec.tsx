@@ -213,6 +213,61 @@ describe('drag-tracking cache refresh', () => {
     expect(callsOn(scope)).toBe(mountCalls + 2);
   });
 
+  it('re-rasterises a styled image when only its focal point changes', async () => {
+    const cacheSpy = vi.spyOn(Konva.Group.prototype, 'cache');
+    const callsOn = (node: Konva.Node) =>
+      cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
+    const focused = {
+      ...styledImage,
+      fitMode: 'cover',
+      focalPoint: { x: 0.1, y: 0.5 },
+    } as DesignerElement;
+
+    await renderTree([focused, otherStyledImage], 0);
+    const styled = cachedAncestor('img-1');
+    const bystander = cachedAncestor('img-2');
+    const before = cacheCanvas(styled);
+    const bystanderBefore = cacheCanvas(bystander);
+    const mountCalls = callsOn(styled);
+    const bystanderMountCalls = callsOn(bystander);
+
+    await renderTree([
+      { ...focused, focalPoint: { x: 0.9, y: 0.5 } },
+      otherStyledImage,
+    ], 0);
+
+    expect(callsOn(styled)).toBe(mountCalls + 1);
+    expect(cacheCanvas(styled)).not.toBe(before);
+    expect(callsOn(bystander)).toBe(bystanderMountCalls);
+    expect(cacheCanvas(bystander)).toBe(bystanderBefore);
+  });
+
+  it('re-caches a filtered Image node when only its focal point changes', async () => {
+    const cacheSpy = vi.spyOn(Konva.Image.prototype, 'cache');
+    const callsOn = (node: Konva.Node) =>
+      cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
+    const filtered = {
+      ...plainImage,
+      filters: ['brightness:1.1'],
+      fitMode: 'cover',
+      focalPoint: { x: 0.1, y: 0.5 },
+    } as DesignerElement;
+
+    await renderTree([filtered], 0);
+    const group = stageRef!.findOne('#img-1');
+    const node = group!.findOne<Konva.Image>('Image');
+    expect(node).toBeTruthy();
+    expect(node!.filters().length).toBeGreaterThan(0);
+    const before = cacheCanvas(node!);
+    expect(before).not.toBeNull();
+    const mountCalls = callsOn(node!);
+
+    await renderTree([{ ...filtered, focalPoint: { x: 0.9, y: 0.5 } }], 0);
+
+    expect(callsOn(node!)).toBe(mountCalls + 1);
+    expect(cacheCanvas(node!)).not.toBe(before);
+  });
+
   it('a wrapper whose contents did NOT move keeps its buffer across the commit bump only', async () => {
     // Sanity on the other direction: with no geometry change and no nonce
     // bump, a plain re-render must not re-rasterise anything.

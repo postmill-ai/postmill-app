@@ -5154,5 +5154,16 @@
   "designer_ai_upscale_desc": "選択した画像の解像度を2倍または4倍にします。",
   "designer_ai_image_to_image_desc": "選択した画像をソースにして、プロンプトで変換します。",
   "designer_ai_inpaint_desc": "マスクを描き、マスク領域に置き換える内容を説明します。",
-  "designer_ai_outpaint_desc": "選択した画像またはページ全体を現在の境界の外側に拡張します。"
+  "designer_ai_outpaint_desc": "選択した画像またはページ全体を現在の境界の外側に拡張します。",
+  "designer_focal_preview": "焦点のプレビュー",
+  "designer_focal_cover_hint": "焦点は画像がクロップされる場合（Cover）に適用されます。",
+  "designer_focal_explicit_crop_hint": "焦点を調整するには、下の明示的なクロップをリセットしてください。",
+  "designer_focal_quick_positions": "焦点のクイック位置",
+  "designer_focal_quick_position": "焦点を設定：{{x}}%、{{y}}%",
+  "designer_focal_x_percent": "焦点 X（%）",
+  "designer_focal_y_percent": "焦点 Y（%）",
+  "designer_reset_focal_format": "フォーカルポイントをリセット（このフォーマット）",
+  "designer_format_crops": "フォーマットのクロップ",
+  "designer_format_crop_preview": "{{format}} のクロッププレビュー",
+  "designer_reset_focal_zoom": "プレビューのズームをリセット"
 }

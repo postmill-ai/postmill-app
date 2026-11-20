@@ -5158,5 +5158,16 @@
   "designer_ai_upscale_desc": "Увеличьте разрешение выбранного изображения в 2 или 4 раза.",
   "designer_ai_image_to_image_desc": "Преобразуйте выбранное изображение по запросу, используя его как источник.",
   "designer_ai_inpaint_desc": "Нарисуйте маску и опишите, что должно заменить замаскированную область.",
-  "designer_ai_outpaint_desc": "Расширьте выбранное изображение или всю страницу за её текущие границы."
+  "designer_ai_outpaint_desc": "Расширьте выбранное изображение или всю страницу за её текущие границы.",
+  "designer_focal_preview": "Предпросмотр фокальной точки",
+  "designer_focal_cover_hint": "Фокальная точка применяется при кадрировании изображения (Cover).",
+  "designer_focal_explicit_crop_hint": "Сбросьте явное кадрирование ниже, чтобы настроить фокальную точку.",
+  "designer_focal_quick_positions": "Быстрые положения фокуса",
+  "designer_focal_quick_position": "Установить фокальную точку: {{x}}%, {{y}}%",
+  "designer_focal_x_percent": "Фокус X (%)",
+  "designer_focal_y_percent": "Фокус Y (%)",
+  "designer_reset_focal_format": "Сбросить точку фокуса (этот формат)",
+  "designer_format_crops": "Кадрирование форматов",
+  "designer_format_crop_preview": "Предпросмотр кадрирования {{format}}",
+  "designer_reset_focal_zoom": "Сбросить масштаб предпросмотра"
 }
