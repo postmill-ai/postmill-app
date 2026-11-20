@@ -207,6 +207,55 @@ describe('clipGeometryUpdate', () => {
     }
   });
 
+  it('does not repeat an earlier base move when editing tagged frames', () => {
+    const preset = (name: string) => TEXT_ANIMATION_PRESETS.find((item) => item.name === name)!;
+    for (const { names, times } of [
+      { names: ['Slide In Left', 'Shake'], times: [0, 100] },
+      { names: ['Fade Up', 'Pulse', 'Fade Out'], times: [0, 300] },
+    ]) {
+      const base = clip({ startMs: 0, endMs: 5000, x: 100, y: 200, width: 200, height: 100 });
+      const combined = names.reduce(
+        (current, name) => ({ ...current, ...buildTextAnimationUpdate(preset(name), current) }),
+        base
+      );
+      const beforeMove = interpolateKeyframes(combined, 3000);
+      const moved = {
+        ...combined,
+        ...clipGeometryUpdate(
+          combined,
+          beforeMove,
+          { ...beforeMove, x: beforeMove.x + 20, y: beforeMove.y + 20 },
+          3000
+        ),
+      };
+
+      for (const tMs of times) {
+        const before = interpolateKeyframes(moved, tMs);
+        const update = clipGeometryUpdate(moved, before, { ...before, x: before.x + 5 }, tMs);
+        const updated = { ...moved, ...update };
+        const after = interpolateKeyframes(updated, tMs);
+        expect(after.x, `${names.join(' + ')} drag at ${tMs}ms`).toBeCloseTo(before.x + 5, 6);
+        expect(after.y, `${names.join(' + ')} drag y at ${tMs}ms`).toBeCloseTo(before.y, 6);
+        expect(updated.keyframes!.map((frame) => frame.animationPreset)).toEqual(
+          moved.keyframes!.map((frame) => frame.animationPreset)
+        );
+      }
+
+      const before = interpolateKeyframes(moved, 0);
+      const update = clipGeometryUpdate(
+        moved,
+        before,
+        { ...before, width: before.width * 1.2 },
+        0
+      );
+      const updated = { ...moved, ...update };
+      const after = interpolateKeyframes(updated, 0);
+      expect(after.width, `${names.join(' + ')} resize`).toBeCloseTo(before.width * 1.2, 6);
+      expect(after.x, `${names.join(' + ')} resize x`).toBeCloseTo(before.x, 6);
+      expect(after.y, `${names.join(' + ')} resize y`).toBeCloseTo(before.y, 6);
+    }
+  });
+
   it('prefers the manual frame at a shared playhead timestamp', () => {
     const preset = TEXT_ANIMATION_PRESETS.find((item) => item.name === 'Fade Up')!;
     const base = clip({

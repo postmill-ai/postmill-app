@@ -561,7 +561,8 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   opacity factors, so one category never resets another's properties. Untagged manual frames always use
   legacy whole-frame interpolation and override composed values for properties they animate. Every edit,
   retime, easing change and clipboard merge targets timestamp PLUS preset identity, never timestamp alone.
-  Canvas geometry gestures translate the requested rendered delta into the target category's local values.
+  Canvas geometry gestures translate the requested rendered delta into the target category's local values,
+  then convert them back to stored values with the inverse of the current-base/preset-base composition.
   Each preset keeps its authoring base in `animationPreset.base`; composition uses that snapshot against
   the current clip base, so later X/Y/size/rotation edits never reverse or amplify a gesture.
   Zoom/pulse frames compensate x/y to preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and

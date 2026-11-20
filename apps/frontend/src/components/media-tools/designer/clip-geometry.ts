@@ -343,20 +343,37 @@ export const clipGeometryUpdate = (
         ...clip,
         keyframes: keyframes.filter((frame) => frame.animationPreset?.category === category),
       }, relativeMs);
+      const currentBase = {
+        x: clip.x ?? 0,
+        y: clip.y ?? 0,
+        width: clip.width ?? 1,
+        height: clip.height ?? 1,
+        rotation: clip.rotation ?? 0,
+        fontSize: clip.fontSize ?? 16,
+      };
+      const presetBase = { ...currentBase, ...kf.animationPreset.base };
+      const stored = {
+        x: local.x - currentBase.x + presetBase.x,
+        y: local.y - currentBase.y + presetBase.y,
+        width: local.width * presetBase.width / Math.max(0.0001, currentBase.width),
+        height: local.height * presetBase.height / Math.max(0.0001, currentBase.height),
+        rotation: local.rotation - currentBase.rotation + presetBase.rotation,
+        fontSize: local.fontSize * presetBase.fontSize / Math.max(0.0001, currentBase.fontSize),
+      };
       next[index] = {
         ...kf,
         props: {
           ...kf.props,
-          x: local.x + dx,
-          y: local.y + dy,
-          width: local.width * after.width / Math.max(0.0001, before.width),
-          height: local.height * after.height / Math.max(0.0001, before.height),
-          rotation: local.rotation + dr,
+          x: stored.x + dx,
+          y: stored.y + dy,
+          width: stored.width * after.width / Math.max(0.0001, before.width),
+          height: stored.height * after.height / Math.max(0.0001, before.height),
+          rotation: stored.rotation + dr,
           ...(scaleFont
             ? {
                 fontSize: Math.min(
                   MAX_FONT_SIZE,
-                  Math.max(MIN_FIT_FONT_SIZE, Math.round(local.fontSize * fontScale))
+                  Math.max(MIN_FIT_FONT_SIZE, Math.round(stored.fontSize * fontScale))
                 ),
               }
             : {}),
