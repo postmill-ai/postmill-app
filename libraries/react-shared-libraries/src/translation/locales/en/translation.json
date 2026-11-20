@@ -4895,7 +4895,7 @@
   "designer_focal_quick_position": "Set focal point: {{x}}%, {{y}}%",
   "designer_focal_x_percent": "Focal X (%)",
   "designer_focal_y_percent": "Focal Y (%)",
-  "designer_reset_focal_format": "Reset this format",
+  "designer_reset_focal_format": "Reset focal point (this format)",
   "designer_format_crops": "Format crops",
   "designer_format_crop_preview": "{{format}} crop preview",
   "designer_reset_focal_zoom": "Reset preview zoom"

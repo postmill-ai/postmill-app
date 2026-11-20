@@ -4895,7 +4895,7 @@
   "designer_focal_quick_position": "Brandpunt instellen: {{x}}%, {{y}}%",
   "designer_focal_x_percent": "Brandpunt X (%)",
   "designer_focal_y_percent": "Brandpunt Y (%)",
-  "designer_reset_focal_format": "Dit formaat herstellen",
+  "designer_reset_focal_format": "Focuspunt herstellen (dit formaat)",
   "designer_format_crops": "Formaatuitsneden",
   "designer_format_crop_preview": "Uitsnedevoorbeeld van {{format}}",
   "designer_reset_focal_zoom": "Voorbeeldzoom herstellen"

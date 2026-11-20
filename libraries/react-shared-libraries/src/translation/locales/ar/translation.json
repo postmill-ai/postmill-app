@@ -4900,7 +4900,7 @@
   "designer_focal_quick_position": "تعيين النقطة المحورية: {{x}}%، {{y}}%",
   "designer_focal_x_percent": "X للنقطة المحورية (%)",
   "designer_focal_y_percent": "Y للنقطة المحورية (%)",
-  "designer_reset_focal_format": "إعادة تعيين هذا التنسيق",
+  "designer_reset_focal_format": "إعادة تعيين نقطة التركيز (هذا التنسيق)",
   "designer_format_crops": "اقتصاصات التنسيقات",
   "designer_format_crop_preview": "معاينة اقتصاص {{format}}",
   "designer_reset_focal_zoom": "إعادة تعيين تكبير المعاينة"

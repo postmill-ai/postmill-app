@@ -4896,7 +4896,7 @@
   "designer_focal_quick_position": "焦点を設定：{{x}}%、{{y}}%",
   "designer_focal_x_percent": "焦点 X（%）",
   "designer_focal_y_percent": "焦点 Y（%）",
-  "designer_reset_focal_format": "このフォーマットをリセット",
+  "designer_reset_focal_format": "フォーカルポイントをリセット（このフォーマット）",
   "designer_format_crops": "フォーマットのクロップ",
   "designer_format_crop_preview": "{{format}} のクロッププレビュー",
   "designer_reset_focal_zoom": "プレビューのズームをリセット"

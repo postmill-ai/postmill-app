@@ -4898,7 +4898,7 @@
   "designer_focal_quick_position": "Установить фокальную точку: {{x}}%, {{y}}%",
   "designer_focal_x_percent": "Фокус X (%)",
   "designer_focal_y_percent": "Фокус Y (%)",
-  "designer_reset_focal_format": "Сбросить этот формат",
+  "designer_reset_focal_format": "Сбросить точку фокуса (этот формат)",
   "designer_format_crops": "Кадрирование форматов",
   "designer_format_crop_preview": "Предпросмотр кадрирования {{format}}",
   "designer_reset_focal_zoom": "Сбросить масштаб предпросмотра"

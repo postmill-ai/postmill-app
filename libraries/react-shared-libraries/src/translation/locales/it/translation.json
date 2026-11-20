@@ -4896,7 +4896,7 @@
   "designer_focal_quick_position": "Imposta punto focale: {{x}}%, {{y}}%",
   "designer_focal_x_percent": "X focale (%)",
   "designer_focal_y_percent": "Y focale (%)",
-  "designer_reset_focal_format": "Reimposta questo formato",
+  "designer_reset_focal_format": "Reimposta punto focale (questo formato)",
   "designer_format_crops": "Ritagli dei formati",
   "designer_format_crop_preview": "Anteprima ritaglio di {{format}}",
   "designer_reset_focal_zoom": "Reimposta lo zoom dell’anteprima"

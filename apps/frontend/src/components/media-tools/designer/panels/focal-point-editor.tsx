@@ -397,7 +397,7 @@ export const FocalPointEditor: React.FC<FocalPointEditorProps> = ({ element, ids
               className="text-[10px] text-btnPrimaryAccent"
               onClick={() => setFocal(DEFAULT_FOCAL)}
             >
-              {t('designer_reset_focal_format', 'Reset this format')}
+              {t('designer_reset_focal_format', 'Reset focal point (this format)')}
             </button>
           </div>
         </>

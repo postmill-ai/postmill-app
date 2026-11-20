@@ -4896,7 +4896,7 @@
   "designer_focal_quick_position": "Đặt điểm lấy nét: {{x}}%, {{y}}%",
   "designer_focal_x_percent": "X lấy nét (%)",
   "designer_focal_y_percent": "Y lấy nét (%)",
-  "designer_reset_focal_format": "Đặt lại định dạng này",
+  "designer_reset_focal_format": "Đặt lại điểm lấy nét (định dạng này)",
   "designer_format_crops": "Phần cắt theo định dạng",
   "designer_format_crop_preview": "Xem trước phần cắt {{format}}",
   "designer_reset_focal_zoom": "Đặt lại thu phóng xem trước"

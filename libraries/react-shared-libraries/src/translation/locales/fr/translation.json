@@ -4896,7 +4896,7 @@
   "designer_focal_quick_position": "Définir le point focal : {{x}} %, {{y}} %",
   "designer_focal_x_percent": "X focal (%)",
   "designer_focal_y_percent": "Y focal (%)",
-  "designer_reset_focal_format": "Réinitialiser ce format",
+  "designer_reset_focal_format": "Réinitialiser le point focal (ce format)",
   "designer_format_crops": "Recadrages par format",
   "designer_format_crop_preview": "Aperçu du recadrage {{format}}",
   "designer_reset_focal_zoom": "Réinitialiser le zoom de l’aperçu"

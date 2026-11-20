@@ -380,7 +380,7 @@ test('focal editor changes cached canvas crops and preserves per-format settings
   await page.getByRole('radio', { name: 'Cover', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('80');
 
-  await page.getByRole('button', { name: 'Reset this format' }).click();
+  await page.getByRole('button', { name: 'Reset focal point (this format)', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Focal X (%)' })).toHaveValue('50');
   await page.getByRole('button', { name: 'Set focal point: 100%, 50%' }).click();
   outputs = await persist();

@@ -4896,7 +4896,7 @@
   "designer_focal_quick_position": "Fokuspunkt festlegen: {{x}} %, {{y}} %",
   "designer_focal_x_percent": "Fokus X (%)",
   "designer_focal_y_percent": "Fokus Y (%)",
-  "designer_reset_focal_format": "Dieses Format zurücksetzen",
+  "designer_reset_focal_format": "Fokuspunkt zurücksetzen (dieses Format)",
   "designer_format_crops": "Formatzuschnitte",
   "designer_format_crop_preview": "Zuschnittvorschau für {{format}}",
   "designer_reset_focal_zoom": "Vorschauzoom zurücksetzen"

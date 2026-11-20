@@ -157,7 +157,7 @@ describe('FocalPointEditor', () => {
   it('resets only the focal point for the current selection', () => {
     const { store } = makeStore();
     render(<FocalPointEditor element={image} ids={[image.id]} store={store} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Reset this format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset focal point (this format)' }));
     expect(store.getState().updateElements).toHaveBeenCalledWith([image.id], {
       focalPoint: { x: 0.5, y: 0.5 },
     });
@@ -192,7 +192,7 @@ describe('FocalPointEditor', () => {
     const { store } = makeStore(element);
     render(<FocalPointEditor element={element} ids={[element.id]} store={store} />);
     expect(screen.getByText('Reset the explicit Crop below to adjust the focal point.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Reset this format' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reset focal point (this format)' })).toBeNull();
     expect(store.getState().updateElements).not.toHaveBeenCalled();
   });
 
