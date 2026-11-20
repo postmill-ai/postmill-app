@@ -147,6 +147,22 @@ describe('smartReflow with preset safe zones', () => {
     expect(result.y).toBe(80);
   });
 
+  it('scales current and previous auto-fit minima with the same type basis', () => {
+    const result = smartReflow(
+      {
+        ...headlineEl,
+        autoFit: true,
+        autoFitMinFontSize: 24,
+        autoFitPreviousMinFontSize: 18,
+      },
+      squareSource,
+      storyTarget
+    );
+    expect(result.fontSize).toBe(96);
+    expect(result.autoFitMinFontSize).toBe(32);
+    expect(result.autoFitPreviousMinFontSize).toBe(24);
+  });
+
   it('keeps a bottom-anchored element above the bottom overlay', () => {
     const el: DesignerElement = { ...headlineEl, anchor: 'bottom-center' };
     const result = smartReflow(el, squareSource, storyTarget);

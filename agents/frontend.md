@@ -234,9 +234,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   IS page 1; `output.pages[0..n]` are the extra pages (`{ id, name?, background?, children[] }` — no
   size: pages inherit their output's canvas, capped at `MAX_PAGES_PER_OUTPUT`). This is one document
   model, not a separate carousel doc type. **View → Pages / Carousel** opens the side-by-side strip;
-  Carousel can insert after any slide and delete slide 1 by promoting the next slide (`allowFirst`),
-  while ordinary Pages keeps the base-slot deletion restriction. Selection/reorder/duplicate/delete/
-  insert each commit one Undo. Shared accessors live in `designer-doc/designer-doc.pages.ts`
+  adding or duplicating page content also reopens it after a saved hide override by clearing that
+  override, not by saving an always-on preference. Every page has
+  right-click and always-visible three-dot actions. Carousel can insert after any slide and delete
+  slide 1 by promoting the next slide (`allowFirst`), while ordinary Pages keeps the base-slot
+  deletion restriction. Selection/reorder/duplicate/delete/insert each commit one Undo. Page
+  duplication fresh-mints element/origin ids and consistently remaps `parentId`/`groupId`. Shared
+  accessors live in `designer-doc/designer-doc.pages.ts`
   (`pageChildren`/`withPageChildren`/`pageBackground`/`appendPage`/`removePageAt`) — never read
   `output.children` directly in an editing surface. Headless `addPage` accepts `afterPageNumber`, and
   `removePage` accepts `allowFirst`. Linked-edit (`originId`) propagation across outputs is a
@@ -277,7 +281,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   black pixels remain valid.
   `renderPage` still rejects video outputs.
 - **Formats can be linked or independent.** Add Formats defaults to linked content; independent
-  copies use fresh ids without shared `originId`s for static pages/elements and video clips. The
+  copies use fresh ids without shared `originId`s for static pages/elements and video clips. Format
+  right-click/three-dot menus also expose explicit linked and independent duplication through the
+  store's `duplicateOutput`; unlike Add Format, duplication preserves dimensions and geometry exactly,
+  including every static page or video track/clip, while fresh-minting local ids and remapping groups.
+  Linked static duplication shares page-one origins only; independent duplication removes origins and
+  receives a fresh `contentLinkGroup`. Each copy inserts after its source with one Undo. The
   store and headless `addOutput` op both accept `linkContent: false`; omitting it preserves linked
   behavior, and Undo adds/removes the whole format. The store seeds from the ACTIVE output (including
   its pages); a frozen source is allowed unless linked copying would need to backfill its missing
@@ -309,7 +318,9 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `renderLibraryPreview`, which retains the original full-size stage before scaling the final JPEG.
 - **Output freeze is distinct from layer/track lock.** Optional-additive `output.frozen` is valid on
   v13 without a version bump (and remains additive when a later version lands). Snowflakes switch
-  the flag through `setOutputFrozen` (store and headless op); switching output, exporting, and
+  the flag through `setOutputFrozen` (store and headless op), and frozen tabs carry a visible Frozen
+  label/tint. Duplication creates an editable unfrozen copy; linked duplication still cannot backfill
+  a frozen source's missing origins. Switching output, exporting, and
   read-only clip/keyframe clipboard copies remain available. `output-freeze.ts` performs
   reference-fast, key-order-insensitive checks (including referenced symbol definitions) for the
   store's boolean-returning guarded actions and `DesignerDocService.applyOps`. Frozen
@@ -384,6 +395,21 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   box keeps its geometry; an unshrunk box grows through the same bounded helper so each increase paints
   at the new size. Unset caption sizes start at the renderer's 28px fallback. Inline blur serialization
   applies shortcut deltas instead of restoring stale run sizes.
+- **Text defaults and auto-fit are output-aware and opt-in.** `add-text.ts` scales every new-text
+  preset and measured starting box through `textStyleScale`/`typeBasisPx`, including video text;
+  this creation/preset scale is clamped to 0.5–4, while linked copies deliberately keep the
+  unclamped `typeScaleRatio` so existing variants remain proportional. Context-menu insertion must
+  use that same helper. Static elements carry optional `autoFit` and
+  `autoFitMinFontSize`: absent preserves legacy height-only fitting, explicit false disables
+  shrinking, and true uses shared `fit-text.ts` layout to fit both dimensions (including long
+  unbroken words and straight rich runs) without changing the authored box. The minimum defaults to
+  8px, never grows small runs, and scales with linked/reflowed/corner-resized variants. The Inspector
+  persists the pre-enable state in optional `autoFitPrevious` (`null` means absent) and
+  `autoFitPreviousMinFontSize`, so disabling after deselection, reload or collaboration restores the
+  exact earlier behavior; the saved minimum scales with the same geometry rules, both snapshot fields
+  clear on restore, and neither is read by renderers. Auto-fit font-size edits change only the authored ceiling. Konva,
+  node-canvas, SVG, preflight, previews and Bulk Create consume the shared result; curved/on-path and
+  video/caption layout stay separate.
 - **Desktop/mobile workspace shares one store and tool registry.** Desktop docks Inspector, Layers,
   Brand, and AI in `workspace-panel.tsx` using `OverflowTabs`; AI and Brand mount on their first visible
   activation, then stay mounted under hidden wrappers so results and in-flight work survive tab and
@@ -401,6 +427,20 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   growth cannot move an active clip drag; without a sheet, the canvas retains its flexible sizing. Long sheet
   bodies scroll independently and Brand mounts only in its active mobile layout. Mobile keeps design rename
   and timeline collapse/zoom-to-fit available.
+- **Inspector is task-tabbed per element category** (`panels/inspector-tabs.tsx`): image gets
+  Layout | Style | AI Tools, text gets Layout | Text | Effects, shape/path/raster/icon/symbol/fill/group/mixed
+  get Layout | Style, and adjustment gets Layout | Adjust. `inspector-panel.tsx` owns the sticky
+  `OverflowTabs` bar (below the always-visible Linked/Unlink row) and the category discriminator;
+  each inspector takes a `tab` prop and wraps its controls in `InspectorTabGroup`s, which hide inactive
+  groups with `hidden` instead of unmounting — in-flight AI jobs, mask canvases, rich-text selection and
+  control drafts survive tab switches. Each group is a labeled `tabpanel` linked to its tab's stable
+  per-Inspector ID. `CommonInspector` splits geometry/alignment/layer order (Layout)
+  from opacity/blend (`styleTab`: Style normally, Effects for text, Adjust for adjustment layers), and the
+  shared `EffectsList` lives on Effects for text and Style elsewhere. Every control keeps exactly one
+  primary home. Active tab and `InspectorSection` collapse state persist per category per org in
+  localStorage (`designer-inspector-tabs-<orgId>`), hydrated in a microtask that merges under any earlier
+  click; selection changes never write the preference, so they cannot force a tab. Sections collapse
+  through `Disclosure`'s `keepMounted` mode, never by unmounting draft-holding bodies.
 - **Timeline gestures and exact timing.** Clip move/trim and ruler scrub use `trySetPointerCapture`
   from `pointer-capture.ts` (an inactive pointer returns false instead of throwing; every Designer
   capture call goes through it), with pointer-id checks, cancellation/lost-capture handling, and

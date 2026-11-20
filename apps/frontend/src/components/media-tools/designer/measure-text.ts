@@ -1,9 +1,12 @@
 import {
   applyTextTransform,
+  fitRichTextToBox,
   fitTextToBox,
   measureLineWidth,
   wrapTextLines,
+  type FittedRichText,
   type FittedText,
+  type MeasureRichRun,
   type MeasureText,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import type { DesignerElement } from './designer.store';
@@ -69,11 +72,55 @@ export const fitDesignerText = (el: DesignerElement): FittedText | null => {
       textTransform: el.textTransform,
       paragraphSpacing: el.paragraphSpacing,
       firstLineIndent: el.firstLineIndent,
+      autoFit: el.autoFit,
+      minFontSize: el.autoFitMinFontSize,
     },
     (line, size) => {
       ctx.font = fontShorthand(el, size);
       return ctx.measureText(line).width;
     }
+  );
+};
+
+export const measureForRichText = (
+  el: DesignerElement
+): MeasureRichRun | undefined => {
+  const ctx = getMeasureCtx();
+  if (!ctx) return undefined;
+  return (text, run) => {
+    ctx.font = fontShorthand({ ...el, ...run } as DesignerElement, run.fontSize);
+    return ctx.measureText(text).width;
+  };
+};
+
+export const fitDesignerRichText = (el: DesignerElement): FittedRichText | null => {
+  if (
+    el.type !== 'text' ||
+    el.autoFit !== true ||
+    !el.richText?.length ||
+    el.textPath ||
+    (el.curve || 0) !== 0 ||
+    !(el.width > 0) ||
+    !(el.height > 0)
+  ) {
+    return null;
+  }
+  const measure = measureForRichText(el);
+  if (!measure) return null;
+  return fitRichTextToBox(
+    {
+      text: el.text ?? '',
+      width: el.width,
+      height: el.height,
+      fontSize: el.fontSize || 16,
+      lineHeight: el.lineHeight,
+      letterSpacing: el.letterSpacing,
+      align: el.align,
+      autoFit: true,
+      minFontSize: el.autoFitMinFontSize,
+    },
+    el.richText,
+    measure
   );
 };
 
@@ -102,7 +149,7 @@ const boxPatchFor = (
   bounds?: { width: number; height: number },
   shrinkHeight = false
 ): Partial<DesignerElement> => {
-  if (!element || element.type !== 'text') return {};
+  if (!element || element.type !== 'text' || element.autoFit === true) return {};
   if (element.richText?.length || element.textPath || (element.curve || 0) !== 0) {
     return {};
   }
@@ -185,7 +232,7 @@ export const fitStyleBoxFor = (
  * had to shrink, otherwise the authored one.
  */
 export const fittedFontSize = (el: DesignerElement): number =>
-  fitDesignerText(el)?.fontSize ?? el.fontSize ?? 16;
+  fitDesignerText(el)?.fontSize ?? fitDesignerRichText(el)?.fontSize ?? el.fontSize ?? 16;
 
 /** Slack either side of the measured glyphs so a new box never wraps on itself. */
 const NEW_TEXT_PADDING_PX = 8;
@@ -203,6 +250,8 @@ export interface NewTextSpec {
   letterSpacing?: number;
   /** Horizontal scale, so a condensed box is born the width it will paint. */
   textScaleX?: number;
+  /** Type-basis scale for the box's padding. */
+  paddingScale?: number;
 }
 
 /**
@@ -241,7 +290,10 @@ export const defaultTextBox = (
   textWidth *= spec.textScaleX || 1;
 
   return {
-    width: Math.max(1, Math.ceil(textWidth + NEW_TEXT_PADDING_PX * 2)),
+    width: Math.max(
+      1,
+      Math.ceil(textWidth + NEW_TEXT_PADDING_PX * 2 * (spec.paddingScale ?? 1))
+    ),
     height,
   };
 };

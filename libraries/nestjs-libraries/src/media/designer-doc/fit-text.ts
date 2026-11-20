@@ -1,3 +1,5 @@
+import type { TextRun } from './designer-doc.schema';
+
 /**
  * Flat-text wrapping and shrink-to-fit, shared by the server-side renderer
  * (`design-render.service.ts`) and the Designer canvas (`elements.tsx`).
@@ -122,15 +124,22 @@ export interface FitTextBox {
   /** Applied before wrapping, because case changes the measurement. */
   textTransform?: TextTransform;
   /**
-   * Absolute floor for the shrink loop, overriding the default
-   * `max(8, 60% of authored)`. The AI composer's role floors are absolute
-   * pixel values; without this it could not reuse the shared fitter.
+   * Absolute floor for the shrink loop. Legacy fitting defaults to
+   * `max(8, 60% of authored)`; opt-in auto-fit defaults to 8px. The AI
+   * composer's role floors are absolute pixel values.
    */
   minFontSize?: number;
   /** Extra leading before each paragraph after the first, in px. */
   paragraphSpacing?: number;
   /** First-line indent of each paragraph, in px. */
   firstLineIndent?: number;
+  /** Rich-run alignment; flat alignment is applied by the renderer. */
+  align?: 'left' | 'center' | 'right' | 'justify';
+  /**
+   * True fits both dimensions; false disables shrinking. Undefined retains the
+   * legacy height-only behavior so existing documents render unchanged.
+   */
+  autoFit?: boolean;
 }
 
 export interface FittedText {
@@ -155,10 +164,10 @@ export interface FittedText {
 }
 
 /**
- * Wrap `text` at `width`, then step the font down 10% at a time — floored at
- * 60% of the authored size, or 8px, whichever is larger — until the wrapped
- * block fits `height`. Text is only ever shrunk, never grown: the authored
- * `fontSize` is the ceiling.
+ * Wrap `text` at `width`. Legacy/absent auto-fit steps down 10% at a time to
+ * the legacy 60%/8px floor for height; explicit true also fits line widths and
+ * defaults to the absolute 8px floor; explicit false keeps the authored size.
+ * Text is only ever shrunk, never grown: `fontSize` is always the ceiling.
  */
 export const fitTextToBox = (
   box: FitTextBox,
@@ -166,10 +175,13 @@ export const fitTextToBox = (
 ): FittedText => {
   const lineHeightFactor = box.lineHeight || DEFAULT_LINE_HEIGHT;
   const letterSpacing = box.letterSpacing || 0;
-  const floor =
+  const requestedFloor =
     box.minFontSize !== undefined
       ? Math.max(1, Math.floor(box.minFontSize))
+      : box.autoFit === true
+      ? MIN_FIT_FONT_SIZE
       : Math.max(MIN_FIT_FONT_SIZE, Math.floor(box.fontSize * FIT_FLOOR_RATIO));
+  const floor = Math.min(box.fontSize, requestedFloor);
   let size = box.fontSize;
   const scaleX = box.scaleX || 1;
   const paragraphSpacing = box.paragraphSpacing || 0;
@@ -206,8 +218,17 @@ export const fitTextToBox = (
     return base + Math.max(0, extra) * paragraphSpacing;
   };
 
+  const overflows = (lines: string[], px: number): boolean => {
+    if (blockHeight(lines, px) > box.height) return true;
+    if (box.autoFit !== true) return false;
+    const available = Math.max(1, box.width - indent);
+    return lines.some(
+      (line) => measureLineWidth(line, px, letterSpacing, measure, scaleX) > available
+    );
+  };
+
   let lines = wrapAt(size);
-  while (size > floor && blockHeight(lines, size) > box.height) {
+  while (box.autoFit !== false && size > floor && overflows(lines, size)) {
     size = Math.max(floor, Math.floor(size * FIT_STEP_RATIO));
     lines = wrapAt(size);
   }
@@ -221,6 +242,205 @@ export const fitTextToBox = (
     lineIndents: starts.map((start) => (start ? indent : 0)),
     paragraphStarts: starts,
   };
+};
+
+export type ResolvedTextRun = TextRun & { fontSize: number };
+export type MeasureRichRun = (text: string, run: ResolvedTextRun) => number;
+
+export interface RichTextLayoutOptions {
+  width: number;
+  fontSize: number;
+  lineHeight?: number;
+  letterSpacing?: number;
+  align?: 'left' | 'center' | 'right' | 'justify';
+}
+
+export interface RichTextSegment {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  run: ResolvedTextRun;
+  lineIndex: number;
+  endsParagraph: boolean;
+}
+
+export interface RichTextLine {
+  segments: RichTextSegment[];
+  y: number;
+  width: number;
+  height: number;
+  endsParagraph: boolean;
+}
+
+export interface RichTextLayout {
+  runs: ResolvedTextRun[];
+  lines: RichTextLine[];
+  segments: RichTextSegment[];
+  fontSize: number;
+  height: number;
+}
+
+export interface FittedRichText extends RichTextLayout {
+  fits: boolean;
+}
+
+const measureRichRunWidth = (
+  text: string,
+  run: ResolvedTextRun,
+  letterSpacing: number,
+  measure: MeasureRichRun
+): number => {
+  if (!letterSpacing) return measure(text, run);
+  let width = 0;
+  for (const ch of text) width += measure(ch, run) + letterSpacing;
+  return width;
+};
+
+export const layoutRichText = (
+  runs: TextRun[],
+  options: RichTextLayoutOptions,
+  measure: MeasureRichRun
+): RichTextLayout => {
+  const resolvedRuns = runs.map((run) => ({
+    ...run,
+    fontSize: run.fontSize ?? options.fontSize,
+  }));
+  const spacing = options.letterSpacing || 0;
+  const lines: RichTextLine[] = [
+    { segments: [], y: 0, width: 0, height: 0, endsParagraph: false },
+  ];
+  let lineWidth = 0;
+
+  const advanceLine = (endsParagraph = false) => {
+    lines[lines.length - 1].endsParagraph = endsParagraph;
+    lines.push({ segments: [], y: 0, width: 0, height: 0, endsParagraph: false });
+    lineWidth = 0;
+  };
+
+  for (const run of resolvedRuns) {
+    if (!run.text) continue;
+    const paragraphs = run.text.split('\n');
+    for (let pi = 0; pi < paragraphs.length; pi++) {
+      const words = paragraphs[pi].split(' ');
+      for (let wi = 0; wi < words.length; wi++) {
+        const raw = words[wi];
+        const line = lines[lines.length - 1];
+        if (raw === '') {
+          const spaceWidth = measureRichRunWidth(' ', run, spacing, measure);
+          if (lineWidth > 0 && lineWidth + spaceWidth > options.width) advanceLine();
+          lineWidth += spaceWidth;
+          continue;
+        }
+        const text = wi < words.length - 1 ? `${raw} ` : raw;
+        const width = measureRichRunWidth(text, run, spacing, measure);
+        if (lineWidth > 0 && lineWidth + width > options.width) advanceLine();
+        lines[lines.length - 1].segments.push({
+          text,
+          x: 0,
+          y: 0,
+          width,
+          run,
+          lineIndex: lines.length - 1,
+          endsParagraph: false,
+        });
+        lineWidth += width;
+      }
+      if (pi < paragraphs.length - 1) advanceLine(true);
+    }
+  }
+  lines[lines.length - 1].endsParagraph = true;
+
+  const lineHeightFactor = options.lineHeight ?? DEFAULT_LINE_HEIGHT;
+  const emptyLineHeight =
+    lineHeightFactor * (resolvedRuns[0]?.fontSize ?? options.fontSize);
+  let y = 0;
+  const segments: RichTextSegment[] = [];
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    line.y = y;
+    line.height = line.segments.length
+      ? Math.max(...line.segments.map((seg) => lineHeightFactor * seg.run.fontSize))
+      : emptyLineHeight;
+    line.width = line.segments.reduce((sum, seg) => sum + seg.width, 0);
+
+    let x = 0;
+    let gap = 0;
+    if (options.align === 'center') x = (options.width - line.width) / 2;
+    else if (options.align === 'right') x = options.width - line.width;
+    else if (
+      options.align === 'justify' &&
+      !line.endsParagraph &&
+      line.segments.length > 1 &&
+      line.width < options.width
+    ) {
+      gap = (options.width - line.width) / (line.segments.length - 1);
+    }
+
+    for (const segment of line.segments) {
+      segment.x = x;
+      segment.y = y;
+      segment.lineIndex = lineIndex;
+      segment.endsParagraph = line.endsParagraph;
+      segments.push(segment);
+      x += segment.width + gap;
+    }
+    y += line.height;
+  }
+
+  return {
+    runs: resolvedRuns,
+    lines,
+    segments,
+    fontSize: options.fontSize,
+    height: y,
+  };
+};
+
+export const fitRichTextToBox = (
+  box: FitTextBox,
+  runs: TextRun[],
+  measure: MeasureRichRun
+): FittedRichText => {
+  const requestedFloor = Math.max(1, Math.floor(box.minFontSize ?? MIN_FIT_FONT_SIZE));
+  const floor = Math.min(box.fontSize, requestedFloor);
+  let size = box.fontSize;
+
+  const layoutAt = (fontSize: number): RichTextLayout => {
+    const ratio = fontSize / box.fontSize;
+    const scaledRuns = runs.map((run) => {
+      const authored = run.fontSize ?? box.fontSize;
+      return {
+        ...run,
+        fontSize: Math.min(
+          authored,
+          Math.max(Math.min(authored, floor), Math.floor(authored * ratio))
+        ),
+      };
+    });
+    return layoutRichText(
+      scaledRuns,
+      {
+        width: box.width,
+        fontSize,
+        lineHeight: box.lineHeight,
+        letterSpacing: box.letterSpacing,
+        align: box.align,
+      },
+      measure
+    );
+  };
+
+  const fits = (layout: RichTextLayout): boolean =>
+    layout.height <= box.height &&
+    layout.lines.every((line) => line.width <= box.width);
+
+  let layout = layoutAt(size);
+  while (box.autoFit === true && size > floor && !fits(layout)) {
+    size = Math.max(floor, Math.floor(size * FIT_STEP_RATIO));
+    layout = layoutAt(size);
+  }
+  return { ...layout, fits: fits(layout) };
 };
 
 export interface JustifiedWord {

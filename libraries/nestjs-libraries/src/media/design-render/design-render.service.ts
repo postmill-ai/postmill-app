@@ -31,6 +31,7 @@ import {
   MAX_GROUP_RENDER_DEPTH,
 } from '../designer-doc/designer-doc.limits';
 import {
+  fitRichTextToBox,
   fitTextToBox,
   justifyLineWords,
   measureLineWidth,
@@ -2571,9 +2572,8 @@ export class DesignRenderService {
       return;
     }
 
-    // Auto-fit: shrink the font (down to a floor) until the wrapped block
-    // fits the box height — a flat text element must never silently overflow
-    // its box bottom.
+    // Legacy text fits height; opted-in text also fits width. Explicit-off
+    // text retains its authored size through the same shared layout.
     const fitted = this.fitFlatText(ctx, text, el, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing);
     ctx.font = `${fontStyle} ${fontWeight} ${fitted.fontSize}px ${fontFamily}`;
 
@@ -2708,6 +2708,8 @@ export class DesignRenderService {
         textTransform: el.textTransform,
         paragraphSpacing: el.paragraphSpacing,
         firstLineIndent: el.firstLineIndent,
+        autoFit: el.autoFit,
+        minFontSize: el.autoFitMinFontSize,
       },
       (line, size) => {
         ctx.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`;
@@ -2746,6 +2748,63 @@ export class DesignRenderService {
       const f = run.fontFamily ?? el.fontFamily ?? 'sans-serif';
       ctx.font = `${s === 'italic' ? 'italic' : 'normal'} ${w} ${sz}px ${f}`;
     };
+
+    if (el.autoFit === true) {
+      const fitted = fitRichTextToBox(
+        {
+          text: el.text ?? '',
+          width: el.width,
+          height: el.height,
+          fontSize: el.fontSize || 16,
+          lineHeight: el.lineHeight,
+          letterSpacing,
+          align,
+          autoFit: true,
+          minFontSize: el.autoFitMinFontSize,
+        },
+        runs,
+        (value, run) => {
+          setRunFont(run);
+          return this.measureLine(ctx, value, 0);
+        }
+      );
+      const top =
+        el.verticalAlign === 'middle'
+          ? Math.max(0, (el.height - fitted.height) / 2)
+          : el.verticalAlign === 'bottom'
+          ? Math.max(0, el.height - fitted.height)
+          : 0;
+
+      for (const seg of fitted.segments) {
+        setRunFont(seg.run);
+        const fill = seg.run.fill || el.fill || '#000000';
+        const size = seg.run.fontSize;
+        ctx.fillStyle = canvasColor(fill);
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        this.drawTextLine(ctx, seg.text, seg.x, top + seg.y + size / 2, letterSpacing, el);
+
+        if (seg.run.underline) {
+          const uy = top + seg.y + size * 1.15;
+          ctx.strokeStyle = canvasColor(fill);
+          ctx.lineWidth = Math.max(1, size / 14);
+          ctx.beginPath();
+          ctx.moveTo(seg.x, uy);
+          ctx.lineTo(seg.x + seg.width, uy);
+          ctx.stroke();
+        }
+        if (seg.run.lineThrough) {
+          const ly = top + seg.y + size * 0.6;
+          ctx.strokeStyle = canvasColor(fill);
+          ctx.lineWidth = Math.max(1, size / 14);
+          ctx.beginPath();
+          ctx.moveTo(seg.x, ly);
+          ctx.lineTo(seg.x + seg.width, ly);
+          ctx.stroke();
+        }
+      }
+      return;
+    }
 
     for (const run of runs) {
       if (!run.text) continue;

@@ -1690,6 +1690,77 @@ describe('DesignRenderService flat text layout', () => {
     expect(used).toBe(20);
   });
 
+  it('preserves the authored size when auto-fit is explicitly off', async () => {
+    const service = makeService();
+    const ctx = await makeCtx();
+
+    (service as any).drawText(ctx as any, makeEl({ autoFit: false }));
+
+    expect(Number(/([\d.]+)px/.exec(ctx.font)?.[1])).toBe(48);
+  });
+
+  it('fits a long unbroken word to the box width when enabled', async () => {
+    const service = makeService();
+    const ctx = await makeCtx();
+
+    (service as any).drawText(ctx as any, makeEl({
+      text: 'supercalifragilisticexpialidocious',
+      width: 80,
+      height: 100,
+      autoFit: true,
+      autoFitMinFontSize: 1,
+    }));
+
+    const used = Number(/([\d.]+)px/.exec(ctx.font)?.[1]);
+    expect(used).toBeLessThan(48);
+    expect(ctx.measureText('supercalifragilisticexpialidocious').width).toBeLessThanOrEqual(80);
+  });
+
+  it('uses the same bounded fitting for a rich run without dropping its style', async () => {
+    const service = makeService();
+    const ctx = await makeCtx();
+    const spy = vi.spyOn(ctx, 'fillText');
+
+    (service as any).drawText(ctx as any, makeEl({
+      text: '',
+      richText: [{ text: 'supercalifragilisticexpialidocious', fontWeight: 700 }],
+      width: 80,
+      height: 100,
+      autoFit: true,
+      autoFitMinFontSize: 1,
+    }));
+
+    expect(spy).toHaveBeenCalledWith(
+      'supercalifragilisticexpialidocious',
+      expect.any(Number),
+      expect.any(Number)
+    );
+    expect(Number(/([\d.]+)px/.exec(ctx.font)?.[1])).toBeLessThan(48);
+    expect(ctx.font).toContain('700');
+  });
+
+  it.each([
+    { verticalAlign: 'middle', expectedY: 98 },
+    { verticalAlign: 'bottom', expectedY: 186 },
+  ])('aligns rich auto-fit text to $verticalAlign', async ({ verticalAlign, expectedY }) => {
+    const service = makeService();
+    const ctx = await makeCtx();
+    const spy = vi.spyOn(ctx, 'fillText');
+
+    (service as any).drawText(ctx as any, makeEl({
+      text: '',
+      richText: [{ text: 'Hi' }],
+      fontSize: 20,
+      width: 200,
+      height: 200,
+      autoFit: true,
+      verticalAlign,
+    }));
+
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls[0][2]).toBeCloseTo(expectedY, 0);
+  });
+
   it('centers the wrapped block vertically when verticalAlign is middle', async () => {
     const service = makeService();
     const ctx = await makeCtx();

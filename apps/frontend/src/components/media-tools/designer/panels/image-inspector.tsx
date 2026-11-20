@@ -29,17 +29,20 @@ import { applyStaticMagicGrab, prepareStaticMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
 import { usePresetPreview } from '../use-preset-preview';
 import { replaceStaticImage } from '../image-replacement';
+import { InspectorSection, InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 interface ImageInspectorProps {
   element: DesignerElement;
   ids: string[];
   store: any;
+  tab?: InspectorTabKey;
 }
 
 export const ImageInspector: FC<ImageInspectorProps> = ({
   element,
   ids,
   store,
+  tab,
 }) => {
   const t = useT();
   const toaster = useToaster();
@@ -514,10 +517,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   return (
     <>
     <div className="space-y-3">
-      <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-        {t('designer_image_heading', 'Image')}
-      </div>
-
+      <InspectorTabGroup for="style" active={tab}>
       <button
         onClick={replacePicker.open}
         className="w-full px-3 py-2 rounded-md text-[12px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 transition-colors"
@@ -531,7 +531,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           onApply={(patch) => updateElement(element.id, patch)}
         />
       )}
+      </InspectorTabGroup>
 
+      <InspectorTabGroup for="layout" active={tab}>
       <div>
         <div className="text-[11px] text-textColor/50 mb-1">{t('designer_label_fit_mode', 'Fit mode')}</div>
         <SegmentedControl
@@ -677,7 +679,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       >
         {aiLoading === 'detect-focal' ? t('designer_detecting_ellipsis', 'Detecting…') : t('designer_auto_detect_subject', 'Auto-detect Subject')}
       </button>
+      </InspectorTabGroup>
 
+      <InspectorTabGroup for="style" active={tab}>
       <Stepper
         label={t('designer_label_border_radius', 'Border radius')}
         min={0}
@@ -716,8 +720,8 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         brandEnforcement={brandEnforcement}
       />
 
-      <div className="flex flex-col gap-2 pt-1 border-t border-studioBorder">
-        <div className="text-[11px] text-textColor/50">{t('designer_label_filters', 'Filters')}</div>
+      <InspectorSection id="filters" title={t('designer_label_filters', 'Filters')} className="pt-1 border-t border-studioBorder">
+        <div className="flex flex-col gap-2">
 
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-textColor/70">{t('designer_label_grayscale', 'Grayscale')}</span>
@@ -790,10 +794,11 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           value={getFilterVal('saturate', 1)}
           onChange={(n) => setFilterVal('saturate', n, 1)}
         />
-      </div>
+        </div>
+      </InspectorSection>
 
-      <div className="space-y-2">
-        <div className="text-[11px] text-textColor/50">{t('designer_label_mask_frame', 'Mask / Frame')}</div>
+      <InspectorSection id="mask" title={t('designer_label_mask_frame', 'Mask / Frame')}>
+        <div className="space-y-2">
         <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
@@ -912,7 +917,8 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
             {t('designer_remove_frame', 'Remove frame')}
           </button>
         )}
-      </div>
+        </div>
+      </InspectorSection>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="image-alt-text" className="text-[11px] text-textColor/50">{t('designer_label_alt_text', 'Alt text')}</label>
@@ -926,6 +932,20 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           placeholder={t('designer_placeholder_describe_image', 'Describe this image…')}
           className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         />
+      </div>
+      </InspectorTabGroup>
+
+      <InspectorTabGroup for="layout" active={tab}>
+      <div className="grid grid-cols-3 gap-1">
+        <button type="button" onClick={fitImageToFrame} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+          {t('designer_fit_to_frame', 'Fit to frame')}
+        </button>
+        <button type="button" onClick={fitImageToCanvas} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+          {t('designer_fit_to_canvas', 'Fit to canvas')}
+        </button>
+        <button type="button" onClick={centerImage} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
+          {t('designer_center', 'Center')}
+        </button>
       </div>
 
       {isSingle && (
@@ -986,9 +1006,10 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           )}
         </div>
       )}
+      </InspectorTabGroup>
 
-      <div className="pt-3 border-t border-studioBorder">
-        <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('designer_ai_tools', 'AI Tools')}</h4>
+      <InspectorTabGroup for="ai" active={tab}>
+      <div>
         <div className="space-y-2">
           {operationAvailable('bg-remove') && (
             <button
@@ -1008,18 +1029,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'magic-grab' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_magic_grab', 'Magic Grab / Select Subject')}
             </button>
           )}
-          <div className="grid grid-cols-3 gap-1">
-            <button type="button" onClick={fitImageToFrame} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-              {t('designer_fit_to_frame', 'Fit to frame')}
-            </button>
-            <button type="button" onClick={fitImageToCanvas} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-              {t('designer_fit_to_canvas', 'Fit to canvas')}
-            </button>
-            <button type="button" onClick={centerImage} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-              {t('designer_center', 'Center')}
-            </button>
-          </div>
-
           {operationAvailable('upscale') && (
           <div className="flex gap-2">
             <select
@@ -1151,8 +1160,11 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           )}
         </div>
       </div>
+      </InspectorTabGroup>
     </div>
-    <CutoutRefineControls store={store} targetId={element.id} />
+    <InspectorTabGroup for="ai" active={tab}>
+      <CutoutRefineControls store={store} targetId={element.id} />
+    </InspectorTabGroup>
     {replacePicker.element}
     </>
   );

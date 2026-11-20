@@ -20,6 +20,10 @@ import {
   movePage,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
+  duplicateImageOutput,
+  duplicateVideoOutput,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/output-duplication';
+import {
   migrateDoc,
   genId,
   matchPreset,
@@ -322,6 +326,7 @@ export interface DesignerActions {
     preset: { formatId: string; name: string; width: number; height: number },
     opts?: { linkContent?: boolean }
   ) => boolean;
+  duplicateOutput: (index: number, opts?: { linkContent?: boolean }) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
@@ -1669,6 +1674,75 @@ export const createDesignerStore = (
         const accepted = mutate({ doc: { ...doc, outputs: outs }, currentOutput: outs.length - 1, selectedIds: [], isDirty: true });
         if (!accepted) return false;
         get().pushHistory();
+        return true;
+      },
+
+      duplicateOutput: (index, opts) => {
+        const { doc } = get();
+        const source = doc.outputs[index];
+        if (!source || doc.outputs.length >= MAX_OUTPUTS) return false;
+        const linkContent = opts?.linkContent ?? true;
+        let name = source.name;
+        for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
+          name = `${source.name} ${suffix}`;
+        }
+        if ('tracks' in source) {
+          const cloned = duplicateVideoOutput(source, name, linkContent);
+          if (!cloned) return false;
+          const outs = doc.outputs.map((output, i) =>
+            i === index ? cloned.sourceOutput : output
+          );
+          outs.splice(index + 1, 0, cloned.output);
+          const accepted = mutate({
+            doc: { ...doc, outputs: outs },
+            currentOutput: index + 1,
+            currentPage: 0,
+            selectedIds: [],
+            selectedClip: null,
+            selectedClips: [],
+            isDirty: true,
+          });
+          if (!accepted) return false;
+          get().pushHistory('Duplicate format');
+          return true;
+        }
+        const legacyLinkedIndexes = new Set<number>();
+        let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
+        if (linkContent && !contentLinkGroup) {
+          if (!isOutputFrozen(source)) legacyLinkedIndexes.add(index);
+          for (let siblingIndex = 0; siblingIndex < doc.outputs.length; siblingIndex++) {
+            const output = doc.outputs[siblingIndex] as DesignerOutput;
+            if (outputsLinkedForInsertion(source, output)) {
+              contentLinkGroup ??= output.contentLinkGroup;
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) {
+                legacyLinkedIndexes.add(siblingIndex);
+              }
+            }
+          }
+        }
+        contentLinkGroup ??= genId();
+        const cloned = duplicateImageOutput(
+          source,
+          name,
+          linkContent,
+          contentLinkGroup
+        );
+        if (!cloned) return false;
+        const outs = doc.outputs.map((output, i) => ({
+          ...output,
+          ...(legacyLinkedIndexes.has(i) ? { contentLinkGroup } : {}),
+          ...(i === index ? { children: cloned.sourceOutput.children } : {}),
+        })) as DesignerOutput[];
+        outs.splice(index + 1, 0, cloned.output);
+        const accepted = mutate({
+          doc: { ...doc, outputs: outs },
+          currentOutput: index + 1,
+          currentPage: 0,
+          selectedIds: [],
+          isDirty: true,
+        });
+        if (!accepted) return false;
+        get().pushHistory('Duplicate format');
         return true;
       },
 

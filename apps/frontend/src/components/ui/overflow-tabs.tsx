@@ -28,6 +28,7 @@ import { KebabMenu, KebabMenuItem } from '@postmill-ai/frontend/components/ui/ke
 export interface OverflowTabItem {
   key: string;
   label: ReactNode;
+  id?: string;
   icon?: ReactNode;
   /** Renders a `Link` (navigation strips). Mutually exclusive with `onClick`. */
   href?: string;
@@ -209,7 +210,7 @@ export const OverflowTabs: FC<OverflowTabsProps> = ({
     );
     const a11y =
       semantics === 'tabs'
-        ? { role: 'tab' as const, 'aria-selected': active }
+        ? { role: 'tab' as const, 'aria-selected': active, id: item.id }
         : semantics === 'toolbar'
           ? { 'aria-pressed': active }
           : { 'aria-current': active ? ('page' as const) : undefined };

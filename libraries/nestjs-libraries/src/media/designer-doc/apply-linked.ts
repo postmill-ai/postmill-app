@@ -211,15 +211,15 @@ const textEditRangeMapper = (
 
 /**
  * Non-geometry updates propagate raw — except `fontSize`, explicit rich-text
- * run sizes and `textStroke.width`: px values authored against one canvas are
- * wrong on another, so linked copies get them re-fit through the shared
- * aspect-aware basis (`typeScaleRatio`, the same rule as smartReflow and the
- * conductor's variant re-fit), with font size floored at 10px. Rich runs keep
- * their authored size when it is already below that floor. Unchanged runs are
- * matched by character range through multi-hunk text edits, splits and merges,
- * retaining the target's existing size rather than round-tripping through a scale.
- * Changed texts over the diff budget use fresh scaling to bound editor work.
- * The old
+ * run sizes, the auto-fit minima and `textStroke.width`: px values authored
+ * against one canvas are wrong on another, so linked copies get them re-fit
+ * through the shared aspect-aware basis (`typeScaleRatio`, the same rule as
+ * smartReflow and the conductor's variant re-fit), with font size floored at
+ * 10px. Rich runs keep their authored size when it is already below that floor.
+ * Unchanged runs are matched by character range through multi-hunk text edits,
+ * splits and merges, retaining the target's existing size rather than
+ * round-tripping through a scale. Changed texts over the diff budget use fresh
+ * scaling to bound editor work. The old
  * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
  * every linked edit — undoing the per-format type of every wider output.
  */
@@ -231,7 +231,21 @@ const scaledForOutput = (
   targetElement?: DesignerElement
 ): Partial<DesignerElement> => {
   const hasFontSize = typeof shared.fontSize === 'number' && Number.isFinite(shared.fontSize);
-  if (!hasFontSize && !shared.textStroke && !shared.richText) return shared;
+  const hasFitMinimum =
+    typeof shared.autoFitMinFontSize === 'number' &&
+    Number.isFinite(shared.autoFitMinFontSize);
+  const hasPreviousFitMinimum =
+    typeof shared.autoFitPreviousMinFontSize === 'number' &&
+    Number.isFinite(shared.autoFitPreviousMinFontSize);
+  if (
+    !hasFontSize &&
+    !hasFitMinimum &&
+    !hasPreviousFitMinimum &&
+    !shared.textStroke &&
+    !shared.richText
+  ) {
+    return shared;
+  }
   const ratio = typeScaleRatio(source, target);
   const sharedRuns = shared.richText;
   const sourceRanges = richTextRanges(sourceElement?.richText);
@@ -286,6 +300,15 @@ const scaledForOutput = (
                   fontSize: scaleRichTextRunFontSize(run.fontSize, ratio, 10),
                 };
           }),
+    ...(hasFitMinimum
+      ? { autoFitMinFontSize: Math.max(1, Math.round(shared.autoFitMinFontSize! * ratio)) }
+      : {}),
+    ...(hasPreviousFitMinimum
+      ? {
+          autoFitPreviousMinFontSize: Math.max(
+            1,
+            Math.round(shared.autoFitPreviousMinFontSize! * ratio)
+          ),
         }
       : {}),
     ...(shared.textStroke

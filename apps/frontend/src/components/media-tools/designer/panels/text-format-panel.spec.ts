@@ -140,6 +140,18 @@ describe('buildFontSizeUpdate', () => {
     expect(first).toMatchObject({ fontSize: 40, width: 400, x: 0 });
     expect(second).toMatchObject({ fontSize: 40, width: 400, x: 450 });
   });
+
+  it('changes only the authored ceiling when auto-fit owns fitting', () => {
+    const element = baseText({
+      autoFit: true,
+      text: 'supercalifragilistic',
+      width: 200,
+      height: 40,
+    });
+    expect(
+      buildFontSizeUpdate(element, 40, { width: 1000, height: 400 }, measure)
+    ).toEqual({ fontSize: 40 });
+  });
 });
 
 describe('buildTextElementPatch', () => {
