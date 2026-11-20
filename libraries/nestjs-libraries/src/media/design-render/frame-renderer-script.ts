@@ -703,7 +703,8 @@ ${stripExportsNamespace(mediaGeometrySource())}
     ctx.clearRect(0, 0, logicalW, logicalH);
     ctx.globalCompositeOperation = 'source-over';
 
-    ctx.fillStyle = output.background || '#000000';
+    const solidBackground = output.bg && output.bg.type === 'color' ? output.bg.color : undefined;
+    ctx.fillStyle = solidBackground || output.background || '#000000';
     ctx.fillRect(0, 0, logicalW, logicalH);
 
     if (output.bg && output.bg.type === 'image' && output.bg.src) {
