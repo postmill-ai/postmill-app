@@ -527,7 +527,7 @@ export const useDesignerActions = (
       { id: 'bring-forward', label: 'Bring Forward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['forward', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'forward'); } },
       { id: 'send-backward', label: 'Send Backward', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['backward', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'backward'); } },
       { id: 'send-back', label: 'Send to Back', menu: 'file', submenuPath: ['Format'], group: 'arrange', keywords: ['back', 'order'], enabled: () => !isVideoDoc() && live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'back'); } },
-      { id: 'convert-mode', label: () => (store.getState().doc.mode === 'image' ? 'Convert to Video Mode' : 'Convert to Image Mode'), menu: 'file', submenuPath: ['Format'], group: 'mode', keywords: ['convert', 'video', 'image', 'mode'], run: ctx.onConvertMode },
+      { id: 'convert-mode', label: () => (store.getState().doc.mode === 'image' ? 'Edit as Video' : 'Convert to Image Mode'), menu: 'file', submenuPath: ['Format'], group: 'mode', keywords: ['edit', 'convert', 'video', 'image', 'mode'], run: ctx.onConvertMode },
 
       // ---------------- Options ----------------
       { id: 'opt-snap', label: 'Snap to Guides', menu: 'file', submenuPath: ['Options'], group: 'overlay', keywords: ['snap', 'guides'], checked: () => store.getState().snapEnabled, run: ctx.onToggleSnap },

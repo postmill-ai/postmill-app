@@ -176,6 +176,16 @@ describe('generate requests', () => {
 });
 
 describe('video-mode gating', () => {
+  it('offers Edit as Video for static documents without changing the reverse action', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => useDesignerActions(store, {} as DesignerActionCtx));
+    const action = result.current.find((item) => item.id === 'convert-mode')!;
+    const label = action.label as () => string;
+    expect(label()).toBe('Edit as Video');
+    store.getState().setMode('video');
+    expect(label()).toBe('Convert to Image Mode');
+  });
+
   it('reports image mode for a fresh document, so the generators stay disabled', () => {
     const store = createDesignerStore();
     expect(store.getState().doc.mode).toBe('image');

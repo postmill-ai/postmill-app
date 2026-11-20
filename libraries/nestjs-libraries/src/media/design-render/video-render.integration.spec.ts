@@ -4,6 +4,8 @@ import sharp from 'sharp';
 import { ChromiumFrameCaptureService } from './chromium-frame-capture.service';
 import { FfmpegVideoEncoderService } from './ffmpeg-video-encoder.service';
 import type { VideoOutput } from './design-render.types';
+import { imageDocToVideoDoc } from '@postmill-ai/nestjs-libraries/ai-designer/util/image-doc-to-video';
+import { videoOutputToPosterOutput } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 
 const redVideo = (durationMs = 1000): VideoOutput => ({
   id: 'test-output',
@@ -626,6 +628,75 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     }
   }, 120000);
 
+  it('exports converted scene timing, z-order, poster and hidden-track state', async () => {
+    const layer = (id: string, type: string, extra: Record<string, unknown>) => ({
+      id, type, x: 0, y: 0, width: 320, height: 240, rotation: 0,
+      opacity: 1, locked: false, hidden: false, ...extra,
+    });
+    const converted = imageDocToVideoDoc({
+      version: 14,
+      mode: 'image',
+      outputs: [{
+        id: 'converted-scenes', formatId: 'custom', name: 'Converted scenes',
+        width: 320, height: 240, background: '#0000ff',
+        children: [
+          layer('red-page', 'shape', { shape: 'rect', fill: '#ff0000' }),
+          layer('page-one-text', 'text', {
+            text: 'ONE', x: 20, y: 20, width: 200, height: 50,
+            fontFamily: 'Arial', fontSize: 32, fill: '#ffffff',
+          }),
+          layer('hidden-cover', 'shape', { shape: 'rect', fill: '#000000', hidden: true }),
+        ],
+        pages: [{
+          id: 'green-page', background: { type: 'color', color: '#00ff00' },
+          children: [layer('page-two-text', 'text', {
+            text: 'TWO', x: 20, y: 20, width: 200, height: 50,
+            fontFamily: 'Arial', fontSize: 32, fill: '#000000',
+          })],
+        }],
+      }],
+    } as any, { preserveContent: true, pageDurationMs: 1000 });
+    const output = converted.outputs[0] as any;
+    const poster = videoOutputToPosterOutput(output);
+    expect(output.durationMs).toBe(2000);
+    expect(poster.children.map((child) => child.type)).toEqual(['shape', 'text']);
+    expect(poster.children.map((child) => child.text)).toEqual([undefined, 'ONE']);
+    expect(poster.children.some((child) => child.fill === '#000000')).toBe(false);
+
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameDir = fs.mkdtempSync(path.join(os.tmpdir(), 'edit-as-video-frames-'));
+    try {
+      await capture.captureFrames(output, 1, frameDir);
+      const readFrame = async (name: string) => {
+        const frame = await sharp(path.join(frameDir, name))
+          .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        const at = (x: number, y: number) => {
+          const index = (y * frame.info.width + x) * frame.info.channels;
+          return [...frame.data.subarray(index, index + 3)];
+        };
+        const textPixels = (color: 'white' | 'black') => {
+          let count = 0;
+          for (let y = 20; y < 70; y++) {
+            for (let x = 20; x < 220; x++) {
+              const [r, g, b] = at(x, y);
+              if (color === 'white' && r > 240 && g > 240 && b > 240) count++;
+              if (color === 'black' && r < 15 && g < 15 && b < 15) count++;
+            }
+          }
+          return count;
+        };
+        return { at, textPixels };
+      };
+      const first = await readFrame('frame-00001.png');
+      expect(first.at(160, 120)).toEqual([255, 0, 0]);
+      expect(first.textPixels('white')).toBeGreaterThan(10);
+      const second = await readFrame('frame-00002.png');
+      expect(second.at(160, 120)).toEqual([0, 255, 0]);
+      expect(second.textPixels('black')).toBeGreaterThan(10);
+    } finally {
+      fs.rmSync(frameDir, { recursive: true, force: true });
   it('exports a multi-point motion path at matching times and resolutions', async () => {
     const capture = new ChromiumFrameCaptureService();
     const encoder = new FfmpegVideoEncoderService(capture);

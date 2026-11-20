@@ -298,6 +298,46 @@ describe('video overlay styles and keyframed text', () => {
     expect(text.fillAfterStrokeEnabled()).toBe(true);
   });
 
+  it('does not invent an outline for a shape with strokeWidth zero', async () => {
+    const store = createDesignerStore(500, 500);
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'shape');
+    const output = store.getState().doc.outputs[0] as VideoOutput;
+    const track = output.tracks.find((item) => item.type === 'shape')!;
+    store.getState().addClip(0, track.id, {
+      id: 'zero-stroke',
+      startMs: 0,
+      endMs: 1000,
+      shape: 'rect',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      fill: '#ffffff',
+      stroke: '#000000',
+      strokeWidth: 0,
+    } as never);
+    vi.spyOn(Konva.Container.prototype, 'draw').mockImplementation(function (this: Konva.Container) {
+      return this;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    await act(async () => {
+      root!.render(
+        <Stage width={500} height={500}>
+          <Layer>
+            <VideoCanvasOverlay store={store} width={500} height={500} />
+          </Layer>
+        </Stage>
+      );
+    });
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const shape = stage.findOne('#zero-stroke')!.findOne('Rect') as Konva.Rect;
+    expect(shape.strokeWidth()).toBe(0);
+  });
+
   it.each(['linear', 'radial'] as const)(
     'omits solid fill and maps %s gradients for every fill-bearing shape',
     async (type) => {
