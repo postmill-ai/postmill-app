@@ -593,7 +593,7 @@ export class AIModelProvider {
               if (imageModel) {
                 this._logger.log(`Falling back to provider "${fallbackImageProvider}" for image generation`);
                 return {
-                  generate: this._createImageGenerator(imageModel, span, scope, orgId, fallbackRef.providerId, fallbackModelId),
+                  generate: this._createImageGenerator(imageModel, span, scope, orgId, fallbackRef.providerId, fallbackModelId, fallbackAdapter.name),
                 };
               }
             }
@@ -602,7 +602,7 @@ export class AIModelProvider {
         }
         this._health.recordSuccess(config.providerId);
         return {
-          generate: this._createImageGenerator(imageModel, span, scope, orgId, config.providerId, imageModelId),
+          generate: this._createImageGenerator(imageModel, span, scope, orgId, config.providerId, imageModelId, config.adapter.name),
         };
       }, { 'ai.scope': scope });
     }, scope, orgId);
@@ -615,15 +615,21 @@ export class AIModelProvider {
     orgId: string | undefined,
     providerId: string,
     modelId: string,
+    providerName?: string,
   ): (prompt: string, opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }) => Promise<string> {
     return async (prompt: string, _opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }) => {
-      const result = await (imageModel as any).doGenerate({
-        prompt,
-        n: 1,
-        size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
-        aspectRatio: undefined,
-        abortSignal: _opts?.signal,
-      });
+      let result: any;
+      try {
+        result = await (imageModel as any).doGenerate({
+          prompt,
+          n: 1,
+          size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
+          aspectRatio: undefined,
+          abortSignal: _opts?.signal,
+        });
+      } catch (err) {
+        throw toProviderError(err, providerId, { name: providerName });
+      }
       const images = result.images as Array<string>;
       await this._recordUsage({
         usage: result.usage,

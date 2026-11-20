@@ -1,4 +1,4 @@
-import { HttpException, Injectable, Logger } from '@nestjs/common';
+import { HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, StorageProviderType } from '@prisma/client';
 import { StorageRepository } from './storage.repository';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
@@ -96,7 +96,7 @@ export class StorageService {
   async #getOrgScopedConfig(id: string, orgId: string): Promise<StorageConfigRow> {
     const config = await this._storageRepository.findById(orgId, id);
     if (!config || config.organizationId !== orgId) {
-      throw new Error('Storage config not found');
+      throw new NotFoundException('Storage config not found');
     }
     return config as StorageConfigRow;
   }
