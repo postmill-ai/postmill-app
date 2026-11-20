@@ -4,7 +4,7 @@ import React, { FC, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 import { animatedProps, GraphEditor, type GraphProp } from './graph-editor';
-import { PROP_DOT_COLORS, type ClipKeyframe } from './keyframe-props';
+import { keyframeIdentityMatches, PROP_DOT_COLORS, type ClipKeyframe } from './keyframe-props';
 import type { VideoClip, VideoOutput } from './designer.store';
 
 /**
@@ -81,19 +81,18 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
   );
   const props = useMemo(() => animatedProps(clip?.keyframes), [clip?.keyframes]);
 
-  const [selected, setSelected] = useState<{ prop: GraphProp; tMs: number } | null>(null);
+  const [selected, setSelected] = useState<{ prop: GraphProp; frame: ClipKeyframe } | null>(null);
   const [easeMenu, setEaseMenu] = useState<{
     prop: GraphProp;
-    tMs: number;
+    frame: ClipKeyframe;
     x: number;
     y: number;
   } | null>(null);
   const [curveOpen, setCurveOpen] = useState(false);
 
-  const [drag, setDrag] = useState<{ prop: GraphProp; origTMs: number; startX: number } | null>(null);
-  // The dragged keyframe's CURRENT tMs — it moves with each silent write, so
-  // the next mousemove must match on the new value or the drag freezes.
-  const currentTMsRef = useRef(0);
+  const [drag, setDrag] = useState<{ prop: GraphProp; frame: ClipKeyframe; startX: number } | null>(null);
+  // Preserve identity while the dragged frame's timestamp changes.
+  const currentFrameRef = useRef<ClipKeyframe>({ tMs: 0, props: {} });
   const movedRef = useRef(false);
   const justDraggedRef = useRef(false);
 
@@ -109,24 +108,22 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
 
   useEffect(() => {
     if (!drag || !clip || !selectedClip) return;
-    // currentTMsRef/movedRef are initialised in the diamond's mousedown, NOT
-    // here: this effect re-runs on every silent write (clip identity changes),
-    // and re-initialising would reset the ref to origTMs mid-drag, freezing
-    // the keyframe after its first move.
+    // The current frame ref is initialised on mousedown, NOT here: this effect
+    // re-runs on every silent write and must not reset the drag to its old time.
     const onMove = (e: MouseEvent) => {
       const dMs = (e.clientX - drag.startX) / pixelsPerMs;
       if (Math.abs(e.clientX - drag.startX) > 2) movedRef.current = true;
-      const next = Math.max(0, Math.min(clipDurationMs, Math.round(drag.origTMs + dMs)));
+      const next = Math.max(0, Math.min(clipDurationMs, Math.round(drag.frame.tMs + dMs)));
       const updated = ((clip.keyframes || []) as ClipKeyframe[]).map((kf) =>
-        kf.tMs === currentTMsRef.current ? { ...kf, tMs: next } : kf
+        keyframeIdentityMatches(kf, currentFrameRef.current) ? { ...kf, tMs: next } : kf
       );
       store
         .getState()
         .updateClipSilent(selectedClip.outputIndex, selectedClip.trackId, selectedClip.clipId, {
           keyframes: updated,
         });
-      currentTMsRef.current = next;
-      setSelected((s) => (s ? { ...s, tMs: next } : s));
+      currentFrameRef.current = { ...currentFrameRef.current, tMs: next };
+      setSelected((s) => (s ? { ...s, frame: { ...s.frame, tMs: next } } : s));
     };
     const onUp = () => {
       if (movedRef.current) {
@@ -156,14 +153,14 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
   const selectedKf =
     selected && clip
       ? keyframes.find(
-          (kf) => Math.abs(kf.tMs - selected.tMs) <= 1 && kf.props[selected.prop] !== undefined
+          (kf) => keyframeIdentityMatches(kf, selected.frame, 1) && kf.props[selected.prop] !== undefined
         )
       : undefined;
 
-  const setEase = (tMs: number, ease: KeyframeEase) => {
+  const setEase = (target: ClipKeyframe, ease: KeyframeEase) => {
     if (!clip || !selectedClip) return;
     const updated = ((clip.keyframes || []) as ClipKeyframe[]).map((kf) =>
-      kf.tMs === tMs ? { ...kf, ease } : kf
+      keyframeIdentityMatches(kf, target) ? { ...kf, ease } : kf
     );
     store
       .getState()
@@ -173,11 +170,11 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
   };
 
   /** Delete drops the prop from its keyframe; an emptied keyframe goes away. */
-  const removeDiamond = (prop: GraphProp, tMs: number) => {
+  const removeDiamond = (prop: GraphProp, target: ClipKeyframe) => {
     if (!clip || !selectedClip) return;
     const updated = ((clip.keyframes || []) as ClipKeyframe[])
       .map((kf) => {
-        if (kf.tMs !== tMs) return kf;
+        if (!keyframeIdentityMatches(kf, target)) return kf;
         const nextProps = { ...kf.props };
         delete nextProps[prop];
         return Object.keys(nextProps).length ? { ...kf, props: nextProps } : null;
@@ -191,29 +188,29 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
     setSelected(null);
   };
 
-  const retimeBy = (prop: GraphProp, tMs: number, deltaMs: number) => {
+  const retimeBy = (prop: GraphProp, target: ClipKeyframe, deltaMs: number) => {
     if (!clip || !selectedClip) return;
-    const next = Math.max(0, Math.min(clipDurationMs, tMs + deltaMs));
+    const next = Math.max(0, Math.min(clipDurationMs, target.tMs + deltaMs));
     const updated = ((clip.keyframes || []) as ClipKeyframe[]).map((kf) =>
-      kf.tMs === tMs ? { ...kf, tMs: next } : kf
+      keyframeIdentityMatches(kf, target) ? { ...kf, tMs: next } : kf
     );
     store
       .getState()
       .updateClip(selectedClip.outputIndex, selectedClip.trackId, selectedClip.clipId, {
         keyframes: updated,
       });
-    setSelected({ prop, tMs: next });
+    setSelected({ prop, frame: { ...target, tMs: next } });
   };
 
-  const openEaseMenu = (e: React.MouseEvent, prop: GraphProp, tMs: number) => {
-    setSelected({ prop, tMs });
+  const openEaseMenu = (e: React.MouseEvent, prop: GraphProp, frame: ClipKeyframe) => {
+    setSelected({ prop, frame });
     setCurveOpen(false);
-    setEaseMenu({ prop, tMs, x: e.clientX, y: e.clientY });
+    setEaseMenu({ prop, frame, x: e.clientX, y: e.clientY });
   };
 
   const keyboardStep = Math.max(1, Math.round(clipDurationMs * 0.01));
   const easeMenuKf = easeMenu
-    ? keyframes.find((kf) => kf.tMs === easeMenu.tMs)
+    ? keyframes.find((kf) => keyframeIdentityMatches(kf, easeMenu.frame, 1))
     : undefined;
 
   return (
@@ -279,13 +276,13 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
             <div className="relative flex-1" style={{ width: contentWidth }}>
               {keyframes
                 .filter((kf) => kf.props[prop] !== undefined)
-                .map((kf) => {
-                  const isSel = selected?.prop === prop && Math.abs(selected.tMs - kf.tMs) <= 1;
+                .map((kf, frameIndex) => {
+                  const isSel = selected?.prop === prop && keyframeIdentityMatches(selected.frame, kf, 1);
                   return (
                     <button
-                      key={`${prop}-${kf.tMs}`}
+                      key={`${prop}-${kf.tMs}-${frameIndex}`}
                       type="button"
-                      data-testid={`kf-diamond-${prop}-${kf.tMs}`}
+                      data-testid={`kf-diamond-${prop}-${kf.tMs}${kf.animationPreset ? `-${kf.animationPreset.category}` : ''}`}
                       aria-label={t('designer_kf_diamond', '{{prop}} keyframe at {{ms}}ms', {
                         prop,
                         ms: Math.round(kf.tMs),
@@ -306,34 +303,34 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
                       onMouseDown={(e) => {
                         if (e.button !== 0) return;
                         e.stopPropagation();
-                        currentTMsRef.current = kf.tMs;
+                        currentFrameRef.current = kf;
                         movedRef.current = false;
-                        setSelected({ prop, tMs: kf.tMs });
-                        setDrag({ prop, origTMs: kf.tMs, startX: e.clientX });
+                        setSelected({ prop, frame: kf });
+                        setDrag({ prop, frame: kf, startX: e.clientX });
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (justDraggedRef.current) return; // the click that ends a drag
-                        setSelected({ prop, tMs: kf.tMs });
+                        setSelected({ prop, frame: kf });
                       }}
                       onDoubleClick={(e) => {
                         e.stopPropagation();
-                        openEaseMenu(e, prop, kf.tMs);
+                        openEaseMenu(e, prop, kf);
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        openEaseMenu(e, prop, kf.tMs);
+                        openEaseMenu(e, prop, kf);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Delete' || e.key === 'Backspace') {
                           e.preventDefault();
                           e.stopPropagation();
-                          removeDiamond(prop, kf.tMs);
+                          removeDiamond(prop, kf);
                         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                           e.preventDefault();
                           e.stopPropagation();
-                          retimeBy(prop, kf.tMs, e.key === 'ArrowLeft' ? -keyboardStep : keyboardStep);
+                          retimeBy(prop, kf, e.key === 'ArrowLeft' ? -keyboardStep : keyboardStep);
                         }
                       }}
                     />
@@ -374,7 +371,7 @@ export const KeyframeLane: FC<KeyframeLaneProps> = ({
                     key={opt.value}
                     role="menuitem"
                     onClick={() => {
-                      setEase(easeMenu.tMs, opt.value);
+                      setEase(easeMenu.frame, opt.value);
                       setEaseMenu(null);
                     }}
                     className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor flex items-center justify-between gap-2"

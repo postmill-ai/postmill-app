@@ -558,8 +558,11 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   that category and preserves unrelated manual keyframes. Typewriter coexists with emphasis/exit.
   Untagged-only clips retain legacy interpolation. Tagged categories interpolate independently before
   adding x/y/rotation offsets, multiplying width/height/fontSize scale factors, and multiplying shared
-  opacity factors, so one category never resets another's properties. Zoom/pulse frames compensate x/y
-  to preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
+  opacity factors, so one category never resets another's properties. Untagged manual frames always use
+  legacy whole-frame interpolation and override composed values for properties they animate. Every edit,
+  retime, easing change and clipboard merge targets timestamp PLUS preset identity, never timestamp alone.
+  Canvas geometry gestures translate the requested rendered delta into the target category's local values.
+  Zoom/pulse frames compensate x/y to preserve the center and scale fontSize on text/caption clips. Exit frames are clamped at zero and
   only that exit contribution is re-anchored to the new duration by `updateClipSilent` when a timing
   edit changes a matched exit.
   Multi-select text effects compute each element's own path and commit one history entry.

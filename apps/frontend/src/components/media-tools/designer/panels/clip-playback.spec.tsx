@@ -4,9 +4,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ClipInspector } from './clip-inspector';
 import { createDesignerStore } from '../designer.store';
 import { matchTextAnimationPresets } from '../text-animation-presets';
+import { interpolateKeyframes } from '../video-preview';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
-  useT: () => (_key: string, fallback: string) => fallback,
+  useT: () => (_key: string, fallback: string, params?: Record<string, unknown>) =>
+    params
+      ? fallback.replace(/\{\{(\w+)\}\}/g, (_match, key) => String(params[key]))
+      : fallback,
 }));
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: vi.fn() }),
@@ -144,5 +148,74 @@ describe('ClipInspector playback controls', () => {
       exit: 'Fade Out',
     });
     expect(store.getState().history.length).toBe(initialHistory + 4);
+  });
+});
+
+describe('ClipInspector combined keyframe editing', () => {
+  const renderCombined = () => {
+    const store = makeStore('text');
+    render(<ClipInspector store={store} outputIndex={0} trackId="track-1" clipId="clip-1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Fade Up', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse', exact: true }));
+    return store;
+  };
+  const frames = (store: ReturnType<typeof makeStore>) =>
+    store.getState().doc.outputs[0].tracks[0].clips[0].keyframes ?? [];
+
+  it('adds a property without dropping the existing preset tag', () => {
+    const store = renderCombined();
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'opacity keyframe timeline' }), { key: 'Enter' });
+
+    const updated = frames(store);
+    expect(updated.every((frame) => frame.animationPreset)).toBe(true);
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(interpolateKeyframes(clip, 3000).opacity).toBe(1);
+    expect(interpolateKeyframes(clip, 3000).y).toBe(200);
+  });
+
+  it('removes a property only from the targeted frame', () => {
+    const store = renderCombined();
+    const pulseBefore = frames(store).filter((frame) => frame.animationPreset?.category === 'emphasis');
+    fireEvent.click(screen.getByRole('button', { name: 'opacity keyframe at 0ms' }));
+
+    const entrance = frames(store).find((frame) => frame.animationPreset?.category === 'entrance' && frame.tMs === 0)!;
+    expect(entrance.props).toEqual({ y: 220 });
+    expect(entrance.animationPreset?.name).toBe('Fade Up');
+    expect(frames(store).filter((frame) => frame.animationPreset?.category === 'emphasis')).toEqual(pulseBefore);
+  });
+
+  it('moves only the selected frame at a shared timestamp', () => {
+    const store = renderCombined();
+    const markers = screen.getAllByRole('button', { name: 'Keyframe at 0ms' });
+    fireEvent.keyDown(markers[0], { key: 'ArrowRight' });
+
+    expect(frames(store).some((frame) => frame.animationPreset?.category === 'entrance' && frame.tMs === 50)).toBe(true);
+    expect(frames(store).some((frame) => frame.animationPreset?.category === 'emphasis' && frame.tMs === 0)).toBe(true);
+    expect(frames(store).some((frame) => frame.animationPreset?.category === 'entrance' && frame.tMs === 0)).toBe(false);
+  });
+
+  it('keeps dragging the same tagged frame across silent updates', () => {
+    const store = renderCombined();
+    const timeline = screen.getByRole('slider', { name: 'Keyframe timeline' });
+    vi.spyOn(timeline, 'getBoundingClientRect').mockReturnValue({ width: 1000 } as DOMRect);
+    const marker = screen.getAllByRole('button', { name: 'Keyframe at 0ms' })[0];
+    fireEvent.mouseDown(marker, { clientX: 0 });
+    fireEvent.mouseMove(window, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 200 });
+    fireEvent.mouseUp(window);
+
+    expect(frames(store).some((frame) => frame.animationPreset?.category === 'entrance' && frame.tMs === 1000)).toBe(true);
+    expect(frames(store).some((frame) => frame.animationPreset?.category === 'emphasis' && frame.tMs === 0)).toBe(true);
+  });
+
+  it('re-eases only the selected frame at a shared timestamp', () => {
+    const store = renderCombined();
+    const row = document.getElementById('clip-kf-row-opacity')!;
+    fireEvent.change(row.querySelector('select')!, { target: { value: 'easeIn' } });
+
+    const entrance = frames(store).find((frame) => frame.animationPreset?.category === 'entrance' && frame.tMs === 0)!;
+    const emphasis = frames(store).find((frame) => frame.animationPreset?.category === 'emphasis' && frame.tMs === 0)!;
+    expect(entrance.ease).toBe('easeIn');
+    expect(emphasis.ease).toBe('easeInOut');
   });
 });

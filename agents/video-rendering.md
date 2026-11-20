@@ -133,8 +133,11 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      Presets are grouped into entrance, emphasis and exit, with one independently replaceable preset
      per category. Generated keyframes carry optional `animationPreset` metadata; untagged-only clips
      keep legacy interpolation, while tagged groups interpolate per property and compose x/y/rotation
-     offsets additively, scale factors multiplicatively, and shared opacity multiplicatively. The
-     preview and injected frame renderer share that evaluator. Exits are timed relative to the clip
+     offsets additively, scale factors multiplicatively, and shared opacity multiplicatively. Untagged
+     manual frames retain legacy whole-frame interpolation and override composed values for their animated
+     properties. All edit paths match timestamp plus preset identity; canvas gestures write category-local
+     values, never the composited absolute transform. The preview and injected frame renderer share that
+     evaluator. Exits are timed relative to the clip
      end; zoom presets scale width/height from the clip base and motion presets offset x/y/rotation.
      All visual track types share the same keyframe evaluator, while reveal stays text-only.
    - Text extrusion (`clip.textExtrusion`, optional-additive doc v12) draws bounded far-to-near

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { clipEdgeUpdate, clipGeometryUpdate, hasKeyframeAtPlayhead, canDropClipOnTrack, resolveClipPlacement, planTrackDrop, type ClipBox, type TrackDropMember } from './clip-geometry';
 import type { VideoClip, VideoTrack } from './designer.store';
+import { buildTextAnimationUpdate, TEXT_ANIMATION_PRESETS } from './text-animation-presets';
+import { interpolateKeyframes } from './video-preview';
 
 const clip = (over: Partial<VideoClip> = {}): VideoClip =>
   ({
@@ -145,6 +147,52 @@ describe('clipGeometryUpdate', () => {
     );
     expect(update?.keyframes?.[0].props.height).toBe(80);
     expect(update?.keyframes?.[0].props.x).toBe(300);
+  });
+
+  it('applies a canvas drag only to the tagged frame under the playhead', () => {
+    const preset = (name: string) => TEXT_ANIMATION_PRESETS.find((item) => item.name === name)!;
+    const base = clip({ startMs: 0, endMs: 5000, x: 100, y: 200, width: 200, height: 100 });
+    const entrance = { ...base, ...buildTextAnimationUpdate(preset('Slide In Left'), base) };
+    const combined = { ...entrance, ...buildTextAnimationUpdate(preset('Shake'), entrance) };
+    const before = interpolateKeyframes(combined, 100);
+    const update = clipGeometryUpdate(combined, before, { ...before, x: before.x + 5 }, 100);
+    const updated = { ...combined, ...update };
+
+    expect(interpolateKeyframes(updated, 100).x).toBeCloseTo(before.x + 5, 6);
+    const entranceFrames = updated.keyframes!.filter((frame) => frame.animationPreset?.category === 'entrance');
+    expect(entranceFrames).toEqual(entrance.keyframes);
+    const shake = updated.keyframes!.find((frame) => frame.animationPreset?.category === 'emphasis' && frame.tMs === 100)!;
+    expect(shake.props.x).toBe(95);
+  });
+
+  it('uses the local scale ratio for a tagged frame resize', () => {
+    const preset = (name: string) => TEXT_ANIMATION_PRESETS.find((item) => item.name === name)!;
+    const base = clip({ startMs: 0, endMs: 5000, x: 100, y: 200, width: 200, height: 100 });
+    const entrance = { ...base, ...buildTextAnimationUpdate(preset('Zoom In'), base) };
+    const combined = { ...entrance, ...buildTextAnimationUpdate(preset('Pulse'), entrance) };
+    const before = interpolateKeyframes(combined, 300);
+    const after = { ...before, width: before.width * 1.1 };
+    const update = clipGeometryUpdate(combined, before, after, 300);
+    const updated = { ...combined, ...update };
+
+    expect(interpolateKeyframes(updated, 300).width).toBeCloseTo(after.width, 6);
+    expect(updated.keyframes!.filter((frame) => frame.animationPreset?.category === 'entrance'))
+      .toEqual(entrance.keyframes);
+  });
+
+  it('prefers the manual frame at a shared playhead timestamp', () => {
+    const preset = TEXT_ANIMATION_PRESETS.find((item) => item.name === 'Fade Up')!;
+    const base = clip({
+      startMs: 0, endMs: 5000, x: 100, y: 200,
+      keyframes: [{ tMs: 0, props: { x: 100 } }],
+    });
+    const combined = { ...base, ...buildTextAnimationUpdate(preset, base) };
+    const before = interpolateKeyframes(combined, 0);
+    const update = clipGeometryUpdate(combined, before, { ...before, x: before.x + 5 }, 0);
+
+    expect(update?.keyframes?.[0]).toMatchObject({ tMs: 0, props: { x: 105 } });
+    expect(update?.keyframes?.[0].animationPreset).toBeUndefined();
+    expect(update?.keyframes?.filter((frame) => frame.animationPreset)).toEqual(combined.keyframes.filter((frame) => frame.animationPreset));
   });
 });
 

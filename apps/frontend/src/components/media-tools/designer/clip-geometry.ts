@@ -1,6 +1,7 @@
 import type { VideoClip, VideoTrack } from './designer.store';
 import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { MIN_FIT_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { interpolateClipKeyframes } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 
 /**
  * Writing a canvas drag or resize back onto a video clip.
@@ -326,15 +327,46 @@ export const clipGeometryUpdate = (
 
   const relativeMs = Math.max(0, playheadMs - clip.startMs);
   const keyframes = clip.keyframes || [];
-  const index = keyframes.findIndex(
-    (kf) => Math.abs(kf.tMs - relativeMs) <= KEYFRAME_EPSILON
+  let index = keyframes.findIndex(
+    (kf) => !kf.animationPreset && Math.abs(kf.tMs - relativeMs) <= KEYFRAME_EPSILON
   );
+  if (index < 0) {
+    index = keyframes.findIndex((kf) => Math.abs(kf.tMs - relativeMs) <= KEYFRAME_EPSILON);
+  }
 
   if (index >= 0) {
-    // Edit the keyframe the user is looking at. Props absent from it inherit the
-    // base value, so seed from the rendered box before applying the delta.
     const kf = keyframes[index];
     const next = [...keyframes];
+    if (kf.animationPreset) {
+      const category = kf.animationPreset.category;
+      const local = interpolateClipKeyframes({
+        ...clip,
+        keyframes: keyframes.filter((frame) => frame.animationPreset?.category === category),
+      }, relativeMs);
+      next[index] = {
+        ...kf,
+        props: {
+          ...kf.props,
+          x: local.x + dx,
+          y: local.y + dy,
+          width: local.width * after.width / Math.max(0.0001, before.width),
+          height: local.height * after.height / Math.max(0.0001, before.height),
+          rotation: local.rotation + dr,
+          ...(scaleFont
+            ? {
+                fontSize: Math.min(
+                  MAX_FONT_SIZE,
+                  Math.max(MIN_FIT_FONT_SIZE, Math.round(local.fontSize * fontScale))
+                ),
+              }
+            : {}),
+        },
+      };
+      return { keyframes: next };
+    }
+
+    // Manual frames override composed values, so the rendered box is already
+    // the local value this edit needs.
     next[index] = {
       ...kf,
       props: {

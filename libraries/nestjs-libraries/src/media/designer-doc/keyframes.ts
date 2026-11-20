@@ -268,10 +268,7 @@ const interpolateComposedKeyframes = (
   defaults: InterpolatedProps
 ): InterpolatedProps => {
   const result = { ...defaults };
-  const manual = kfs.filter((frame) => !frame.animationPreset);
-  const manualProps = interpolateKeyframeGroup(manual, relativeMs);
-  Object.assign(result, manualProps);
-  let hasOpacity = manualProps.opacity !== undefined;
+  let hasOpacity = false;
 
   for (const category of ['entrance', 'emphasis', 'exit'] as const) {
     const frames = kfs.filter((frame) => frame.animationPreset?.category === category);
@@ -288,6 +285,16 @@ const interpolateComposedKeyframes = (
     if (props.opacity !== undefined) {
       result.opacity = hasOpacity ? result.opacity * props.opacity : props.opacity;
       hasOpacity = true;
+    }
+  }
+
+  const manual = kfs.filter((frame) => !frame.animationPreset);
+  if (manual.length) {
+    const manualProps = interpolateLegacyKeyframes(manual, relativeMs, defaults);
+    for (const prop of KEYFRAME_PROP_NAMES) {
+      if (manual.some((frame) => frame.props[prop] !== undefined)) {
+        result[prop] = manualProps[prop];
+      }
     }
   }
   return result;

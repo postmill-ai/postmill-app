@@ -382,6 +382,29 @@ describe('buildTextAnimationUpdate', () => {
     expect(replaced.keyframes.filter((frame) => !frame.animationPreset)).toEqual([]);
   });
 
+  it('keeps manual whole-frame interpolation unchanged through preset add, replace, and remove', () => {
+    const manual = {
+      x: 100, y: 200, width: 200, height: 100, opacity: 1,
+      startMs: 0, endMs: 5000,
+      keyframes: [
+        { tMs: 0, props: { x: 0 } },
+        { tMs: 1000, props: { opacity: 0.5 } },
+      ],
+    };
+    const pulsed = { ...manual, ...buildTextAnimationUpdate(presetByName('Pulse'), manual) };
+    const swung = { ...pulsed, ...buildTextAnimationUpdate(presetByName('Swing'), pulsed) };
+    const cleared = { ...swung, ...clearTextAnimationCategory(swung, 'emphasis') };
+
+    for (const clip of [pulsed, swung, cleared]) {
+      for (const tMs of [0, 500, 1000, 2000]) {
+        const expected = interpolateKeyframes(manual, tMs);
+        const actual = interpolateKeyframes(clip, tMs);
+        expect(actual.x).toBeCloseTo(expected.x, 6);
+        expect(actual.opacity).toBeCloseTo(expected.opacity, 6);
+      }
+    }
+  });
+
   it('preserves standalone playback for exclusive properties across every category combination', () => {
     const entrances = TEXT_ANIMATION_PRESETS.filter((preset) => preset.category === 'entrance' && !preset.textReveal);
     const emphases = TEXT_ANIMATION_PRESETS.filter((preset) => preset.category === 'emphasis');
