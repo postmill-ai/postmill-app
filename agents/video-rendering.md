@@ -143,6 +143,18 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      into entrance, emphasis and exit. Exits are timed relative to the clip end; zoom presets scale
      width/height from the clip base and motion presets offset x/y/rotation. All visual track types
      share the same keyframe evaluator, while reveal stays text-only.
+   - Copy/Paste Animation writes only the existing keyframe, KAN-16 `motionPath`, and text-reveal
+     channels through `designer-doc/animation-clipboard.ts`; there is no separate renderer or preset
+     model. Pasted keyframe/reveal/path times are normalized from source to target duration. Position
+     and rotation retain source deltas from each target's base, dimensions and font size use finite
+     base ratios, and paths re-anchor between base centers through `translateMotionPath` and
+     `rescaleMotionPathTimes`. Target content/assets, base geometry, timing, crop/focal state, speed,
+     audio, and linked variants remain local and unchanged. Source volume is skipped; target volume
+     keyframes survive, with their easing taking precedence at coincident timestamps. Audio clips keep
+     the separate merge-based Copy/Paste Keyframes workflow for volume envelopes. Preview, poster, and
+     injected export frames therefore evaluate the pasted document through the same `interpolateClipWithMotionPath` and reveal
+     implementations as authored animation; acceptance must compare normalized timestamps and at least
+     two `renderScale` values rather than only checking saved fields.
    - Text extrusion (`clip.textExtrusion`, optional-additive doc v12) draws bounded far-to-near
      silhouette copies behind the original text. `designer-doc/text-extrusion.ts` owns the offsets
      (depth ≤200) and is injected with `textExtrusionSource()`; the preview uses the same helper and

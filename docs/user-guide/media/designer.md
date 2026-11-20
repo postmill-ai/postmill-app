@@ -41,10 +41,10 @@ saved.
   visual guides only and do not change layout; a side without an actual overlay retains its generic margin.
 - **Freeze a format** — select the snowflake on an output tab to prevent canvas, Inspector, page,
   timeline, resize, and incoming linked edits to that output. Other formats remain editable. You can
-  still switch to a frozen output, export it, and copy clips or keyframes for use elsewhere; pasting
-  into the frozen output remains blocked. Frozen tabs show a tinted background and **Frozen** label.
-  Duplicating a frozen format creates an editable copy. Select the snowflake again to unfreeze; this
-  is separate from locking an individual layer or timeline track.
+  still switch to a frozen output, export it, and copy clips, audio keyframes, or visual animation
+  for use elsewhere; pasting into the frozen output remains blocked. Frozen tabs show a tinted
+  background and **Frozen** label. Duplicating a frozen format creates an editable copy. Select the
+  snowflake again to unfreeze; this is separate from locking an individual layer or timeline track.
 - **Copy and paste** — copying a group includes its contents. Paste into another format scales the
   selection with the target's text and layout rules while preserving crops, focal points, rotation,
   and relative ordering. Right-click **Paste** centers the selection at the clicked canvas point,
@@ -141,6 +141,15 @@ via headless Chromium + FFmpeg.
   **Entrance** (such as Pop, Fade Up, Slide In Left, Zoom In), **Emphasis** (Pulse, Shake, Swing), and
   **Exit** (such as Fade Out, Slide Out Left, Spin Out) presets; text clips also get a **Typewriter**
   reveal. Audio clips can detect beats.
+- **Animation clipboard** — **Copy Animation** captures visual position, size, rotation, opacity, and
+  font-size keyframes with their easing, plus motion paths and text reveal. It does not copy content,
+  assets or file references, IDs, base geometry, crop/focal state, clip placement or duration, speed,
+  transitions, motion blur, or volume. **Paste Animation** replaces the target's compatible visual
+  animation rather than merging with it, while preserving the target's content, base properties, and
+  existing volume keyframes and fades. Keyframe, path, and reveal timing scales from the source clip's
+  duration to the target's. Right-click inside a multi-selection to paste to every compatible selected
+  clip as one Undo step. Source volume is reported as skipped. On audio clips, use **Copy keyframes**
+  and **Paste keyframes** instead to copy and merge a volume envelope at the same clip-relative times.
 - **Captions** — **CC** auto-generates captions from every audio-bearing clip (needs a
   speech-to-text provider such as Deepgram), imports `.srt`/`.vtt` files, and exports the caption
   tracks as `.srt`.

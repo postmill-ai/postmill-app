@@ -3,6 +3,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { buildFramePage } from '../../libraries/nestjs-libraries/src/media/design-render/frame-page';
 import { escapeForScriptTag, FRAME_RENDERER_SCRIPT } from '../../libraries/nestjs-libraries/src/media/design-render/frame-renderer-script';
+import { interpolateClipWithMotionPath } from '../../libraries/nestjs-libraries/src/media/designer-doc/motion-path';
+import type { VideoClip } from '../../libraries/nestjs-libraries/src/media/designer-doc/designer-doc.schema';
 
 const DESIGN_ID = 'design-generated-video-e2e';
 const GENERATED_URL = '/mock-storage/generated.mp4';
@@ -79,6 +81,18 @@ interface VideoClipSnapshot {
   textStroke?: { color: string; width: number };
   transitionIn?: { type: string; durationMs: number };
   transitionOut?: { type: string; durationMs: number };
+  motionPath?: {
+    points: Array<{ x: number; y: number; tMs: number }>;
+    ease?: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
+    followRotation?: boolean;
+  };
+  textReveal?: { mode: 'chars' | 'words'; durationMs?: number };
+  rotation?: number;
+  volume?: number;
+  speed?: number;
+  speedCurve?: unknown[];
+  fadeInMs?: number;
+  fadeOutMs?: number;
 }
 
 interface DesignerElementSnapshot extends Omit<VideoClipSnapshot, 'startMs' | 'endMs'> {
@@ -1349,6 +1363,152 @@ test.describe('Designer motion graphics editing (mocked local document)', () => 
   });
 });
 
+const animationClipboardDoc = (): DesignerDocSnapshot => ({
+  version: 15,
+  mode: 'video',
+  outputs: [{
+    id: 'animation-clipboard-output',
+    width: 400,
+    height: 300,
+    durationMs: 4000,
+    tracks: [
+      {
+        id: 'shape-target-track', type: 'shape', name: 'shape target',
+        clips: [{
+          id: 'shape-target', shape: 'rect', fill: '#ff0000', fileId: 'shape-file',
+          startMs: 0, endMs: 2000, x: 220, y: 180, width: 50, height: 30,
+          speed: 1.5, speedCurve: [{ atMs: 0, speed: 1 }, { atMs: 1000, speed: 2 }],
+        }],
+      },
+      {
+        id: 'text-target-track', type: 'text', name: 'target',
+        clips: [{
+          id: 'text-target', text: 'TARGET', fileId: 'target-file',
+          startMs: 0, endMs: 2000, x: 180, y: 100, width: 120, height: 40,
+          rotation: 5, fontSize: 12, volume: 0.8, fadeInMs: 100, fadeOutMs: 200,
+        }],
+      },
+      {
+        id: 'animation-source-track', type: 'text', name: 'source',
+        clips: [{
+          id: 'animation-source', text: 'SOURCE', fileId: 'source-file',
+          startMs: 0, endMs: 4000, x: 20, y: 20, width: 80, height: 40, fontSize: 20,
+          keyframes: [
+            {
+              tMs: 0,
+              props: { x: 20, y: 20, width: 80, height: 40, rotation: 0, opacity: 1, fontSize: 20 },
+              ease: { out: [0.2, 0.8] },
+            },
+            {
+              tMs: 2000,
+              props: { x: 60, y: 40, width: 40, height: 20, rotation: 0, opacity: 1, fontSize: 40 },
+              ease: { in: [0.7, 0.1] },
+            },
+            {
+              tMs: 4000,
+              props: { x: 20, y: 20, width: 80, height: 40, rotation: 0, opacity: 1, fontSize: 20 },
+            },
+          ],
+          motionPath: {
+            points: [{ x: 60, y: 40, tMs: 0 }, { x: 100, y: 40, tMs: 4000 }],
+            ease: 'easeInOut', followRotation: true,
+          },
+          textReveal: { mode: 'chars', durationMs: 2000 },
+        }],
+      },
+    ],
+  }],
+});
+
+test.describe('Designer animation clipboard (mocked local document)', () => {
+  test('copies target-relative animation with atomic Undo, reload persistence, and frame parity', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const mocks = new DesignerMocks();
+    mocks.doc = animationClipboardDoc();
+    mocks.name = 'Animation clipboard E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+
+    await clipOnTrack(page, 'Source').click({ button: 'right' });
+    await page.getByLabel('Video timeline').getByRole('button', { name: 'Copy Animation', exact: true }).click();
+    await expect(page.getByText('Animation copied', { exact: true })).toBeVisible();
+
+    await clipOnTrack(page, 'Target').click();
+    await page.getByRole('button', { name: 'Paste Animation', exact: true }).click();
+    await expect(page.getByText('Animation pasted to 1 clip(s)', { exact: true })).toBeVisible();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeDefined();
+    await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^Undo/ }).click();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.keyframes).toBeUndefined();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.motionPath).toBeUndefined();
+
+    await clipOnTrack(page, 'Target').click();
+    await clipOnTrack(page, 'Shape target').click({ modifiers: ['Shift'] });
+    await clipOnTrack(page, 'Target').click({ button: 'right' });
+    await page.getByLabel('Video timeline').getByRole('button', { name: 'Paste Animation', exact: true }).click();
+    await expect(page.getByText(/Animation pasted to 2 clip\(s\)\. Skipped:/)).toBeVisible();
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'text-target')?.textReveal?.durationMs).toBe(1000);
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-target')?.motionPath).toBeDefined();
+
+    const textTarget = mocks.savedClips().find((clip) => clip.id === 'text-target');
+    expect(textTarget).toMatchObject({
+      text: 'TARGET', fileId: 'target-file', startMs: 0, endMs: 2000,
+      x: 180, y: 100, width: 120, height: 40, rotation: 5, fontSize: 12,
+      volume: 0.8, fadeInMs: 100, fadeOutMs: 200,
+      textReveal: { mode: 'chars', durationMs: 1000 },
+      motionPath: {
+        points: [{ x: 240, y: 120, tMs: 0 }, { x: 280, y: 120, tMs: 2000 }],
+        ease: 'easeInOut', followRotation: true,
+      },
+    });
+    expect(textTarget?.keyframes).toHaveLength(3);
+    expect(textTarget?.keyframes?.map((keyframe) => (keyframe as { tMs: number }).tMs))
+      .toEqual([0, 1000, 2000]);
+    expect(textTarget?.fileId).not.toBe('source-file');
+
+    const shapeTarget = mocks.savedClips().find((clip) => clip.id === 'shape-target');
+    expect(shapeTarget).toMatchObject({
+      fileId: 'shape-file', startMs: 0, endMs: 2000,
+      x: 220, y: 180, width: 50, height: 30, speed: 1.5,
+      motionPath: {
+        points: [{ x: 245, y: 195, tMs: 0 }, { x: 285, y: 195, tMs: 2000 }],
+        ease: 'easeInOut', followRotation: true,
+      },
+    });
+    expect(shapeTarget?.textReveal).toBeUndefined();
+    expect(shapeTarget?.speedCurve).toEqual([{ atMs: 0, speed: 1 }, { atMs: 1000, speed: 2 }]);
+
+    await saveDesign(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    expect(mocks.savedClips().find((clip) => clip.id === 'text-target')?.textReveal)
+      .toEqual({ mode: 'chars', durationMs: 1000 });
+
+    const framePage = await page.context().newPage();
+    await mocks.install(framePage);
+    const seek = page.getByRole('slider', { name: 'Seek timeline', exact: true });
+    for (const timeMs of [500, 1000]) {
+      await seek.press('Home');
+      for (let step = 0; step < timeMs / 100; step++) await seek.press('ArrowRight');
+      await expect(seek).toHaveAttribute('aria-valuenow', String(timeMs));
+      const renderedTarget = mocks.savedClips().find((clip) => clip.id === 'shape-target') as unknown as VideoClip;
+      const props = interpolateClipWithMotionPath(renderedTarget, timeMs);
+      const center = { x: Math.round(props.x + props.width / 2), y: Math.round(props.y + props.height / 2) };
+      await expect.poll(() => canvasRgbaAtDocumentPoint(page, 400, 300, center.x, center.y))
+        .toEqual([255, 0, 0, 255]);
+      for (const scale of [1, 2]) {
+        await expect.poll(() => renderedFrameRgba(framePage, mocks, center.x, center.y, timeMs, scale))
+          .toEqual([255, 0, 0, 255]);
+      }
+    }
+    await framePage.close();
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
 test.describe('Designer animated stock media (local non-paid fixture)', () => {
   test('MP4 sticker insertion plays, seeks, saves and reopens as a video clip', async ({ page }) => {
     const mocks = new DesignerMocks();
@@ -2118,9 +2278,11 @@ async function renderedFrameRgba(
   page: Page,
   mocks: DesignerMocks,
   x: number,
-  y: number
+  y: number,
+  timeMs = 0,
+  renderScale = 1
 ): Promise<number[]> {
-  const output = mocks.doc.outputs[0];
+  const output = { ...mocks.doc.outputs[0], renderScale };
   await page.setContent(buildFramePage({
     outputLiteral: escapeForScriptTag(output),
     baseUrlLiteral: '"https://app.postmill.ai"',
@@ -2131,11 +2293,11 @@ async function renderedFrameRgba(
     fontLinks: '',
   }), { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => !!(window as any).__FRAME_API);
-  await page.evaluate(() => (window as any).__FRAME_API.renderFrame(0));
+  await page.evaluate((time) => (window as any).__FRAME_API.renderFrame(time), timeMs);
   return page.locator('#frame-canvas').evaluate((canvas, point) => {
     const context = (canvas as HTMLCanvasElement).getContext('2d')!;
     return Array.from(context.getImageData(point.x, point.y, 1, 1).data);
-  }, { x, y });
+  }, { x: Math.round(x * renderScale), y: Math.round(y * renderScale) });
 }
 
 async function cropFromRightHandle(
