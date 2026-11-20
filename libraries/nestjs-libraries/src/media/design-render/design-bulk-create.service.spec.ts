@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFile as readDiskFile } from 'fs/promises';
 import { Readable } from 'stream';
 import { strFromU8, unzipSync } from 'fflate';
+import sharp from 'sharp';
 
 const redis = new Map<string, string>();
 vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
@@ -71,7 +72,17 @@ const makeService = () => {
     id: 'job-1', organizationId: 'org-1', operation: DESIGN_BULK_CREATE_OPERATION,
     status, inputJson: null,
   };
-  const renderService = { renderPage: vi.fn(async () => Buffer.from(`png-${++renderNumber}`)) };
+  const renderService = {
+    renderPage: vi.fn(async () => {
+      renderNumber++;
+      return PNG_BYTES;
+    }),
+    renderPageToFormat: vi.fn(async () => ({
+      bytes: await sharp(PNG_BYTES).jpeg({ quality: 92 }).toBuffer(),
+      mime: 'image/jpeg',
+      extension: 'jpg',
+    })),
+  };
   const lifecycle = { createPendingJob: vi.fn(async () => ({ id: 'job-1', status: 'pending' })) };
   const aiSettings = {
     getMediaJobById: vi.fn(async () => job.organizationId === 'org-1' ? job : null),
@@ -159,6 +170,7 @@ const makeService = () => {
     fileService as any,
     storageService as any,
     { getCustomFonts: vi.fn(async () => []) } as any,
+    renderService as any,
     { renderPreviewBuffer: vi.fn(async () => PNG_BYTES) } as any,
   );
   const service = new DesignBulkCreateService(
@@ -460,7 +472,7 @@ describe('DesignBulkCreateService enqueue and status', () => {
 
 describe('DesignBulkCreateService processing', () => {
   it('creates editable designs, imports row images and writes self-contained archives and source files into the ZIP', async () => {
-    const { service, designService, aiMediaService, fileService, aiSettings, writes, readFile, localAdapter } = makeService();
+    const { service, designService, aiMediaService, fileService, aiSettings, writes, readFile, localAdapter, renderService } = makeService();
     seedPayload();
 
     await service.processBulkCreate('job-1');
@@ -504,7 +516,17 @@ describe('DesignBulkCreateService processing', () => {
       expect(parsed.manifest.assets).toHaveProperty(remoteId);
       expect(parsed.manifest.assets).toHaveProperty('existing-file');
       expect(parsed.assets.get(parsed.manifest.assets![remoteId].path)).toBeDefined();
+      const archiveEntries = unzipSync(entries[`editable/row-${String(index + 1).padStart(3, '0')}.pdesign`]);
+      for (const previewName of ['previews/output-1-page-1.jpg', 'previews/output-1-page-2.jpg']) {
+        const jpeg = Buffer.from(archiveEntries[previewName]);
+        expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+        expect(await sharp(jpeg).metadata()).toMatchObject({ width: 1, height: 1, format: 'jpeg' });
+      }
     }
+    // Only the source template uses the bundle builder's render path. Rows
+    // convert the four PNGs already rendered above instead of rendering again.
+    expect(renderService.renderPage).toHaveBeenCalledTimes(4);
+    expect(renderService.renderPageToFormat).toHaveBeenCalledTimes(2);
     const template = parsePostmillFile(entries['source/template.pdesign']);
     const templateDoc = new DesignerDocService().validate(template.doc);
     expect((templateDoc.outputs[0] as any).children[0].text).toBe('Hello {{name}}');

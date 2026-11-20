@@ -90,7 +90,10 @@ Video files and video designs carry a **duration badge** on their tile.
 ### Design files (`.pdesign`)
 
 A `.pdesign` file is a self-contained Designer export (document, media, and custom fonts bundled)
-produced from a saved design or template. In the library it shows the design's thumbnail and a
+produced from a saved design or template. New image-design and image-template archives also include
+a full-size JPG for every output and carousel page under `previews/`, so **Download** provides
+ready-to-use images alongside the editable source. Existing archives are not rewritten. Video
+archives keep their current contents. In the library a design shows its thumbnail and a
 label such as **Image design**, **Video design**, **Image template**, or **Video template**.
 **Open in Designer** on a `.pdesign` imports it as a **new design** in your organisation
 (`POST /media/designs/import-library`) and opens it; the library file is left as is. To bring in a

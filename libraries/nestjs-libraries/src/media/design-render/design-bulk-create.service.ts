@@ -22,6 +22,8 @@ import {
   DESIGN_EXPORT_PROVIDER,
   DesignExportService,
   designExportEventId,
+  designExportPreviewFromPng,
+  type DesignExportPreviewEntry,
 } from '@postmill-ai/nestjs-libraries/media/design-export/design-export.service';
 import { applyBulkRow, normalizeBulkImageSource } from '../designer-doc/bulk-variables';
 import { readValidatedImageSource } from '../image-source';
@@ -634,6 +636,7 @@ export class DesignBulkCreateService extends DesignBulkService {
           if (design.previewFileId) previewFileIds.push(design.previewFileId);
           result.designId = design.id;
           let firstPreviewPath: string | undefined;
+          const previews: DesignExportPreviewEntry[] = [];
           const outputCount = Math.min(doc.outputs.length, MAX_OUTPUTS);
           for (let outputIndex = 0; outputIndex < outputCount; outputIndex++) {
             const output = doc.outputs[outputIndex];
@@ -641,6 +644,7 @@ export class DesignBulkCreateService extends DesignBulkService {
             const pages = Math.min(pageCount(output), MAX_PAGES_PER_OUTPUT);
             for (let page = 0; page < pages; page++) {
               const bytes = await this._renderService.renderPage(doc, outputIndex, { orgId }, page);
+              previews.push(await designExportPreviewFromPng(outputIndex, page, bytes));
               const filename = `row-${String(index + 1).padStart(3, '0')}-output-${outputIndex + 1}-page-${page + 1}.png`;
               addZipBytes(bytes.length, true);
               const file = await this._saveBuffer(orgId, {
@@ -668,6 +672,7 @@ export class DesignBulkCreateService extends DesignBulkService {
             doc,
             firstPreviewPath || null,
             bundleCache,
+            previews,
           );
           addZipBytes(bundle.bytes.length);
           const editableFile = await this._saveDocument(orgId, {
