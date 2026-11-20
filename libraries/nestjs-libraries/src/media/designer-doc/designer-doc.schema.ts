@@ -26,6 +26,7 @@ import {
   MAX_LAYER_STYLES,
   MAX_SMART_FILTERS,
   MAX_OPS_PER_REQUEST,
+  MAX_MOTION_PATH_POINTS,
   MAX_OUTPUTS,
   MAX_PAGES_PER_OUTPUT,
   MAX_PATH_NODES,
@@ -566,6 +567,14 @@ export interface DesignerElement {
   paragraphSpacing?: number;
   /** First-line indent of each paragraph, in px. */
   firstLineIndent?: number;
+  /** Opt-in width-and-height fitting. Undefined retains legacy height fitting. */
+  autoFit?: boolean;
+  /** Absolute lower bound for auto-fit, in output px. Never grows smaller runs. */
+  autoFitMinFontSize?: number;
+  /** Pre-enable state used to restore Auto-fit; null means it was absent. */
+  autoFitPrevious?: boolean | null;
+  /** Pre-enable minimum restored with `autoFitPrevious`. */
+  autoFitPreviousMinFontSize?: number;
 
   // image
   src?: string;
@@ -711,8 +720,31 @@ export interface ClipTransition {
   direction?: 'left' | 'right' | 'up' | 'down';
 }
 
+export interface MotionPathPoint {
+  x: number;
+  y: number;
+  /** Clip-relative time; recording preserves the user's relative speed. */
+  tMs: number;
+}
+
+export interface MotionPath {
+  points: MotionPathPoint[];
+  ease?: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
+  /** Optional-additive doc v15; absent keeps the authored/base rotation. */
+  followRotation?: boolean;
+  /** Internal split origin metadata; ordinary recordings omit these fields. */
+  timeOffsetMs?: number;
+  timeDurationMs?: number;
+  startDx?: number;
+  startDy?: number;
+  startRotation?: number;
+  startAngle?: number;
+}
+
 export interface VideoClip {
   id: string;
+  /** Optional-additive doc v15: canvas-space, clip-local motion geometry. */
+  motionPath?: MotionPath;
   /** Optional-additive doc v10: format-local selection and reflow move-unit. */
   groupId?: string;
   /**
@@ -1375,6 +1407,8 @@ const elementCommon = {
   textTransform: z.enum(['none', 'uppercase', 'lowercase', 'capitalize']).optional(),
   paragraphSpacing: z.number().min(0).max(500).optional(),
   firstLineIndent: z.number().min(0).max(500).optional(),
+  autoFit: z.boolean().optional(),
+  autoFitPrevious: z.boolean().nullable().optional(),
 
   // image
   src: SrcSchema.optional(),
@@ -1469,6 +1503,8 @@ const elementStrictNumeric = {
 
 const elementStrictOptionalNumeric = {
   fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
+  autoFitMinFontSize: strictNum(1, MAX_FONT_SIZE).optional(),
+  autoFitPreviousMinFontSize: strictNum(1, MAX_FONT_SIZE).optional(),
   fontWeight: strictNum(1, 1000).optional(),
   lineHeight: strictNum(0, 100).optional(),
   letterSpacing: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
@@ -1500,6 +1536,8 @@ const elementLenientNumeric = {
   locked: z.boolean().catch(false),
   hidden: z.boolean().catch(false),
   fontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
+  autoFitMinFontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
+  autoFitPreviousMinFontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
   fontWeight: lenientOptionalNum(1, 1000),
   lineHeight: lenientOptionalNum(0, 100),
   letterSpacing: lenientOptionalNum(-MAX_DIMENSION, MAX_DIMENSION),
@@ -1708,6 +1746,24 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
     }
   );
 
+const MotionPathPointSchema = z.object({
+  x: strictNum(-MAX_DIMENSION, MAX_DIMENSION),
+  y: strictNum(-MAX_DIMENSION, MAX_DIMENSION),
+  tMs: strictNum(0, MAX_VIDEO_DURATION_MS),
+}).strict();
+
+export const MotionPathSchema = z.object({
+  points: z.array(MotionPathPointSchema).max(MAX_MOTION_PATH_POINTS),
+  ease: z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']).optional(),
+  followRotation: z.boolean().optional(),
+  timeOffsetMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+  timeDurationMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+  startDx: strictNum(-2 * MAX_DIMENSION, 2 * MAX_DIMENSION).optional(),
+  startDy: strictNum(-2 * MAX_DIMENSION, 2 * MAX_DIMENSION).optional(),
+  startRotation: strictNum(-360, 360).optional(),
+  startAngle: strictNum(-360, 360).optional(),
+}).strict();
+
 // ---------------------------------------------------------------------------
 // SpeedCurvePoint
 // ---------------------------------------------------------------------------
@@ -1887,6 +1943,7 @@ const clipStrictNested = {
   fillGradient: StrictDesignerGradientSchema.optional(),
   textStroke: StrictDesignerTextStrokeSchema.optional(),
   keyframes: z.array(StrictKeyframeSchema).max(1000).optional(),
+  motionPath: MotionPathSchema.optional(),
   // Speed ramp points (doc v7) — additive, so earlier clips keep validating.
   speedCurve: z.array(StrictSpeedCurvePointSchema).max(100).optional(),
   transitionIn: StrictTransitionSchema.optional(),
@@ -1904,6 +1961,7 @@ const clipLenientNested = {
   fillGradient: LenientDesignerGradientSchema.optional(),
   textStroke: LenientDesignerTextStrokeSchema.optional(),
   keyframes: z.array(LenientKeyframeSchema).max(1000).optional(),
+  motionPath: MotionPathSchema.optional(),
   speedCurve: z.array(LenientSpeedCurvePointSchema).max(100).optional(),
   transitionIn: LenientTransitionSchema.optional(),
   transitionOut: LenientTransitionSchema.optional(),

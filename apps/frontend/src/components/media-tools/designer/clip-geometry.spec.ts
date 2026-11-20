@@ -474,3 +474,32 @@ describe('planTrackDrop', () => {
     ]);
   });
 });
+
+
+describe('motion path geometry composition', () => {
+  it('translates a path with a whole-clip drag', () => {
+    const animated = clip({
+      motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 120, tMs: 4000 }] },
+    });
+    const update = clipGeometryUpdate(animated, box(), box({ x: 40, y: 60 }), 2000);
+    expect(update?.motionPath?.points).toEqual([
+      { x: 40, y: 60, tMs: 0 },
+      { x: 130, y: 160, tMs: 4000 },
+    ]);
+  });
+
+  it('does not move the path when editing the keyframe under the playhead', () => {
+    const animated = clip({
+      motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 120, tMs: 4000 }] },
+      keyframes: [{ tMs: 1000, props: { x: 10, y: 20 } }],
+    });
+    const update = clipGeometryUpdate(
+      animated,
+      box(),
+      box({ x: 40, y: 60 }),
+      2000
+    );
+    expect(update?.keyframes?.[0].props).toMatchObject({ x: 40, y: 60 });
+    expect(update?.motionPath).toBeUndefined();
+  });
+});

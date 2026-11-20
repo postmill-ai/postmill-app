@@ -69,6 +69,59 @@ describe('applyLinked fontSize propagation', () => {
     expect(affected).toEqual([1]);
   });
 
+  it('scales an auto-fit minimum even when it is the only pixel-valued edit', () => {
+    const { outputs, affected } = applyLinked(
+      makeDoc(),
+      0,
+      new Set(['e1']),
+      { autoFit: true, autoFitMinFontSize: 24 },
+      false
+    );
+    expect((outputs[0] as any).children[0]).toMatchObject({
+      autoFit: true,
+      autoFitMinFontSize: 24,
+    });
+    expect((outputs[1] as any).children[0]).toMatchObject({
+      autoFit: true,
+      autoFitMinFontSize: 20,
+    });
+    expect(affected).toEqual([1]);
+  });
+
+  it('scales a saved pre-enable minimum with linked auto-fit restoration state', () => {
+    const { outputs, affected } = applyLinked(
+      makeDoc(),
+      0,
+      new Set(['e1']),
+      { autoFitPrevious: null, autoFitPreviousMinFontSize: 24 },
+      false
+    );
+    expect((outputs[0] as any).children[0]).toMatchObject({
+      autoFitPrevious: null,
+      autoFitPreviousMinFontSize: 24,
+    });
+    expect((outputs[1] as any).children[0]).toMatchObject({
+      autoFitPrevious: null,
+      autoFitPreviousMinFontSize: 20,
+    });
+    expect(affected).toEqual([1]);
+  });
+
+  it('keeps linked scaling proportional below the new-text default floor', () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 400, height: 400 });
+
+    const { outputs } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { fontSize: 64 },
+      false
+    );
+
+    expect((outputs[1] as any).children[0].fontSize).toBe(24);
+  });
+
   it('never re-imposes short-edge type on a wider linked output', () => {
     const { outputs } = applyLinked(
       makeDoc(),
@@ -116,6 +169,477 @@ describe('applyLinked fontSize propagation', () => {
       textStroke: { color: '#123456', width: 0 },
     }, false);
     expect((zero.outputs[1] as any).children[0].textStroke.width).toBe(0);
+  });
+
+  it('re-fits explicit rich-text runs for each linked output', () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 540, height: 540 });
+    const source = (doc.outputs[0] as any).children[0];
+    const target = (doc.outputs[1] as any).children[0];
+    source.fontSize = 64;
+    source.richText = [
+      { text: 'Big ', fontSize: 64, fontWeight: 700, fill: '#112233' },
+      { text: 'rich ', fontSize: 32, fontStyle: 'italic' },
+      { text: '™', fontSize: 8 },
+      { text: 'headline', fontWeight: 500 },
+    ];
+    target.fontSize = 32;
+    target.richText = [
+      { text: 'Big ', fontSize: 32, fontWeight: 700, fill: '#112233' },
+      { text: 'rich ', fontSize: 16, fontStyle: 'italic' },
+      { text: '™', fontSize: 8 },
+      { text: 'headline', fontWeight: 500 },
+    ];
+    const editedRuns = source.richText.map((run: any, index: number) =>
+      index === 0 ? { ...run, fill: '#abcdef' } : { ...run }
+    );
+
+    const { outputs, affected } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].fontSize).toBe(64);
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8, undefined,
+    ]);
+    expect((outputs[1] as any).children[0].fontSize).toBe(32);
+    expect((outputs[1] as any).children[0].richText).toEqual([
+      { text: 'Big ', fontSize: 32, fontWeight: 700, fill: '#abcdef' },
+      { text: 'rich ', fontSize: 16, fontStyle: 'italic' },
+      { text: '™', fontSize: 8 },
+      { text: 'headline', fontWeight: 500 },
+    ]);
+    expect((outputs[1] as any).children[0].richText[3]).not.toHaveProperty('fontSize');
+    expect(affected).toEqual([1]);
+  });
+
+  const makeLinkedSizeDoc = () => {
+    const doc = makeDoc();
+    Object.assign(doc.outputs[1], { width: 540, height: 540 });
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    larger.richText = [
+      { text: 'Big ', fontSize: 64, fill: '#112233' },
+      { text: 'rich ', fontSize: 32 },
+      { text: '™', fontSize: 8 },
+    ];
+    smaller.richText = [
+      { text: 'Big ', fontSize: 32, fill: '#112233' },
+      { text: 'rich ', fontSize: 16 },
+      { text: '™', fontSize: 8 },
+    ];
+    larger.text = larger.richText.map((run: any) => run.text).join('');
+    smaller.text = smaller.richText.map((run: any) => run.text).join('');
+    return { doc };
+  };
+
+  it('keeps target run sizes unchanged for a style-only edit from the smaller format', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any, index: number) =>
+      index === 0 ? { ...run, fill: '#abcdef' } : { ...run }
+    );
+
+    const { outputs, affected } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8,
+    ]);
+    expect((outputs[0] as any).children[0].richText[0].fill).toBe('#abcdef');
+    expect((outputs[1] as any).children[0].richText[0].fill).toBe('#abcdef');
+    expect(affected).toEqual([0]);
+  });
+
+  it('scales only the run whose size actually changed', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any, index: number) =>
+      index === 0 ? { ...run, fontSize: 40 } : { ...run }
+    );
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      80, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      40, 16, 8,
+    ]);
+  });
+
+  it.each([
+    { action: 'typing into', text: 'Bigger rich ™', firstRunText: 'Bigger ' },
+    { action: 'deleting from', text: 'Bi rich ™', firstRunText: 'Bi ' },
+  ])(
+    'preserves later run sizes when $action an earlier run on the smaller format',
+    ({ text, firstRunText }) => {
+      const { doc } = makeLinkedSizeDoc();
+      const smaller = (doc.outputs[1] as any).children[0];
+      const editedRuns = smaller.richText.map((run: any) => ({ ...run }));
+      editedRuns[0].text = firstRunText;
+
+      const { outputs } = applyLinked(
+        doc,
+        1,
+        new Set(['e9']),
+        { text, richText: editedRuns },
+        false
+      );
+
+      expect((outputs[0] as any).children[0].text).toBe(text);
+      expect((outputs[1] as any).children[0].text).toBe(text);
+      expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        64, 32, 8,
+      ]);
+      expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        32, 16, 8,
+      ]);
+    }
+  );
+
+  const replaceRuns = (element: any, runs: any[]) => {
+    element.richText = runs;
+    element.text = runs.map((run) => run.text).join('');
+  };
+
+  it('preserves a sub-floor run when its entire text is replaced', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any) => ({ ...run }));
+    editedRuns[2].text = '®';
+    const text = editedRuns.map((run: any) => run.text).join('');
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8,
+    ]);
+  });
+
+  it.each([
+    { side: 'target', largerSizes: [12, 8], smallerSizes: [10, 10] },
+    { side: 'source', largerSizes: [12, 12], smallerSizes: [10, 8] },
+  ])(
+    'matches every mapped $side range when a run spans an edit and unchanged text',
+    ({ largerSizes, smallerSizes }) => {
+      const { doc } = makeLinkedSizeDoc();
+      const larger = (doc.outputs[0] as any).children[0];
+      const smaller = (doc.outputs[1] as any).children[0];
+      replaceRuns(larger, [
+        { text: 'Big ', fontSize: largerSizes[0] },
+        { text: 'rich ', fontSize: largerSizes[1] },
+      ]);
+      replaceRuns(smaller, [
+        { text: 'Big ', fontSize: smallerSizes[0] },
+        { text: 'rich ', fontSize: smallerSizes[1] },
+      ]);
+      const text = 'Bigger rich ';
+
+      const { outputs } = applyLinked(
+        doc,
+        1,
+        new Set(['e9']),
+        { text, richText: [{ text, fontSize: 10 }] },
+        false
+      );
+
+      expect((outputs[0] as any).children[0].text).toBe(text);
+      expect((outputs[1] as any).children[0].text).toBe(text);
+      expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        20,
+      ]);
+      expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+        10,
+      ]);
+    }
+  );
+
+  it('bounds work when replacing the maximum-length text', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    const previousText = 'The quick brown fox jumps over the lazy dog. '.repeat(500).slice(0, 20000);
+    const text = 'A completely different line of replacement copy. '.repeat(500).slice(0, 20000);
+    replaceRuns(larger, [{ text: previousText, fontSize: 8 }]);
+    replaceRuns(smaller, [{ text: previousText, fontSize: 8 }]);
+
+    const startedAt = performance.now();
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: [{ text, fontSize: 8 }] },
+      false
+    );
+    const elapsed = performance.now() - startedAt;
+
+    expect(elapsed).toBeLessThan(250);
+    expect((outputs[0] as any).children[0].text).toBe(text);
+    expect((outputs[1] as any).children[0].text).toBe(text);
+    expect((outputs[0] as any).children[0].richText[0].fontSize).toBe(16);
+    expect((outputs[1] as any).children[0].richText[0].fontSize).toBe(8);
+  });
+
+  const makeFiveRunLinkedSizeDoc = () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 64, fill: '#112233' },
+      { text: 'rich ', fontSize: 32 },
+      { text: '™', fontSize: 8 },
+      { text: ' and ', fontSize: 32 },
+      { text: '©', fontSize: 8 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 32, fill: '#112233' },
+      { text: 'rich ', fontSize: 16 },
+      { text: '™', fontSize: 8 },
+      { text: ' and ', fontSize: 16 },
+      { text: '©', fontSize: 8 },
+    ]);
+    return { doc };
+  };
+
+  it.each([
+    {
+      label: 'rich ',
+      runIndex: 1,
+      text: 'Big ™ and ©',
+      largerSizes: [64, 8, 32, 8],
+      smallerSizes: [32, 8, 16, 8],
+    },
+    {
+      label: ' and ',
+      runIndex: 3,
+      text: 'Big rich ™©',
+      largerSizes: [64, 32, 8, 8],
+      smallerSizes: [32, 16, 8, 8],
+    },
+  ])(
+    'preserves surviving run sizes after deleting the whole $label run',
+    ({ runIndex, text, largerSizes, smallerSizes }) => {
+      const { doc } = makeFiveRunLinkedSizeDoc();
+      const smaller = (doc.outputs[1] as any).children[0];
+      const editedRuns = smaller.richText
+        .filter((_: any, index: number) => index !== runIndex)
+        .map((run: any) => ({ ...run }));
+
+      const { outputs } = applyLinked(
+        doc,
+        1,
+        new Set(['e9']),
+        { text, richText: editedRuns },
+        false
+      );
+
+      expect((outputs[0] as any).children[0].text).toBe(text);
+      expect((outputs[1] as any).children[0].text).toBe(text);
+      expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual(
+        largerSizes
+      );
+      expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual(
+        smallerSizes
+      );
+    }
+  );
+
+  it('preserves run sizes between separate text edits in one editing session', () => {
+    const { doc } = makeFiveRunLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const editedRuns = smaller.richText.map((run: any) => ({ ...run }));
+    editedRuns[0].text = 'Bigger ';
+    editedRuns[3].text = ' & ';
+    const text = editedRuns.map((run: any) => run.text).join('');
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { text, richText: editedRuns },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].text).toBe(text);
+    expect((outputs[1] as any).children[0].text).toBe(text);
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8, 16, 8,
+    ]);
+  });
+
+  it('scales a changed size when differently sized runs merge on the smaller format', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'small ', fontSize: 12 },
+      { text: 'type', fontSize: 14 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'small ', fontSize: 10 },
+      { text: 'type', fontSize: 10 },
+    ]);
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: [{ text: 'small type', fontSize: 10 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([20]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([10]);
+  });
+
+  it('requires every covered source run to agree before preserving a merged target size', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 24 },
+      { text: 'rich ', fontSize: 28 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 12 },
+      { text: 'rich ', fontSize: 12 },
+    ]);
+
+    const { outputs } = applyLinked(
+      doc,
+      0,
+      new Set(['e1']),
+      { richText: [{ text: 'Big rich ', fontSize: 28 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([28]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([14]);
+  });
+
+  it('does not choose the first target size when differently sized target runs merge', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const larger = (doc.outputs[0] as any).children[0];
+    const smaller = (doc.outputs[1] as any).children[0];
+    replaceRuns(larger, [
+      { text: 'Big ', fontSize: 14 },
+      { text: 'rich ', fontSize: 12 },
+    ]);
+    replaceRuns(smaller, [
+      { text: 'Big ', fontSize: 12 },
+      { text: 'rich ', fontSize: 12 },
+    ]);
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: [{ text: 'Big rich ', fontSize: 12 }] },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([24]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([12]);
+  });
+
+  const splitFirstRun = (element: any) => {
+    const [first, ...rest] = element.richText;
+    return [
+      { ...first, text: 'B', fontWeight: 700 },
+      { ...first, text: 'ig ' },
+      ...rest.map((run: any) => ({ ...run })),
+    ];
+  };
+
+  it('preserves target sizes by character range when a run splits', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+
+    const { outputs } = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: splitFirstRun(smaller) },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 32, 16, 8,
+    ]);
+    expect((outputs[0] as any).children[0].richText[0].fontWeight).toBe(700);
+    expect((outputs[1] as any).children[0].richText[0].fontWeight).toBe(700);
+  });
+
+  it('preserves target sizes by character range when split runs merge', () => {
+    const { doc } = makeLinkedSizeDoc();
+    const smaller = (doc.outputs[1] as any).children[0];
+    const split = applyLinked(
+      doc,
+      1,
+      new Set(['e9']),
+      { richText: splitFirstRun(smaller) },
+      false
+    );
+    const splitDoc = { ...doc, outputs: split.outputs } as DesignerDoc;
+    const splitSmaller = (splitDoc.outputs[1] as any).children[0];
+    const [first, second, ...rest] = splitSmaller.richText;
+    const mergedFirst = { ...first, text: `${first.text}${second.text}` };
+    delete mergedFirst.fontWeight;
+
+    const { outputs } = applyLinked(
+      splitDoc,
+      1,
+      new Set(['e9']),
+      {
+        richText: [
+          mergedFirst,
+          ...rest.map((run: any) => ({ ...run })),
+        ],
+      },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      64, 32, 8,
+    ]);
+    expect((outputs[1] as any).children[0].richText.map((run: any) => run.fontSize)).toEqual([
+      32, 16, 8,
+    ]);
+    expect((outputs[0] as any).children[0].richText[0]).not.toHaveProperty('fontWeight');
   });
 
   it('keeps the edit on the current output when editFormatOnly is set', () => {
@@ -273,6 +797,8 @@ describe('applyLinkedVideoClip styles', () => {
         align: 'justify',
         fontStyle: 'italic',
         textStroke: { color: '#000000', width: 6 },
+        stroke: '#123456',
+        strokeWidth: 6,
         groupId: 'new-group',
         x: 999,
       },
@@ -284,6 +810,8 @@ describe('applyLinkedVideoClip styles', () => {
     expect(sibling.align).toBe('justify');
     expect(sibling.fontStyle).toBe('italic');
     expect(sibling.textStroke).toEqual({ color: '#000000', width: 5 });
+    expect(sibling.stroke).toBe('#123456');
+    expect(sibling.strokeWidth).toBe(6);
     expect(sibling.groupId).toBe('group-1');
     expect(sibling.x).toBe(100);
     expect(sibling.startMs).toBe(500);
@@ -293,14 +821,30 @@ describe('applyLinkedVideoClip styles', () => {
       0,
       'track-0',
       'clip-0',
-      { fillGradient: undefined, fill: '#123456' },
+      { fillGradient: undefined, fill: '#123456', strokeWidth: 0 },
       false
     );
     const solidSibling = (cleared.outputs[1] as any).tracks[0].clips[0];
     expect(solidSibling.fillGradient).toBeUndefined();
     expect(solidSibling.fill).toBe('#123456');
+    expect(solidSibling.strokeWidth).toBe(0);
     expect(solidSibling.x).toBe(100);
     expect(solidSibling.startMs).toBe(500);
+
+    const local = applyLinkedVideoClip(
+      doc, 0, 'track-0', 'clip-0', { stroke: '#abcdef', strokeWidth: 0 }, true
+    );
+    expect((local.outputs[0] as any).tracks[0].clips[0]).toMatchObject({ stroke: '#abcdef', strokeWidth: 0 });
+    expect((local.outputs[1] as any).tracks[0].clips[0].stroke).toBeUndefined();
+
+    const frozenDoc = {
+      ...doc,
+      outputs: [doc.outputs[0], { ...doc.outputs[1], frozen: true }],
+    } as DesignerDoc;
+    const frozen = applyLinkedVideoClip(
+      frozenDoc, 0, 'track-0', 'clip-0', { stroke: '#abcdef', strokeWidth: 4 }, false
+    );
+    expect(frozen.outputs[1]).toBe(frozenDoc.outputs[1]);
   });
 
   it('clears stale crop and focal points on linked clips when their media is replaced', () => {

@@ -20,11 +20,16 @@ import {
   movePage,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
+  duplicateImageOutput,
+  duplicateVideoOutput,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/output-duplication';
+import {
   migrateDoc,
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import { withTextStrokeVersion } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.version';
+import { withMotionPathVersion, withTextStrokeVersion } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.version';
+import { rescaleMotionPathTimes, splitMotionPath } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-path';
 import {
   smartReflow,
   computeContainerBoxes,
@@ -78,6 +83,12 @@ import type {
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 import { mergeKeyframes } from './keyframe-props';
 import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
+import {
+  planClipArrangement,
+  expandClipArrangementRefs,
+  type ClipArrangementDirection,
+  type ClipArrangementFailure,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/clip-arrangement';
 import type { DesignerAssistantSuggestionEntry } from './panels/designer-assistant-cache';
 
 export type {
@@ -178,6 +189,15 @@ export interface DesignerState {
   gestureDepth: number;
   /** The primary selection — drives the inspector. Always a member of `selectedClips`. */
   selectedClip: { outputIndex: number; trackId: string; clipId: string } | null;
+  motionPathRecording: {
+    outputIndex: number;
+    trackId: string;
+    clipId: string;
+    startedAtMs: number;
+    originalPath?: VideoClip['motionPath'];
+  } | null;
+  /** Selected editable point on the active motion path; editor state only. */
+  motionPathPointIndex: number | null;
   /**
    * Multi-select on the video timeline. Editor state, deliberately NOT part of
    * history (snapshots carry only `doc`). Members carry no outputIndex — track
@@ -325,6 +345,7 @@ export interface DesignerActions {
     preset: { formatId: string; name: string; width: number; height: number },
     opts?: { linkContent?: boolean }
   ) => boolean;
+  duplicateOutput: (index: number, opts?: { linkContent?: boolean }) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
@@ -398,6 +419,11 @@ export interface DesignerActions {
     moves: { trackId: string; clipId: string; toTrackId: string | null; startMs: number; endMs: number }[],
     opts?: { newTrackType?: VideoTrack['type'] }
   ) => boolean;
+  arrangeVideoClips: (
+    outputIndex: number,
+    refs: { trackId: string; clipId: string }[],
+    direction: ClipArrangementDirection
+  ) => ClipArrangementFailure | 'ok';
   updateClip: (outputIndex: number, trackId: string, clipId: string, updates: Partial<VideoClip>) => void;
   // Same as updateClip but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead, the
@@ -408,6 +434,10 @@ export interface DesignerActions {
   splitClip: (outputIndex: number, trackId: string, clipId: string, atMs: number) => void;
   setMode: (mode: 'image' | 'video') => void;
   setPlayhead: (ms: number) => void;
+  startMotionPathRecording: (outputIndex: number, trackId: string, clipId: string) => boolean;
+  cancelMotionPathRecording: () => void;
+  finishMotionPathRecording: () => void;
+  setMotionPathPointIndex: (index: number | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
   /**
@@ -639,6 +669,8 @@ export const createDesignerStore = (
       isPlaying: false,
       gestureDepth: 0,
       selectedClip: null,
+      motionPathRecording: null,
+      motionPathPointIndex: null,
       selectedClips: [],
       clipClipboard: [],
       keyframeClipboard: null,
@@ -1681,6 +1713,75 @@ export const createDesignerStore = (
         return true;
       },
 
+      duplicateOutput: (index, opts) => {
+        const { doc } = get();
+        const source = doc.outputs[index];
+        if (!source || doc.outputs.length >= MAX_OUTPUTS) return false;
+        const linkContent = opts?.linkContent ?? true;
+        let name = source.name;
+        for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
+          name = `${source.name} ${suffix}`;
+        }
+        if ('tracks' in source) {
+          const cloned = duplicateVideoOutput(source, name, linkContent);
+          if (!cloned) return false;
+          const outs = doc.outputs.map((output, i) =>
+            i === index ? cloned.sourceOutput : output
+          );
+          outs.splice(index + 1, 0, cloned.output);
+          const accepted = mutate({
+            doc: { ...doc, outputs: outs },
+            currentOutput: index + 1,
+            currentPage: 0,
+            selectedIds: [],
+            selectedClip: null,
+            selectedClips: [],
+            isDirty: true,
+          });
+          if (!accepted) return false;
+          get().pushHistory('Duplicate format');
+          return true;
+        }
+        const legacyLinkedIndexes = new Set<number>();
+        let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
+        if (linkContent && !contentLinkGroup) {
+          if (!isOutputFrozen(source)) legacyLinkedIndexes.add(index);
+          for (let siblingIndex = 0; siblingIndex < doc.outputs.length; siblingIndex++) {
+            const output = doc.outputs[siblingIndex] as DesignerOutput;
+            if (outputsLinkedForInsertion(source, output)) {
+              contentLinkGroup ??= output.contentLinkGroup;
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) {
+                legacyLinkedIndexes.add(siblingIndex);
+              }
+            }
+          }
+        }
+        contentLinkGroup ??= genId();
+        const cloned = duplicateImageOutput(
+          source,
+          name,
+          linkContent,
+          contentLinkGroup
+        );
+        if (!cloned) return false;
+        const outs = doc.outputs.map((output, i) => ({
+          ...output,
+          ...(legacyLinkedIndexes.has(i) ? { contentLinkGroup } : {}),
+          ...(i === index ? { children: cloned.sourceOutput.children } : {}),
+        })) as DesignerOutput[];
+        outs.splice(index + 1, 0, cloned.output);
+        const accepted = mutate({
+          doc: { ...doc, outputs: outs },
+          currentOutput: index + 1,
+          currentPage: 0,
+          selectedIds: [],
+          isDirty: true,
+        });
+        if (!accepted) return false;
+        get().pushHistory('Duplicate format');
+        return true;
+      },
+
       removeOutput: (index) => {
         const { doc, currentOutput } = get();
         if (doc.outputs.length <= 1 || isOutputFrozen(doc.outputs[index])) return;
@@ -2009,6 +2110,8 @@ export const createDesignerStore = (
           playheadMs: 0,
           gestureDepth: 0,
           selectedClip: null,
+          motionPathRecording: null,
+          motionPathPointIndex: null,
           selectedClips: [],
           linkedUpdateFlash: {},
           assistantSuggestions: {},
@@ -2036,6 +2139,8 @@ export const createDesignerStore = (
           playheadMs: 0,
           gestureDepth: 0,
           selectedClip: null,
+          motionPathRecording: null,
+          motionPathPointIndex: null,
           selectedClips: [],
           linkedUpdateFlash: {},
           brandAdminOverride: false,
@@ -2195,6 +2300,51 @@ export const createDesignerStore = (
         return true;
       },
 
+      arrangeVideoClips: (outputIndex, refs, direction) => {
+        const { doc, selectedClip } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return 'unknown-clip';
+        if (isOutputFrozen(vo)) return 'frozen';
+
+        // Groups and transition pairs can pull each other in, so expand both until stable.
+        let expanded = expandClipRefs(vo, refs);
+        for (;;) {
+          const next = expandClipRefs(vo, expandClipArrangementRefs(vo, expanded));
+          if (next.length === expanded.length) break;
+          expanded = next;
+        }
+        const planned = planClipArrangement(vo, expanded, direction, genId);
+        if (planned.status !== 'ok') return planned.status;
+
+        const destinations = new Map(
+          planned.moves.map((move) => [`${move.trackId}:${move.clipId}`, move.toTrackId] as const)
+        );
+        const retarget = (ref: { trackId: string; clipId: string }) => ({
+          ...ref,
+          trackId: destinations.get(`${ref.trackId}:${ref.clipId}`) ?? ref.trackId,
+        });
+        const outputs = [...doc.outputs];
+        outputs[outputIndex] = { ...vo, tracks: planned.tracks };
+        const accepted = mutate({
+          doc: { ...doc, outputs },
+          isDirty: true,
+          selectedClips: expanded.map(retarget),
+          selectedClip: selectedClip && selectedClip.outputIndex === outputIndex
+            ? { ...selectedClip, ...retarget(selectedClip) }
+            : selectedClip,
+        });
+        if (!accepted) return 'frozen';
+
+        const labels: Record<ClipArrangementDirection, string> = {
+          front: 'Bring clip to front',
+          forward: 'Bring clip forward',
+          backward: 'Send clip backward',
+          back: 'Send clip to back',
+        };
+        get().pushHistory(labels[direction]);
+        return 'ok';
+      },
+
       removeClips: (outputIndex, refs) => {
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
@@ -2264,6 +2414,15 @@ export const createDesignerStore = (
           patched = { ...patched, startMs: nextStart, endMs: nextEnd };
           const previousDuration = clip.endMs - clip.startMs;
           const nextDuration = nextEnd - nextStart;
+          if (
+            previousDuration !== nextDuration && clip.motionPath &&
+            patched.motionPath === undefined
+          ) {
+            patched = {
+              ...patched,
+              motionPath: rescaleMotionPathTimes(clip.motionPath, previousDuration, nextDuration),
+            };
+          }
           if (previousDuration !== nextDuration && clip.keyframes?.length) {
             const textClip = track.type === 'text' || track.type === 'caption';
             const presetName = matchTextAnimationPreset(
@@ -2304,7 +2463,10 @@ export const createDesignerStore = (
           patched,
           editFormatOnly
         );
-        const nextDoc = withTextStrokeVersion({ ...doc, outputs }, patched);
+        const nextDoc = withMotionPathVersion(
+          withTextStrokeVersion({ ...doc, outputs }, patched),
+          patched
+        );
         if (affected.length) {
           const now = Date.now();
           const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
@@ -2347,10 +2509,16 @@ export const createDesignerStore = (
             // splitSpeedCurveForClip — it also handles the reverse mirror).
             // Without a curve the legacy trim advance applies unchanged.
             const curveSplit = splitSpeedCurveForClip(original, splitPoint - original.startMs);
+            const motionSplit = splitMotionPath(
+              original.motionPath,
+              splitPoint - original.startMs,
+              original.endMs - original.startMs
+            );
             const first: VideoClip = {
               ...original,
               id: genId(),
               endMs: splitPoint,
+              motionPath: motionSplit.first,
               ...(curveSplit ? { speedCurve: curveSplit.first.speedCurve, trimInMs: curveSplit.first.trimInMs } : {}),
             };
             // The second half must advance its source trim-in so it continues from
@@ -2361,6 +2529,7 @@ export const createDesignerStore = (
               ...original,
               id: genId(),
               startMs: splitPoint,
+              motionPath: motionSplit.second,
               ...(curveSplit
                 ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
                 : { trimInMs: (original.trimInMs ?? 0) + (splitPoint - original.startMs) }),
@@ -2422,6 +2591,52 @@ export const createDesignerStore = (
       },
 
       setPlayhead: (ms) => mutate({ playheadMs: ms }),
+
+      startMotionPathRecording: (outputIndex, trackId, clipId) => {
+        const { doc } = get();
+        const output = doc.outputs[outputIndex] as VideoOutput | undefined;
+        const track = output?.tracks.find((item) => item.id === trackId);
+        const clip = track?.clips.find((item) => item.id === clipId);
+        if (
+          doc.mode !== 'video' || !output || isOutputFrozen(output) ||
+          !track || track.locked || track.type === 'audio' || !clip
+        ) return false;
+        set({
+          motionPathRecording: {
+            outputIndex,
+            trackId,
+            clipId,
+            startedAtMs: Date.now(),
+            originalPath: clip.motionPath,
+          },
+          motionPathPointIndex: 0,
+        });
+        get().setSelectedClip({ outputIndex, trackId, clipId });
+        get().setSelectedClips([{ trackId, clipId }], { trackId, clipId });
+        get().setPlayhead(clip.startMs);
+        return true;
+      },
+
+      cancelMotionPathRecording: () => {
+        const recording = get().motionPathRecording;
+        if (!recording) return;
+        const output = get().doc.outputs[recording.outputIndex] as VideoOutput | undefined;
+        const clip = output?.tracks.find((track) => track.id === recording.trackId)?.clips
+          .find((item) => item.id === recording.clipId);
+        if (clip && clip.motionPath !== recording.originalPath) {
+          get().updateClipSilent(
+            recording.outputIndex,
+            recording.trackId,
+            recording.clipId,
+            { motionPath: recording.originalPath }
+          );
+        }
+        set({ motionPathRecording: null, motionPathPointIndex: null });
+      },
+
+      finishMotionPathRecording: () => set({ motionPathRecording: null, motionPathPointIndex: null }),
+
+      setMotionPathPointIndex: (index) => set({ motionPathPointIndex: index }),
 
       setIsPlaying: (playing) => mutate({ isPlaying: playing }),
 

@@ -130,7 +130,7 @@ replace their local media with provider generation.
 The `Designer video acceptance` workflow runs those two cases on GitHub-hosted runners through
 `playwright.designer-ci.config.ts` after a production frontend build; the config refuses to load outside
 GitHub Actions. A sibling job installs Chromium and FFmpeg and runs `video-render.integration.spec.ts`
-with `RUN_RENDER_INTEGRATION=1` for real gradient/outline/sticker, poster and MP4 acceptance. The same
+with `RUN_RENDER_INTEGRATION=1` for real gradient/outline/sticker, poster, converted-scene and MP4 acceptance. The Edit as Video integration case uses the real preservation mapper and captures both sides of a scene boundary, including z-order and hidden-track exclusion. The same
 flag enables an explicitly authorized local run against an existing Puppeteer Chrome; no browser download
 is required. Do not start these listeners, browsers, or render jobs on a production host for verification.
 
@@ -150,7 +150,9 @@ design, render, and upload routes and starts no `webServer`. Set `E2E_BASE` to a
 loopback worktree frontend and run `pnpm exec playwright test --config
 playwright.designer-editing.config.ts` from `e2e/`. The `production-editing` job in
 `.github/workflows/designer-browser.yml` builds the frontend, starts that production bundle only on
-the GitHub runner, and executes this config with the skip flag and mocked routes. Never use the mock cookie or
+the GitHub runner, and executes this config with the skip flag and mocked routes. Its Edit as Video case
+uses separate source/video design ids to verify the conversion summary, source immutability, timed
+save/reopen, and resized video variants without a backend. Never use the mock cookie or
 skip flag for unmocked/live tests, and never start the server or Playwright on the production host.
 
 ### Opt-in live provider playback (never default CI)

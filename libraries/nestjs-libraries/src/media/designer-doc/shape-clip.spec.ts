@@ -56,6 +56,26 @@ describe('shape clips (doc v5)', () => {
     expect(DesignerDocLenientSchema.safeParse(shapeClipDoc()).success).toBe(true);
   });
 
+  it.each(['rect', 'ellipse', 'star', 'triangle', 'polygon'] as const)(
+    'preserves flat stroke fields for %s clips at zero and bounded widths',
+    (shape) => {
+      for (const strokeWidth of [0, 2, 40]) {
+        const source = shapeClipDoc({ shape, stroke: '#123456', strokeWidth });
+        const strict = DesignerDocStrictSchema.parse(source);
+        const lenient = DesignerDocLenientSchema.parse(source);
+        expect(strict.outputs[0].tracks[0].clips[0]).toMatchObject({ shape, stroke: '#123456', strokeWidth });
+        expect(lenient.outputs[0].tracks[0].clips[0]).toMatchObject({ shape, stroke: '#123456', strokeWidth });
+      }
+    }
+  );
+
+  it('keeps shape strokes additive on a v5 document', () => {
+    const source = { ...shapeClipDoc({ strokeWidth: 0 }), version: 5 };
+    const parsed = DesignerDocStrictSchema.parse(source);
+    expect(parsed.version).toBe(5);
+    expect(parsed.outputs[0].tracks[0].clips[0].strokeWidth).toBe(0);
+  });
+
   it('rejects a shape outside the enum', () => {
     const bad = shapeClipDoc({ shape: 'hexagram' });
     expect(DesignerDocStrictSchema.safeParse(bad).success).toBe(false);

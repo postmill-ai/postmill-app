@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { escapeForScriptTag, FRAME_RENDERER_SCRIPT, stripExportsNamespace } from './frame-renderer-script';
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
+import { interpolateClipWithMotionPath } from '../designer-doc/motion-path';
 import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
 import { transitionAdjustment } from '../designer-doc/transitions';
+import { planClipArrangement } from '../designer-doc/clip-arrangement';
+import type { VideoOutput } from '../designer-doc/designer-doc.schema';
 
 describe('escapeForScriptTag (0.2 </script> breakout)', () => {
   it('neutralizes a </script> breakout in a user-controlled composition value', () => {
@@ -159,6 +162,42 @@ describe('FRAME_RENDERER_SCRIPT', () => {
   it('renders a frame without throwing', async () => {
     const api = run(output);
     await expect(api.renderFrame(500)).resolves.toBeUndefined();
+  });
+
+  it('paints arranged same-time clips in document track order', async () => {
+    const shared = {
+      ...output,
+      tracks: [
+        {
+          id: 'source', type: 'shape',
+          clips: [
+            { id: 'selected', startMs: 0, endMs: 1000, shape: 'rect', fill: '#ff0000', x: 0, y: 0, width: 100, height: 100 },
+            { id: 'resident', startMs: 2000, endMs: 3000, shape: 'rect', fill: '#00ff00', x: 0, y: 0, width: 100, height: 100 },
+          ],
+        },
+        {
+          id: 'target', type: 'shape',
+          clips: [{ id: 'target-clip', startMs: 0, endMs: 1000, shape: 'rect', fill: '#0000ff', x: 0, y: 0, width: 100, height: 100 }],
+        },
+      ],
+    } as VideoOutput;
+    const planned = planClipArrangement(shared, [
+      { trackId: 'source', clipId: 'selected' },
+    ], 'forward', () => 'arranged');
+    expect(planned.status).toBe('ok');
+    if (planned.status !== 'ok') return;
+
+    const fills: string[] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      fill: () => fills.push(String(state.fillStyle)),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    await run({ ...shared, tracks: planned.tracks }, context as never).renderFrame(0);
+    expect(fills).toEqual(['#0000ff', '#ff0000']);
   });
 
   it('uses shared Konva-style wrapping, centered baselines and keyframed font size', async () => {
@@ -573,6 +612,76 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(state.roundRect).toHaveBeenNthCalledWith(1, 0, 0, 50, 50, [10, 0, 20, 0]);
     await run(withRadius(12), context as never).renderFrame(0);
     expect(state.roundRect).toHaveBeenNthCalledWith(2, 0, 0, 50, 50, [12, 12, 12, 12]);
+  });
+
+  it('paints every closed shape stroke at scaled widths and suppresses explicit zero', async () => {
+    for (const shape of ['rect', 'ellipse', 'star', 'triangle', 'polygon'] as const) {
+      for (const strokeWidth of [0, 3, 12]) {
+        const state: Record<string, unknown> = {
+          canvas: { width: 100, height: 100 },
+          stroke: vi.fn(),
+        };
+        const context = new Proxy(state, {
+          get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+          set: (target, prop, value) => { target[prop as string] = value; return true; },
+        });
+        const api = run({
+          ...output,
+          renderScale: 2,
+          tracks: [{
+            ...output.tracks[0],
+            clips: [{
+              ...output.tracks[0].clips[0],
+              keyframes: undefined,
+              shape,
+              stroke: '#123456',
+              strokeWidth,
+            }],
+          }],
+        }, context as never);
+        await api.renderFrame(0);
+
+        expect(state.strokeStyle).toBe('#123456');
+        expect(state.lineWidth).toBe(strokeWidth);
+        expect(state.stroke).toHaveBeenCalledTimes(strokeWidth > 0 ? 1 : 0);
+      }
+    }
+  });
+
+  it('does not invent a non-line stroke from fill and retains the line default', async () => {
+    const renderShape = async (shape: 'rect' | 'ellipse' | 'polygon' | 'line') => {
+      const state: Record<string, unknown> = {
+        canvas: { width: 100, height: 100 },
+        stroke: vi.fn(),
+      };
+      const context = new Proxy(state, {
+        get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+        set: (target, prop, value) => { target[prop as string] = value; return true; },
+      });
+      await run({
+        ...output,
+        tracks: [{
+          ...output.tracks[0],
+          clips: [{
+            ...output.tracks[0].clips[0],
+            keyframes: undefined,
+            shape,
+            strokeWidth: shape === 'line' ? 0 : 4,
+          }],
+        }],
+      }, context as never).renderFrame(0);
+      return state;
+    };
+
+    for (const shape of ['rect', 'ellipse', 'polygon'] as const) {
+      const closedShape = await renderShape(shape);
+      expect(closedShape.lineWidth).toBe(4);
+      expect(closedShape.stroke).not.toHaveBeenCalled();
+    }
+    const line = await renderShape('line');
+    expect(line.strokeStyle).toBe('#ff0000');
+    expect(line.lineWidth).toBe(2);
+    expect(line.stroke).toHaveBeenCalledOnce();
   });
 
   it('builds shape fill gradients through the shared gradient painter', async () => {
@@ -1379,6 +1488,53 @@ describe('FRAME_RENDERER_SCRIPT — media draw geometry', () => {
     for (const testCase of cases) {
       const clip = filtered ? { ...testCase.clip, filters: ['grayscale'] } : testCase.clip;
       expect(await drawArguments(clip)).toEqual(testCase.expected);
+    }
+  });
+});
+
+
+describe('motion path frame rendering', () => {
+  it('matches shared evaluation at several timestamps without renderScale changing geometry', async () => {
+    const translations: [number, number][] = [];
+    const state: Record<string, unknown> = {
+      canvas: { width: 100, height: 100 },
+      translate: (x: number, y: number) => translations.push([x, y]),
+    };
+    const context = new Proxy(state, {
+      get: (target, prop) => prop in target ? target[prop as string] : () => undefined,
+      set: (target, prop, value) => { target[prop as string] = value; return true; },
+    });
+    const clip = {
+      id: 'moving-shape', startMs: 0, endMs: 1000, shape: 'rect', fill: '#ff0000',
+      x: 0, y: 0, width: 50, height: 50,
+      motionPath: {
+        points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 0, tMs: 500 }, { x: 100, y: 100, tMs: 1000 }],
+      },
+    };
+    for (const renderScale of [1, 2]) {
+      const canvas = { width: 0, height: 0, getContext: () => context };
+      const win: Record<string, unknown> = {
+        __DATA: {
+          output: {
+            id: 'motion-output', width: 200, height: 200, fps: 30, durationMs: 1000,
+            background: '#000000', renderScale,
+            tracks: [{ id: 'shape-track', type: 'shape', clips: [clip] }],
+          },
+        },
+      };
+      const doc = {
+        getElementById: () => canvas,
+        createElement: () => ({ width: 0, height: 0, getContext: () => context }),
+      };
+      const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+      fn(win, doc, class {});
+      const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+      for (const time of [250, 750, 1000]) {
+        translations.length = 0;
+        await api.renderFrame(time);
+        const expected = interpolateClipWithMotionPath(clip as never, time);
+        expect(translations[0]).toEqual([expected.x + 25, expected.y + 25]);
+      }
     }
   });
 });

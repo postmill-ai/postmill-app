@@ -272,6 +272,32 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
     [store, textElements, element, out.width, out.height]
   );
 
+  const toggleAutoFit = useCallback(() => {
+    if (!textElements.length) return;
+    const enabling = element?.autoFit !== true;
+    for (const el of textElements) {
+      const hasPrevious = el.autoFitPrevious !== undefined;
+      store.getState().updateElement(
+        el.id,
+        enabling
+          ? {
+              autoFit: true,
+              autoFitPrevious: el.autoFit ?? null,
+              autoFitPreviousMinFontSize: el.autoFitMinFontSize,
+            }
+          : {
+              autoFit: hasPrevious ? el.autoFitPrevious ?? undefined : false,
+              autoFitMinFontSize: hasPrevious
+                ? el.autoFitPreviousMinFontSize
+                : el.autoFitMinFontSize,
+              autoFitPrevious: undefined,
+              autoFitPreviousMinFontSize: undefined,
+            }
+      );
+    }
+    store.getState().pushHistory();
+  }, [store, textElements, element?.autoFit]);
+
   const currentFont = element?.fontFamily || 'Arial';
 
   if (!element) {
@@ -365,9 +391,8 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
             onChange={(e) => {
               const value = parseInt(e.target.value, 10);
               if (!Number.isNaN(value) && value > 0) {
-                // The fitter only ever shrinks, so a size larger than the box
-                // used to be accepted, stored, echoed back by this field — and
-                // then silently painted smaller. Grow the box to honour it.
+                // Without auto-fit, grow the box to honour an explicit size.
+                // Auto-fit keeps the box stable and uses this as its ceiling.
                 update({ fontSize: value }, true, true);
               }
             }}
@@ -397,6 +422,52 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
           </select>
         </div>
       </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] text-newTextColor/60">
+          {t('designer_auto_fit_text', 'Auto-fit text')}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-label={t('designer_auto_fit_text', 'Auto-fit text')}
+          aria-checked={element.autoFit === true}
+          onClick={toggleAutoFit}
+          className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
+            element.autoFit === true ? 'bg-designerAccent' : 'bg-studioBorder'
+          }`}
+        >
+          <span
+            className={`absolute top-[3px] w-[16px] h-[16px] rounded-full bg-white transition-all ${
+              element.autoFit === true ? 'left-[21px]' : 'left-[3px]'
+            }`}
+          />
+        </button>
+      </div>
+
+      {element.autoFit === true && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="text-auto-fit-minimum" className="text-[11px] text-newTextColor/60">
+            {t('designer_auto_fit_minimum', 'Minimum font size')}
+          </label>
+          <input
+            id="text-auto-fit-minimum"
+            type="number"
+            min={1}
+            max={element.fontSize || 16}
+            value={Math.min(element.autoFitMinFontSize ?? 8, element.fontSize || 16)}
+            onChange={(e) => {
+              const value = parseInt(e.target.value, 10);
+              if (!Number.isNaN(value) && value > 0) {
+                update({
+                  autoFitMinFontSize: Math.min(element.fontSize || 16, value),
+                });
+              }
+            }}
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
+          />
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         {/* A gradient headline is a staple of poster work; text was the only

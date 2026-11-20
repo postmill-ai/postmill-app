@@ -62,9 +62,17 @@ import { CornerRadiusControl } from './corner-radius-control';
 import { TextStyleControl } from './text-style-control';
 import { DesignerAssistantPanel } from './designer-assistant-panel';
 import { ClipTimingControls } from './clip-timing-controls';
+import { MotionPathControls } from './motion-path-controls';
 import { CutoutRefineControls } from './cutout-refine-controls';
 import { applyClipMagicGrab, prepareClipMagicGrab } from '../magic-grab';
 import { openMagicGrabReview } from '../magic-grab-modal';
+import {
+  CLIP_ARRANGEMENT_INSPECTOR_COMMANDS,
+  clipArrangementFailureText,
+  clipArrangementRefsForTarget,
+  clipArrangementSelectionFailure,
+  runClipArrangement,
+} from '../clip-arrangement-actions';
 
 // Same weight ladder the image-mode text panel offers.
 const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
@@ -400,6 +408,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   const toaster = useToaster();
   const modals = useModals();
   const doc = store((s: any) => s.doc);
+  const selectedClips = store((s: any) => s.selectedClips);
   const hasKeyframeClipboard = store((s: any) => !!s.keyframeClipboard?.length);
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const vo = doc.outputs[outputIndex];
@@ -416,6 +425,11 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   }, [vo, trackId]);
 
   const clipTrackType = parentTrack?.type;
+  const arrangementRefs = useMemo(
+    () => clipArrangementRefsForTarget(selectedClips, { trackId, clipId }),
+    [selectedClips, trackId, clipId]
+  );
+  const arrangementFailure = clipArrangementSelectionFailure(vo, arrangementRefs);
   const keyframes = useMemo(() => clip?.keyframes || [], [clip?.keyframes]);
   const [graphOpen, setGraphOpen] = useState(false);
   const [analysing, setAnalysing] = useState(false);
@@ -1003,6 +1017,46 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         onCommit={commitClip}
         disabled={!!parentTrack?.locked}
       />
+      {clipTrackType !== 'audio' && (
+        <MotionPathControls
+          store={store}
+          outputIndex={outputIndex}
+          trackId={trackId}
+          clipId={clipId}
+          clip={clip}
+          disabled={!!parentTrack?.locked || vo.frozen === true}
+        />
+      )}
+
+      <div>
+        <div className="text-[11px] text-textColor/50 mb-1">
+          {translate('designer_label_layer_order', 'Layer order')}
+        </div>
+        <div className="flex gap-1">
+          {CLIP_ARRANGEMENT_INSPECTOR_COMMANDS.map((command) => (
+            <button
+              key={command.direction}
+              type="button"
+              onClick={() => runClipArrangement(
+                store,
+                outputIndex,
+                arrangementRefs,
+                command.direction,
+                toaster,
+                translate
+              )}
+              disabled={!!arrangementFailure}
+              title={arrangementFailure
+                ? clipArrangementFailureText(arrangementFailure, translate)
+                : undefined}
+              aria-label={translate(command.key, command.label)}
+              className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate(command.shortKey, command.shortLabel)}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {(clipTrackType === 'video' || clipTrackType === 'audio') && !!clip.src && (
         <div className="pt-1 border-t border-studioBorder space-y-2">
@@ -1392,6 +1446,37 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             label={translate('fill_button', 'Fill')}
             brandEnforcement={brandEnforcement}
           />
+          {clip.shape !== 'line' && (
+            <div
+              role="group"
+              aria-label={translate('designer_label_stroke', 'Stroke')}
+              className="space-y-2"
+            >
+              <div className="text-[11px] text-textColor/50">{translate('designer_label_stroke', 'Stroke')}</div>
+              <ColorSwatch
+                label={translate('color', 'Color')}
+                value={clip.stroke || clip.fill || '#2B5CD3'}
+                onChange={(stroke) => updateClip({
+                  stroke,
+                  ...(clip.strokeWidth === undefined ? { strokeWidth: 0 } : {}),
+                })}
+                brandEnforcement={brandEnforcement}
+              />
+              <Stepper
+                label={translate('designer_label_width', 'Width')}
+                min={0}
+                max={40}
+                value={clip.strokeWidth ?? 0}
+                onChange={(strokeWidth) => updateClipSilent({
+                  strokeWidth,
+                  ...(strokeWidth > 0 && !clip.stroke
+                    ? { stroke: clip.fill || '#2B5CD3' }
+                    : {}),
+                })}
+                onCommit={commitClip}
+              />
+            </div>
+          )}
           <CornerRadiusControl
             value={clip.borderRadius}
             width={clip.width ?? 1}

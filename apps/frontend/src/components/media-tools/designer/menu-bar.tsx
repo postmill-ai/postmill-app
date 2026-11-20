@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { FC, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import {
@@ -14,6 +14,7 @@ import {
   type DesignerMenu,
 } from './actions';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { getSubmenuPlacement, type MenuPlacement } from './context-menu-position';
 
 interface MenuBarProps {
   actions: DesignerAction[];
@@ -126,26 +127,34 @@ const SubmenuItem: FC<{ entry: Extract<Entry, { type: 'sub' }>; onClose: () => v
 }) => {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<MenuPlacement | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const flyoutSizeRef = useRef<{ width: number; height: number } | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The parent dropdown is `max-h-[70vh] overflow-y-auto`, which computes to
   // `overflow: hidden auto` — so anything positioned beside it (left: 100%) is
   // CLIPPED on the x-axis and simply never appears. The flyout therefore has to
   // leave that box entirely: portal to <body> and position it as `fixed` from
-  // the trigger's rect.
+  // the trigger's rect and the flyout's measured content size.
   const place = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const width = 230;
-    const spillsRight = r.right + width > window.innerWidth - 8;
-    setPos({
-      left: spillsRight ? Math.max(8, r.left - width) : r.right,
-      // Keep the flyout on screen when the trigger sits near the bottom.
-      top: Math.min(r.top, Math.max(8, window.innerHeight - 240)),
-    });
+    const trigger = triggerRef.current;
+    const flyout = flyoutRef.current;
+    if (!trigger || !flyout) return;
+    const rect = flyout.getBoundingClientRect();
+    const borderWidth = Math.max(0, rect.width - flyout.clientWidth);
+    const borderHeight = Math.max(0, rect.height - flyout.clientHeight);
+    const measured = flyoutSizeRef.current ?? { width: 0, height: 0 };
+    flyoutSizeRef.current = {
+      width: Math.max(measured.width, flyout.scrollWidth + borderWidth),
+      height: Math.max(measured.height, flyout.scrollHeight + borderHeight),
+    };
+    setPos(getSubmenuPlacement(
+      trigger.getBoundingClientRect(),
+      flyoutSizeRef.current,
+      { width: window.innerWidth, height: window.innerHeight }
+    ));
   }, []);
 
   const openNow = useCallback(() => {
@@ -153,9 +162,8 @@ const SubmenuItem: FC<{ entry: Extract<Entry, { type: 'sub' }>; onClose: () => v
       clearTimeout(closeTimer.current);
       closeTimer.current = null;
     }
-    place();
     setOpen(true);
-  }, [place]);
+  }, []);
 
   // A short grace period so moving the pointer from the row across to the
   // flyout doesn't dismiss it mid-travel.
@@ -163,6 +171,21 @@ const SubmenuItem: FC<{ entry: Extract<Entry, { type: 'sub' }>; onClose: () => v
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => setOpen(false), 180);
   }, []);
+
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open, place]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => place();
+    window.addEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [open, place]);
 
   useEffect(() => () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -198,16 +221,24 @@ const SubmenuItem: FC<{ entry: Extract<Entry, { type: 'sub' }>; onClose: () => v
         <span className="shrink-0 text-[10px] text-textColor/40">▶</span>
       </button>
 
-      {open && pos && typeof document !== 'undefined' &&
+      {open && typeof document !== 'undefined' &&
         createPortal(
           <div
+            ref={flyoutRef}
             role="menu"
             data-submenu-flyout
             tabIndex={-1}
             onMouseEnter={openNow}
             onMouseLeave={closeSoon}
-            style={{ left: pos.left, top: pos.top, width: 230 }}
-            className="fixed max-h-[70vh] overflow-y-auto bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-400"
+            style={{
+              left: pos?.left ?? 0,
+              top: pos?.top ?? 0,
+              width: 230,
+              maxWidth: pos?.maxWidth,
+              maxHeight: pos?.maxHeight ?? 'calc(100vh - 16px)',
+              visibility: pos ? 'visible' : 'hidden',
+            }}
+            className="fixed overflow-y-auto overflow-x-hidden overscroll-contain bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-400"
           >
             <EntryList entries={entry.items} onClose={onClose} />
           </div>,
