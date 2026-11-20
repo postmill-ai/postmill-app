@@ -22,9 +22,11 @@ import {
   pageBackground,
   pageChildren,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
+import { InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 interface TextInspectorProps {
   store: any;
+  tab?: InspectorTabKey;
 }
 
 const averageColor = (data: Uint8ClampedArray): string => {
@@ -90,7 +92,7 @@ const sampleTextBackground = (el: DesignerElement): string | null => {
   }
 };
 
-export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
+export const TextInspector: FC<TextInspectorProps> = ({ store, tab }) => {
   const t = useT();
   const selectedIds = store((s: any) => s.selectedIds);
   const out = store((s: any) => s.doc.outputs[s.currentOutput]);
@@ -270,6 +272,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
 
   return (
     <div className="flex flex-col gap-5">
+      <InspectorTabGroup for="text" active={tab} className="flex flex-col gap-5">
       {textElements.length > 0 && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -396,8 +399,13 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
           </div>
         </div>
       )}
+      </InspectorTabGroup>
 
-      <TextEffectPresets store={store} textElements={textElements} />
+      <InspectorTabGroup for="effects" active={tab} className="flex flex-col gap-5">
+        <TextEffectPresets store={store} textElements={textElements} />
+      </InspectorTabGroup>
+
+      <InspectorTabGroup for="text" active={tab} className="flex flex-col gap-5">
       <TextFormatPanel store={store} />
       {primary && (
         <DesignerAssistantPanel
@@ -418,6 +426,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
           }}
         />
       )}
+      </InspectorTabGroup>
     </div>
   );
 };

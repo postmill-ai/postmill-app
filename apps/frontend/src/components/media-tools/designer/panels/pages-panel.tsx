@@ -4,6 +4,8 @@ import React, { FC, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { pageCount } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import { MAX_PAGES_PER_OUTPUT } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { ContextMenu, type ContextMenuItem } from '../../../ui/context-menu';
+import { useContextMenu } from '../../../ui/use-context-menu';
 import type { DesignerOutput } from '../designer.store';
 import { FormatThumbnail } from '../format-thumbnail';
 
@@ -16,9 +18,10 @@ import { FormatThumbnail } from '../format-thumbnail';
 interface PagesPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
   visible: boolean;
+  onContentAdded?: () => void;
 }
 
-export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
+export const PagesPanel: FC<PagesPanelProps> = ({ store, visible, onContentAdded }) => {
   const t = useT();
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
@@ -31,6 +34,7 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
   const [editingName, setEditingName] = useState('');
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
+  const pageMenu = useContextMenu<number>();
   const carousel = view === 'carousel';
   const thumbH = carousel ? 96 : 64;
 
@@ -46,6 +50,46 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
     setEditingPage(null);
   };
 
+  const beginRename = (i: number) => {
+    if (i === 0 || output.frozen) return;
+    setEditingPage(i);
+    setEditingName(output.pages?.[i - 1]?.name ?? '');
+  };
+
+  const duplicatePage = (i: number) => {
+    store.getState().duplicatePage(i);
+    const current = store.getState().doc.outputs[currentOutput];
+    if (current && 'children' in current && pageCount(current) > count) onContentAdded?.();
+  };
+
+  const addPage = (afterPageNumber?: number) => {
+    store.getState().addPage(undefined, afterPageNumber);
+    const current = store.getState().doc.outputs[currentOutput];
+    if (current && 'children' in current && pageCount(current) > count) onContentAdded?.();
+  };
+
+  const actionsFor = (i: number): ContextMenuItem[] => [
+    {
+      label: t('designer_duplicate_page', 'Duplicate page'),
+      onClick: () => duplicatePage(i),
+      disabled: output.frozen || count >= MAX_PAGES_PER_OUTPUT,
+    },
+    ...(i > 0 ? [{
+      label: t('designer_rename_page', 'Rename page'),
+      onClick: () => beginRename(i),
+      disabled: output.frozen === true,
+    }] : []),
+    ...((i > 0 || carousel) && count > 1 ? [
+      { divider: true } as const,
+      {
+        label: t('designer_delete_page', 'Delete page'),
+        onClick: () => store.getState().removePage(i, carousel),
+        disabled: output.frozen === true,
+        danger: true,
+      },
+    ] : []),
+  ];
+
   return (
     <div
       className="shrink-0 flex items-center gap-2 px-3 py-1.5 border-t border-studioBorder bg-newBgColorInner overflow-x-auto"
@@ -59,6 +103,10 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
             type="button"
             onClick={() => setView(option)}
             aria-pressed={view === option}
+            data-tooltip-id="tooltip"
+            data-tooltip-content={option === 'pages'
+              ? t('designer_pages_hint', 'Manage pages in this format')
+              : t('designer_carousel_hint', 'Arrange slides; insert or delete at any position')}
             className={`rounded-sm px-2 py-1 text-[10px] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
               view === option
                 ? 'bg-designerAccent/10 text-btnPrimaryAccent'
@@ -74,7 +122,8 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
       {Array.from({ length: count }, (_, i) => (
         <React.Fragment key={i === 0 ? `${output.id}-base` : output.pages?.[i - 1]?.id ?? i}>
         <div
-          className={`relative group shrink-0 rounded-md border-2 ${
+          data-page-index={i}
+          className={`relative shrink-0 rounded-md border-2 ${
             i === currentPage
               ? 'border-designerAccent'
               : dropAt === i && dragFrom !== null && dragFrom !== i
@@ -104,15 +153,14 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
           <button
             type="button"
             onClick={() => store.getState().setCurrentPage(i)}
-            onDoubleClick={() => {
-              if (i === 0 || output.frozen) return;
-              setEditingPage(i);
-              setEditingName(output.pages?.[i - 1]?.name ?? '');
-            }}
+            onContextMenu={(event) => pageMenu.openAt(event, i)}
+            onDoubleClick={() => beginRename(i)}
             className="flex flex-col items-center gap-0.5 p-1 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             aria-label={nameOf(i)}
             aria-current={i === currentPage}
-            title={t('designer_page_double_click_rename', 'Double-click to rename')}
+            title={i > 0 && !output.frozen
+              ? t('designer_page_double_click_rename', 'Double-click to rename')
+              : undefined}
           >
             <FormatThumbnail
               output={output}
@@ -141,41 +189,28 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
               </span>
             )}
           </button>
-          <div className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center gap-0.5 z-10">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                store.getState().duplicatePage(i);
-              }}
-              disabled={output.frozen || count >= MAX_PAGES_PER_OUTPUT}
-              title={t('designer_duplicate_page', 'Duplicate page')}
-              aria-label={t('designer_duplicate_page', 'Duplicate page')}
-              className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor disabled:opacity-30"
-            >
-              ⧉
-            </button>
-            {(i > 0 || carousel) && count > 1 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  store.getState().removePage(i, carousel);
-                }}
-                disabled={output.frozen}
-                title={t('designer_delete_page', 'Delete page')}
-                aria-label={t('designer_delete_page', 'Delete page')}
-                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20 disabled:opacity-30"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            aria-label={t('designer_page_actions', 'Page {{number}} actions', { number: i + 1 })}
+            aria-haspopup="menu"
+            aria-expanded={pageMenu.menu?.target === i}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              pageMenu.openAt({
+                clientX: rect.right,
+                clientY: rect.bottom,
+                currentTarget: event.currentTarget,
+              }, i);
+            }}
+            className="absolute -top-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-textColor/60 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
+          >
+            ⋮
+          </button>
         </div>
         {carousel && (
           <button
             type="button"
-            onClick={() => store.getState().addPage(undefined, i)}
+            onClick={() => addPage(i)}
             disabled={output.frozen || count >= MAX_PAGES_PER_OUTPUT}
             aria-label={t('designer_add_slide_after', 'Add slide after {{number}}', { number: i + 1 })}
             title={t('designer_add_slide_after', 'Add slide after {{number}}', { number: i + 1 })}
@@ -190,7 +225,7 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
       {!carousel && (
         <button
           type="button"
-          onClick={() => store.getState().addPage()}
+          onClick={() => addPage()}
           disabled={output.frozen || count >= MAX_PAGES_PER_OUTPUT}
           aria-label={t('designer_add_page', 'Add page')}
           title={t('designer_add_page', 'Add page')}
@@ -199,6 +234,15 @@ export const PagesPanel: FC<PagesPanelProps> = ({ store, visible }) => {
         >
           +
         </button>
+      )}
+      {pageMenu.menu && (
+        <ContextMenu
+          x={pageMenu.menu.x}
+          y={pageMenu.menu.y}
+          items={actionsFor(pageMenu.menu.target)}
+          onClose={pageMenu.close}
+          ariaLabel={t('designer_page_actions', 'Page {{number}} actions', { number: pageMenu.menu.target + 1 })}
+        />
       )}
     </div>
   );

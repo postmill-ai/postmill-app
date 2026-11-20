@@ -15,7 +15,12 @@ import { isNativeBlend } from '@postmill-ai/nestjs-libraries/media/designer-doc/
 import { canvasColor } from '@postmill-ai/nestjs-libraries/media/designer-doc/canvas-color';
 import type { DesignerElement, DesignerGradient, TextRun } from './designer.store';
 import { computeMediaDraw } from '@postmill-ai/nestjs-libraries/media/designer-doc/media-geometry';
-import { fittedFontSize, fitDesignerText, measureForElement } from './measure-text';
+import {
+  fitDesignerRichText,
+  fitDesignerText,
+  fittedFontSize,
+  measureForElement,
+} from './measure-text';
 import { measureLineWidth, applyTextTransform, justifyLineWords } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import {
   pointsForShape,
@@ -1249,7 +1254,21 @@ export const CanvasElements: FC<ElementsProps> = ({
                   (run.fontStyle ?? el.fontStyle) === 'italic'
                 );
 
-              const segments = applyAlignment(layoutRichRuns(el.richText, el), el);
+              const autoFit = fitDesignerRichText(el);
+              const autoFitTop = autoFit
+                ? el.verticalAlign === 'middle'
+                  ? Math.max(0, (el.height - autoFit.height) / 2)
+                  : el.verticalAlign === 'bottom'
+                  ? Math.max(0, el.height - autoFit.height)
+                  : 0
+                : 0;
+              const segments = autoFit
+                ? autoFit.segments.map((seg) => ({
+                    ...seg,
+                    y: seg.y + autoFitTop,
+                    element: el,
+                  }))
+                : applyAlignment(layoutRichRuns(el.richText, el), el);
 
               return (
                 <Group key={el.id} {...commonProps}>
@@ -1446,10 +1465,9 @@ export const CanvasElements: FC<ElementsProps> = ({
                 // width of every word and Konva wraps on what it is given.
                 text={applyTextTransform(el.text || '', el.textTransform)}
                 fontFamily={el.fontFamily || 'Arial'}
-                // Shrink-to-fit through the same helper the exporter uses, so
-                // the glyphs stay inside el.width × el.height — which is the
-                // box the Transformer draws. Without this the text overflows
-                // its own selection box and the canvas disagrees with the PNG.
+                // Resolve fitting through the same helper the exporter uses.
+                // Legacy and opted-in text shrink as required; explicit-off
+                // text keeps its authored size.
                 fontSize={fittedFontSize(el)}
                 fontStyle={fontStyle}
                 fill={hasGrad ? undefined : canvasColor(el.fill || '#000000')}

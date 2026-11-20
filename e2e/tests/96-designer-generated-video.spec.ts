@@ -62,6 +62,8 @@ interface VideoClipSnapshot {
   keyframes?: unknown[];
   shape?: string;
   fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
   crop?: CropSnapshot;
   fitMode?: 'contain' | 'cover' | 'fill';
   blendMode?: string;
@@ -110,7 +112,7 @@ interface DesignerDocSnapshot {
       naturalHeight?: number;
       focalPoint?: { x: number; y: number };
     };
-    tracks: Array<{ id: string; type: string; clips: VideoClipSnapshot[] }>;
+    tracks: Array<{ id: string; type: string; clips: VideoClipSnapshot[]; locked?: boolean }>;
     children?: DesignerElementSnapshot[];
   }>;
 }
@@ -1109,6 +1111,46 @@ const essentialsDoc = (): DesignerDocSnapshot => ({
   }],
 });
 
+const arrangementDoc = (): DesignerDocSnapshot => ({
+  version: 14,
+  mode: 'video',
+  outputs: [{
+    id: 'arrangement-output',
+    formatId: 'arrangement',
+    name: 'Clip arrangement',
+    width: 400,
+    height: 300,
+    durationMs: 6000,
+    tracks: [
+      {
+        id: 'shared-track', type: 'shape',
+        clips: [
+          {
+            id: 'arrange-red', originId: 'arrange-red-origin', groupId: 'arrange-red-group',
+            shape: 'rect', startMs: 0, endMs: 4000,
+            x: 0, y: 0, width: 200, height: 200, fill: '#ff0000',
+            keyframes: [
+              { tMs: 0, props: { x: 0, y: 0, width: 200, height: 200 } },
+              { tMs: 4000, props: { x: 0, y: 0, width: 200, height: 200 } },
+            ],
+          },
+          {
+            id: 'shared-resident', shape: 'rect', startMs: 4000, endMs: 6000,
+            x: 0, y: 0, width: 200, height: 200, fill: '#00ff00',
+          },
+        ],
+      },
+      {
+        id: 'target-track', type: 'shape',
+        clips: [{
+          id: 'arrange-blue', shape: 'rect', startMs: 0, endMs: 4000,
+          x: 0, y: 0, width: 200, height: 200, fill: '#0000ff',
+        }],
+      },
+    ],
+  }],
+});
+
 const motionDoc = (): DesignerDocSnapshot => ({
   version: 9,
   mode: 'video',
@@ -1316,7 +1358,7 @@ test.describe('Designer animated stock media (local non-paid fixture)', () => {
 });
 
 test.describe('Designer video Inspector and timeline essentials (mocked local document)', () => {
-  test('shape gradients paint, reflow controls persist, and frames match preview pixels', async ({ page }) => {
+  test('shape gradients and strokes paint, persist, export, and match preview pixels', async ({ page }) => {
     const mocks = new DesignerMocks();
     mocks.doc = essentialsDoc();
     mocks.name = 'Video shape gradient E2E';
@@ -1370,6 +1412,50 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     expect(radialEdge[2]).toBeGreaterThan(80);
     expect(radialEdge[2]).toBeLessThan(180);
 
+    const stroke = page.getByRole('group', { name: 'Stroke', exact: true });
+    await stroke.getByRole('button', { name: '#ff0000', exact: true }).click();
+    const strokeHex = page.getByRole('textbox', { name: 'Hex color', exact: true });
+    await strokeHex.fill('#123456');
+    await strokeHex.press('Enter');
+    const width = stroke.getByRole('spinbutton', { name: 'Width', exact: true });
+    const deselectCanvas = async () => {
+      await page.getByRole('application', { name: 'Design canvas', exact: true }).press('Escape');
+      await expect(stroke).toHaveCount(0);
+    };
+    await width.fill('6');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+    await deselectCanvas();
+    // Sample the centre of the left stroke band (the shape edge itself): a
+    // 6px stroke spans doc x 197–203, so this point stays solid stroke even
+    // when the sampled canvas pixel rounds one device pixel off.
+    await expect.poll(async () => canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))
+      .toEqual([18, 52, 86, 255]);
+
+    await clipOnTrack(page, 'Shape').click();
+    await width.fill('0');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 0,
+    });
+    await deselectCanvas();
+    // At width 0 the same point shows what lies beneath the old stroke band:
+    // the gradient's dark-blue outer stop at the shape edge, or the black
+    // artboard just outside it — never the stroke's red/green channels.
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))[0])
+      .toBeLessThan(10);
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))[1])
+      .toBeLessThan(10);
+
+    await clipOnTrack(page, 'Shape').click();
+    await width.fill('6');
+    await width.press('Tab');
+    await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+
     await saveDesign(page);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
@@ -1381,7 +1467,13 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
       focalY: 0.75,
       stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#0000FF80' }],
     });
-    await expect.poll(async () => (await canvasRgbaAtDocumentPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(240);
+    expect(mocks.savedClips().find((clip) => clip.id === 'shape-original')).toMatchObject({
+      stroke: '#123456', strokeWidth: 6,
+    });
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 225, 95))[0]).toBeGreaterThan(200);
+    await expect.poll(async () => (await canvasRgbaAtOutputPoint(page, 400, 300, 225, 95))[2]).toBeLessThan(40);
+    await expect.poll(async () => canvasRgbaAtOutputPoint(page, 400, 300, 200, 60))
+      .toEqual([18, 52, 86, 255]);
 
     const framePage = await page.context().newPage();
     await mocks.install(framePage);
@@ -1391,12 +1483,23 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
     const frameEdge = await renderedFrameRgba(framePage, mocks, 290, 30);
     expect(frameEdge[2]).toBeGreaterThan(80);
     expect(frameEdge[2]).toBeLessThan(180);
+    expect(await renderedFrameRgba(framePage, mocks, 202, 60)).toEqual([18, 52, 86, 255]);
     await framePage.close();
 
     await clipOnTrack(page, 'Shape').click();
     await page.getByRole('radio', { name: 'Solid', exact: true }).click();
     await expect.poll(() => mocks.savedClips().find((clip) => clip.id === 'shape-original')?.fillGradient).toBeUndefined();
     await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 250, 60)).toEqual([255, 0, 0, 255]);
+
+    await page.keyboard.press('Control+e');
+    await page.getByRole('button', { name: 'Next: Choose Folder', exact: true }).click();
+    await page.getByRole('button', { name: 'Next: Export 1 file', exact: true }).click();
+    await page.getByRole('button', { name: 'Start Render', exact: true }).click();
+    await expect(page.getByText('Render Complete', { exact: true })).toBeVisible();
+    const composition = mocks.renderRequests[0].composition as DesignerDocSnapshot['outputs'][0];
+    const exportedShape = composition.tracks.find((track) => track.type === 'shape')
+      ?.clips.find((clip) => clip.id === 'shape-original');
+    expect(exportedShape).toMatchObject({ stroke: '#123456', strokeWidth: 6 });
     expect(mocks.generatePosts).toHaveLength(0);
     mocks.expectClean();
   });
@@ -1562,6 +1665,136 @@ test.describe('Designer video Inspector and timeline essentials (mocked local do
   });
 });
 
+test.describe('Designer video clip arrangement (mocked local document)', () => {
+  test('arranges from both menus, preserves clips, undoes atomically, locks, reloads, and exports in preview order', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const mocks = new DesignerMocks();
+    mocks.doc = arrangementDoc();
+    mocks.name = 'Video clip arrangement E2E';
+    await mocks.install(page);
+    await openDesigner(page, mocks);
+    await fitDesignerCanvas(page);
+
+    const layout = () => mocks.doc.outputs[0].tracks.map((track) =>
+      track.clips.map((clip) => clip.id)
+    );
+    const expectLayout = async (expected: string[][]) => {
+      await expect.poll(layout).toEqual(expected);
+    };
+    const initial = [
+      ['arrange-red', 'shared-resident'],
+      ['arrange-blue'],
+    ];
+    const front = [
+      ['shared-resident'],
+      ['arrange-blue'],
+      ['arrange-red'],
+    ];
+    const middle = [
+      ['shared-resident'],
+      ['arrange-red'],
+      ['arrange-blue'],
+    ];
+    const back = [
+      ['arrange-red'],
+      ['shared-resident'],
+      ['arrange-blue'],
+    ];
+    const redBefore = mocks.savedClips().find((clip) => clip.id === 'arrange-red')!;
+    const contextCommand = async (trackLabel: string, command: string) => {
+      await clipOnTrack(page, trackLabel).first().click({ button: 'right' });
+      await page.getByRole('button', { name: command, exact: true }).click();
+    };
+    const trackRow = (label: string) => page
+      .getByTitle(label.toLowerCase(), { exact: true })
+      .first()
+      .locator('xpath=ancestor::div[contains(@class,"items-stretch")][1]');
+
+    await expectLayout(initial);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 100, 100))
+      .toEqual([0, 0, 255, 255]);
+
+    await contextCommand('Shape 1', 'Bring Forward');
+    await expectLayout(front);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 100, 100))
+      .toEqual([255, 0, 0, 255]);
+    await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+    await expectLayout(initial);
+
+    await contextCommand('Shape 1', 'Bring Forward');
+    await expectLayout(front);
+    await contextCommand('Shape 3', 'Send Backward');
+    await expectLayout(middle);
+    await contextCommand('Shape 2', 'Send to Back');
+    await expectLayout(back);
+    await contextCommand('Shape 1', 'Bring to Front');
+    await expectLayout(front);
+
+    await clipOnTrack(page, 'Shape 3').click();
+    await page.getByRole('button', { name: 'Send backward', exact: true }).click();
+    await expectLayout(middle);
+    await clipOnTrack(page, 'Shape 2').click();
+    await page.getByRole('button', { name: 'Bring forward', exact: true }).click();
+    await expectLayout(front);
+    await clipOnTrack(page, 'Shape 3').click();
+    await page.getByRole('button', { name: 'Send to back', exact: true }).click();
+    await expectLayout(back);
+    await clipOnTrack(page, 'Shape 1').click();
+    await page.getByRole('button', { name: 'Bring to front', exact: true }).click();
+    await expectLayout(front);
+
+    await clipOnTrack(page, 'Shape 3').click();
+    await clipOnTrack(page, 'Shape 2').click({ modifiers: ['Shift'] });
+    await page.getByRole('button', { name: 'Send backward', exact: true }).click();
+    await expectLayout([
+      ['arrange-blue'],
+      ['arrange-red'],
+      ['shared-resident'],
+    ]);
+    await page.getByRole('button', { name: 'Undo (Ctrl+Z)', exact: true }).click();
+    await expectLayout(front);
+
+    await clipOnTrack(page, 'Shape 3').click();
+    await trackRow('Shape 3').getByRole('button', { name: 'Lock track', exact: true }).click();
+    await expect.poll(() => mocks.doc.outputs[0].tracks[2].locked).toBe(true);
+    await clipOnTrack(page, 'Shape 3').click({ button: 'right' });
+    for (const command of ['Bring to Front', 'Bring Forward', 'Send Backward', 'Send to Back']) {
+      await expect(page.getByRole('button', { name: command, exact: true })).toBeDisabled();
+    }
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await expectLayout(front);
+    await trackRow('Shape 3').getByRole('button', { name: 'Unlock track', exact: true }).click();
+
+    await saveDesign(page);
+    const redAfter = mocks.savedClips().find((clip) => clip.id === 'arrange-red')!;
+    expect(redAfter).toMatchObject({
+      startMs: redBefore.startMs,
+      endMs: redBefore.endMs,
+      originId: redBefore.originId,
+      groupId: redBefore.groupId,
+      keyframes: redBefore.keyframes,
+      x: redBefore.x,
+      y: redBefore.y,
+      width: redBefore.width,
+      height: redBefore.height,
+      fill: redBefore.fill,
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.konvajs-content').first()).toBeVisible({ timeout: 60_000 });
+    await fitDesignerCanvas(page);
+    await expectLayout(front);
+    await expect.poll(async () => canvasRgbaAtDocumentPoint(page, 400, 300, 100, 100))
+      .toEqual([255, 0, 0, 255]);
+
+    const framePage = await page.context().newPage();
+    await mocks.install(framePage);
+    expect(await renderedFrameRgba(framePage, mocks, 100, 100)).toEqual([255, 0, 0, 255]);
+    await framePage.close();
+    expect(mocks.generatePosts).toHaveLength(0);
+    mocks.expectClean();
+  });
+});
+
 async function openStaticDesigner(page: Page, mocks: DesignerMocks) {
   await page.goto(`/media/designer?designId=${DESIGN_ID}`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: 'Save (Ctrl+S)' })).toBeVisible({ timeout: 60_000 });
@@ -1609,6 +1842,45 @@ async function canvasRgbaAtDocumentPoint(
     const pixelY = Math.max(0, Math.min(canvas.height - 1, Math.round((clientY - rect.top) * canvas.height / rect.height)));
     return Array.from(context.getImageData(pixelX, pixelY, 1, 1).data);
   }, point);
+}
+
+// Sample the preview without assuming anything about the stage's on-screen
+// layout. The Konva backing store always holds the whole artboard regardless
+// of zoom, pan, or Inspector overlays, and the video output's artboard is the
+// only solid opaque black rectangle on it, so locating that rectangle gives
+// the exact doc → canvas-pixel mapping after any layout change (selection,
+// deselect, reload).
+async function canvasRgbaAtOutputPoint(
+  page: Page,
+  outputWidth: number,
+  outputHeight: number,
+  x: number,
+  y: number
+): Promise<number[]> {
+  return page.evaluate(({ ow, oh, dx, dy }) => {
+    const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>('.konvajs-content canvas'));
+    const canvas = canvases.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    if (!canvas) throw new Error('No designer canvas');
+    const context = canvas.getContext('2d')!;
+    const { width: w, height: h } = canvas;
+    const data = context.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const i = (py * w + px) * 4;
+        if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 255) {
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+      }
+    }
+    if (maxX < 0) throw new Error('Artboard not found on canvas');
+    const sx = Math.max(0, Math.min(w - 1, Math.round(minX + dx * (maxX - minX + 1) / ow)));
+    const sy = Math.max(0, Math.min(h - 1, Math.round(minY + dy * (maxY - minY + 1) / oh)));
+    return Array.from(context.getImageData(sx, sy, 1, 1).data);
+  }, { ow: outputWidth, oh: outputHeight, dx: x, dy: y });
 }
 
 async function renderedFrameRgba(
@@ -2679,6 +2951,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
     const center = await canvasDocumentPoint(page, 400, 300, 200, 150);
     await page.mouse.click(center.x, center.y);
 
+    await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
@@ -2756,6 +3029,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
     const center = await canvasDocumentPoint(page, 400, 300, 200, 150);
     await page.mouse.click(center.x, center.y);
 
+    await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
@@ -3010,6 +3284,7 @@ test.describe('Designer blend controls and renderer parity', () => {
     for (const [id, x] of [['text', 50], ['shape', 150], ['image', 250]] as const) {
       const point = await canvasDocumentPoint(page, 400, 100, x, 50);
       await page.mouse.click(point.x, point.y);
+      await page.getByRole('tab', { name: id === 'text' ? 'Effects' : 'Style', exact: true }).click();
       await expect(select).toBeVisible();
       for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
         await select.selectOption(blendMode);
@@ -3020,10 +3295,10 @@ test.describe('Designer blend controls and renderer parity', () => {
       }
     }
 
-    await page.keyboard.press('Control+k');
-    await page.getByRole('button', { name: 'Layers View', exact: true }).click();
+    await page.getByRole('tab', { name: 'Layers', exact: true }).click();
     await page.getByRole('option', { name: /\bGroup\b/ }).click();
-    await page.getByRole('button', { name: 'Close', exact: true }).first().click();
+    await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
     for (const blendMode of ['multiply', 'screen', 'overlay', 'soft-light']) {
       await select.selectOption(blendMode);
       await expect.poll(() => mocks.doc.outputs[0].children!.find((el) => el.id === 'group')?.blendMode).toBe(blendMode);
@@ -3083,6 +3358,7 @@ test.describe('Designer mobile workspace', () => {
     await page.mouse.click(center.x, center.y);
     const inspectorButton = page.getByRole('button', { name: 'Inspector', exact: true });
     if (await inspectorButton.isVisible()) await inspectorButton.click();
+    await page.getByRole('tab', { name: 'Style', exact: true }).click();
 
     const select = page.getByRole('combobox', { name: 'Blend mode', exact: true });
     await expect(select).toBeVisible();

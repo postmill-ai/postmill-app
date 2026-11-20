@@ -1,7 +1,7 @@
 import type { DesignerElement, VideoClip } from './designer.store';
 import { ensureFontLoaded } from './fonts';
 import { defaultTextBox } from './measure-text';
-import type { TextStylePreset } from './text-styles';
+import { textStyleScale, type TextStylePreset } from './text-styles';
 
 /**
  * Creating text, in either kind of document.
@@ -45,10 +45,20 @@ export const addText = (
   preset: Partial<TextStylePreset> = {},
   options: AddTextOptions = {}
 ): string | null => {
-  const style = { ...DEFAULT_TEXT, ...preset };
   const state = store.getState();
   const out = state.doc.outputs[state.currentOutput];
   if (!out) return null;
+
+  const scale = textStyleScale(out);
+  const baseStyle = { ...DEFAULT_TEXT, ...preset };
+  const style = {
+    ...baseStyle,
+    fontSize: Math.max(1, Math.min(999, Math.round(baseStyle.fontSize * scale))),
+    letterSpacing:
+      baseStyle.letterSpacing === undefined
+        ? undefined
+        : Math.round(baseStyle.letterSpacing * scale * 100) / 100,
+  };
 
   void ensureFontLoaded(style.fontFamily);
 
@@ -61,8 +71,9 @@ export const addText = (
       fontSize: style.fontSize,
       fontWeight: style.fontWeight,
       fontFamily: style.fontFamily,
-      lineHeight: (preset as TextStylePreset).lineHeight,
-      letterSpacing: (preset as TextStylePreset).letterSpacing,
+      lineHeight: style.lineHeight,
+      letterSpacing: style.letterSpacing,
+      paddingScale: scale,
     });
 
   const x = options.at?.x ?? out.width / 2 - box.width / 2;
@@ -139,8 +150,9 @@ export const addText = (
     fontStyle: 'normal',
     fill: (preset as TextStylePreset).fill || '#000000',
     align: 'center',
-    lineHeight: (preset as TextStylePreset).lineHeight,
-    letterSpacing: (preset as TextStylePreset).letterSpacing,
+    lineHeight: style.lineHeight,
+    letterSpacing: style.letterSpacing,
+    autoFit: false,
   };
   state.addElement(el);
   return store.getState().selectedIds[0] || null;

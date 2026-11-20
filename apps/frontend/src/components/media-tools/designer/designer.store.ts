@@ -20,6 +20,10 @@ import {
   movePage,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.pages';
 import {
+  duplicateImageOutput,
+  duplicateVideoOutput,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/output-duplication';
+import {
   migrateDoc,
   genId,
   matchPreset,
@@ -79,6 +83,12 @@ import type {
 import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 import { mergeKeyframes } from './keyframe-props';
 import { expandClipRefs, groupRefsForClip, toggleClipRefs } from './video-selection';
+import {
+  planClipArrangement,
+  expandClipArrangementRefs,
+  type ClipArrangementDirection,
+  type ClipArrangementFailure,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/clip-arrangement';
 import type { DesignerAssistantSuggestionEntry } from './panels/designer-assistant-cache';
 
 export type {
@@ -332,6 +342,7 @@ export interface DesignerActions {
     preset: { formatId: string; name: string; width: number; height: number },
     opts?: { linkContent?: boolean }
   ) => boolean;
+  duplicateOutput: (index: number, opts?: { linkContent?: boolean }) => boolean;
   removeOutput: (index: number) => void;
   resizeOutput: (index: number, width: number, height: number, formatId?: string, name?: string) => void;
   setOutputFrozen: (index: number, frozen: boolean) => void;
@@ -402,6 +413,11 @@ export interface DesignerActions {
     moves: { trackId: string; clipId: string; toTrackId: string | null; startMs: number; endMs: number }[],
     opts?: { newTrackType?: VideoTrack['type'] }
   ) => boolean;
+  arrangeVideoClips: (
+    outputIndex: number,
+    refs: { trackId: string; clipId: string }[],
+    direction: ClipArrangementDirection
+  ) => ClipArrangementFailure | 'ok';
   updateClip: (outputIndex: number, trackId: string, clipId: string, updates: Partial<VideoClip>) => void;
   // Same as updateClip but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead, the
@@ -1688,6 +1704,75 @@ export const createDesignerStore = (
         return true;
       },
 
+      duplicateOutput: (index, opts) => {
+        const { doc } = get();
+        const source = doc.outputs[index];
+        if (!source || doc.outputs.length >= MAX_OUTPUTS) return false;
+        const linkContent = opts?.linkContent ?? true;
+        let name = source.name;
+        for (let suffix = 2; doc.outputs.some((out) => out.name === name); suffix++) {
+          name = `${source.name} ${suffix}`;
+        }
+        if ('tracks' in source) {
+          const cloned = duplicateVideoOutput(source, name, linkContent);
+          if (!cloned) return false;
+          const outs = doc.outputs.map((output, i) =>
+            i === index ? cloned.sourceOutput : output
+          );
+          outs.splice(index + 1, 0, cloned.output);
+          const accepted = mutate({
+            doc: { ...doc, outputs: outs },
+            currentOutput: index + 1,
+            currentPage: 0,
+            selectedIds: [],
+            selectedClip: null,
+            selectedClips: [],
+            isDirty: true,
+          });
+          if (!accepted) return false;
+          get().pushHistory('Duplicate format');
+          return true;
+        }
+        const legacyLinkedIndexes = new Set<number>();
+        let contentLinkGroup = linkContent ? source.contentLinkGroup : undefined;
+        if (linkContent && !contentLinkGroup) {
+          if (!isOutputFrozen(source)) legacyLinkedIndexes.add(index);
+          for (let siblingIndex = 0; siblingIndex < doc.outputs.length; siblingIndex++) {
+            const output = doc.outputs[siblingIndex] as DesignerOutput;
+            if (outputsLinkedForInsertion(source, output)) {
+              contentLinkGroup ??= output.contentLinkGroup;
+              if (!output.contentLinkGroup && !isOutputFrozen(output)) {
+                legacyLinkedIndexes.add(siblingIndex);
+              }
+            }
+          }
+        }
+        contentLinkGroup ??= genId();
+        const cloned = duplicateImageOutput(
+          source,
+          name,
+          linkContent,
+          contentLinkGroup
+        );
+        if (!cloned) return false;
+        const outs = doc.outputs.map((output, i) => ({
+          ...output,
+          ...(legacyLinkedIndexes.has(i) ? { contentLinkGroup } : {}),
+          ...(i === index ? { children: cloned.sourceOutput.children } : {}),
+        })) as DesignerOutput[];
+        outs.splice(index + 1, 0, cloned.output);
+        const accepted = mutate({
+          doc: { ...doc, outputs: outs },
+          currentOutput: index + 1,
+          currentPage: 0,
+          selectedIds: [],
+          isDirty: true,
+        });
+        if (!accepted) return false;
+        get().pushHistory('Duplicate format');
+        return true;
+      },
+
       removeOutput: (index) => {
         const { doc, currentOutput } = get();
         if (doc.outputs.length <= 1 || isOutputFrozen(doc.outputs[index])) return;
@@ -2199,6 +2284,51 @@ export const createDesignerStore = (
         });
         get().pushHistory('Move clip');
         return true;
+      },
+
+      arrangeVideoClips: (outputIndex, refs, direction) => {
+        const { doc, selectedClip } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return 'unknown-clip';
+        if (isOutputFrozen(vo)) return 'frozen';
+
+        // Groups and transition pairs can pull each other in, so expand both until stable.
+        let expanded = expandClipRefs(vo, refs);
+        for (;;) {
+          const next = expandClipRefs(vo, expandClipArrangementRefs(vo, expanded));
+          if (next.length === expanded.length) break;
+          expanded = next;
+        }
+        const planned = planClipArrangement(vo, expanded, direction, genId);
+        if (planned.status !== 'ok') return planned.status;
+
+        const destinations = new Map(
+          planned.moves.map((move) => [`${move.trackId}:${move.clipId}`, move.toTrackId] as const)
+        );
+        const retarget = (ref: { trackId: string; clipId: string }) => ({
+          ...ref,
+          trackId: destinations.get(`${ref.trackId}:${ref.clipId}`) ?? ref.trackId,
+        });
+        const outputs = [...doc.outputs];
+        outputs[outputIndex] = { ...vo, tracks: planned.tracks };
+        const accepted = mutate({
+          doc: { ...doc, outputs },
+          isDirty: true,
+          selectedClips: expanded.map(retarget),
+          selectedClip: selectedClip && selectedClip.outputIndex === outputIndex
+            ? { ...selectedClip, ...retarget(selectedClip) }
+            : selectedClip,
+        });
+        if (!accepted) return 'frozen';
+
+        const labels: Record<ClipArrangementDirection, string> = {
+          front: 'Bring clip to front',
+          forward: 'Bring clip forward',
+          backward: 'Send clip backward',
+          back: 'Send clip to back',
+        };
+        get().pushHistory(labels[direction]);
+        return 'ok';
       },
 
       removeClips: (outputIndex, refs) => {

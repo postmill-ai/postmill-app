@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { analyzeDesignerPreflight, rotatedBox } from './design-preflight';
 import { getContrastRatio } from './contrast';
 
-const measureForElement = vi.hoisted(() => vi.fn());
-vi.mock('./measure-text', () => ({ measureForElement }));
+const { measureForElement, measureForRichText } = vi.hoisted(() => ({
+  measureForElement: vi.fn(),
+  measureForRichText: vi.fn(),
+}));
+vi.mock('./measure-text', () => ({ measureForElement, measureForRichText }));
 
 const text = (id: string, overrides: Record<string, unknown> = {}) => ({
   id,
@@ -47,7 +50,11 @@ describe('getContrastRatio', () => {
 describe('analyzeDesignerPreflight', () => {
   beforeEach(() => {
     measureForElement.mockReset();
+    measureForRichText.mockReset();
     measureForElement.mockImplementation(() => (value: string, size: number) => value.length * size * 0.5);
+    measureForRichText.mockImplementation(() =>
+      (value: string, run: { fontSize: number }) => value.length * run.fontSize * 0.5
+    );
   });
 
   it('accepts readable flat text on a solid background', () => {
@@ -249,6 +256,32 @@ describe('analyzeDesignerPreflight', () => {
     expect(result.findings).toEqual([
       expect.objectContaining({ rule: 'text-overflow', elementId: 'one' }),
     ]);
+  });
+
+  it('does not report auto-fit text that the shared layout can fit', () => {
+    const result = analyze(doc([output([text('one', {
+      text: 'x'.repeat(100), width: 100, height: 20, fontSize: 20,
+      autoFit: true, autoFitMinFontSize: 1,
+    })])]));
+    expect(result.findings).toEqual([]);
+  });
+
+  it('uses rich-run auto-fit when assessing residual overflow', () => {
+    const fitted = analyze(doc([output([text('rich', {
+      text: '', richText: [{ text: 'x'.repeat(100), fontWeight: 700 }],
+      width: 100, height: 20, fontSize: 20,
+      autoFit: true, autoFitMinFontSize: 1,
+    })])]));
+    expect(fitted.findings).toEqual([]);
+
+    const overflowing = analyze(doc([output([text('rich', {
+      text: '', richText: [{ text: 'x'.repeat(100) }],
+      width: 100, height: 20, fontSize: 20,
+      autoFit: true, autoFitMinFontSize: 20,
+    })])]));
+    expect(overflowing.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rule: 'text-overflow', elementId: 'rich' }),
+    ]));
   });
 
   it('marks unavailable text measurement as unassessed', () => {

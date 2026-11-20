@@ -10,7 +10,9 @@ import { ChevronDownIcon } from '@postmill-ai/frontend/components/ui/icons';
  * pass their own classes for the container, header, and body.
  *
  * The body unmounts when closed, so interactive children must keep their
- * state in the parent if it has to survive a collapse.
+ * state in the parent if it has to survive a collapse. `keepMounted` instead
+ * hides the closed body — for sections holding live drafts (e.g. the Designer
+ * Inspector's AI tools), which must survive a collapse untouched.
  */
 export const Disclosure: React.FC<{
   header: React.ReactNode;
@@ -20,7 +22,8 @@ export const Disclosure: React.FC<{
   className?: string;
   headerClassName?: string;
   bodyClassName?: string;
-}> = ({ header, open, onToggle, children, className, headerClassName, bodyClassName }) => (
+  keepMounted?: boolean;
+}> = ({ header, open, onToggle, children, className, headerClassName, bodyClassName, keepMounted }) => (
   <div className={className}>
     <button
       type="button"
@@ -38,6 +41,10 @@ export const Disclosure: React.FC<{
         className="shrink-0 mt-0.5 text-textColor/60"
       />
     </button>
-    {open && <div className={bodyClassName}>{children}</div>}
+    {(open || keepMounted) && (
+      <div hidden={!open} className={bodyClassName}>
+        {children}
+      </div>
+    )}
   </div>
 );

@@ -18,7 +18,7 @@ import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { getBrandViolations } from './brand-compliance';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
-import { measureForElement } from './measure-text';
+import { measureForElement, measureForRichText } from './measure-text';
 import {
   layersNeedingRaster,
   outputToSvg,
@@ -399,6 +399,9 @@ const renderOutputAsSvg = async (
     // SVG can't wrap or shrink text on its own; the exporter lays the lines out
     // with the same fitter the canvas uses, given a browser measurement.
     measure: (el) => measureForElement(el as never) ?? ((line, size) => line.length * size * 0.6),
+    measureRich: (el) =>
+      measureForRichText(el as never) ??
+      ((text, run) => text.length * run.fontSize * 0.6),
   });
 };
 
