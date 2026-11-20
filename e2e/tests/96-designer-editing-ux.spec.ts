@@ -1404,7 +1404,7 @@ test('entrance, emphasis, and exit animations remain independent through save an
   await expectSelected();
 
   const savesBefore = state.saveDocs.length;
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.keyboard.press('Control+s');
   await expect.poll(() => state.saveDocs.length).toBeGreaterThan(savesBefore);
   const savedClip = (state.saveDocs.at(-1) as any).outputs[0].tracks[1].clips[0];
   expect(savedClip.id).toBe('still-clip');
