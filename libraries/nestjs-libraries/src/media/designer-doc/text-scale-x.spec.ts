@@ -106,3 +106,51 @@ describe('textScaleX on the document schema', () => {
     expect(parsed.outputs[0].children[0].textScaleX).toBeUndefined();
   });
 });
+
+describe('auto-fit document fields', () => {
+  it.each([true, false])('round-trips autoFit=%s and its minimum', (autoFit) => {
+    const source = doc({ autoFit, autoFitMinFontSize: 12 });
+    expect(DesignerDocStrictSchema.parse(source).outputs[0].children[0]).toMatchObject({
+      autoFit,
+      autoFitMinFontSize: 12,
+    });
+    expect(DesignerDocLenientSchema.parse(source).outputs[0].children[0]).toMatchObject({
+      autoFit,
+      autoFitMinFontSize: 12,
+    });
+  });
+
+  it.each([null, false, true])(
+    'round-trips the previous auto-fit state %s and minimum',
+    (autoFitPrevious) => {
+      const source = doc({
+        autoFit: true,
+        autoFitPrevious,
+        autoFitPreviousMinFontSize: 12,
+      });
+      expect(DesignerDocStrictSchema.parse(source).outputs[0].children[0]).toMatchObject({
+        autoFitPrevious,
+        autoFitPreviousMinFontSize: 12,
+      });
+      expect(DesignerDocLenientSchema.parse(source).outputs[0].children[0]).toMatchObject({
+        autoFitPrevious,
+        autoFitPreviousMinFontSize: 12,
+      });
+    }
+  );
+
+  it('does not stamp auto-fit fields onto an existing document', () => {
+    const parsed = DesignerDocLenientSchema.parse(doc({}));
+    expect(parsed.outputs[0].children[0]).not.toHaveProperty('autoFit');
+    expect(parsed.outputs[0].children[0]).not.toHaveProperty('autoFitMinFontSize');
+    expect(parsed.outputs[0].children[0]).not.toHaveProperty('autoFitPrevious');
+    expect(parsed.outputs[0].children[0]).not.toHaveProperty('autoFitPreviousMinFontSize');
+  });
+
+  it('rejects unbounded current and previous minima in strict mode', () => {
+    expect(() => DesignerDocStrictSchema.parse(doc({ autoFitMinFontSize: 0 }))).toThrow();
+    expect(() => DesignerDocStrictSchema.parse(doc({ autoFitMinFontSize: 10000 }))).toThrow();
+    expect(() => DesignerDocStrictSchema.parse(doc({ autoFitPreviousMinFontSize: 0 }))).toThrow();
+    expect(() => DesignerDocStrictSchema.parse(doc({ autoFitPreviousMinFontSize: 10000 }))).toThrow();
+  });
+});

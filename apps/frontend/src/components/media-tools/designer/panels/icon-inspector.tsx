@@ -5,17 +5,20 @@ import { ColorSwatch, Stepper } from '../controls';
 import type { DesignerElement } from '../designer.store';
 import { useBrandColors } from './use-brand-colors';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { InspectorTabGroup, type InspectorTabKey } from './inspector-tabs';
 
 interface IconInspectorProps {
   element: DesignerElement;
   ids: string[];
   store: any;
+  tab?: InspectorTabKey;
 }
 
 export const IconInspector: FC<IconInspectorProps> = ({
   element,
   ids,
   store,
+  tab,
 }) => {
   const t = useT();
   const updateElements = store((s: any) => s.updateElements);
@@ -26,10 +29,7 @@ export const IconInspector: FC<IconInspectorProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider">
-        {t('designer_icon_heading', 'Icon')}
-      </div>
-
+      <InspectorTabGroup for="style" active={tab}>
       <ColorSwatch
         label={t('fill_button', 'Fill')}
         value={element.fill || '#2B5CD3'}
@@ -55,7 +55,9 @@ export const IconInspector: FC<IconInspectorProps> = ({
           onChange={(n) => set({ strokeWidth: n })}
         />
       </div>
+      </InspectorTabGroup>
 
+      <InspectorTabGroup for="layout" active={tab}>
       <div className="grid grid-cols-2 gap-2">
         <Stepper
           label={t('designer_label_w', 'W')}
@@ -70,6 +72,7 @@ export const IconInspector: FC<IconInspectorProps> = ({
           onChange={(n) => set({ width: n, height: n })}
         />
       </div>
+      </InspectorTabGroup>
     </div>
   );
 };

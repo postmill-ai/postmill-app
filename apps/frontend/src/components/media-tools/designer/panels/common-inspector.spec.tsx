@@ -216,3 +216,45 @@ describe('CommonInspector geometry history', () => {
     expect(children(store)[0].width).toBe(486);
   });
 });
+
+describe('CommonInspector tab ownership', () => {
+  const renderWithTab = (tab?: 'layout' | 'style' | 'effects', styleTab?: 'style' | 'effects') => {
+    const store = createDesignerStore();
+    store.getState().addElement({ ...element('image'), naturalWidth: 200, naturalHeight: 100 });
+    const selected = children(store);
+    const ids = [selected[0].id];
+    store.getState().setSelectedIds(ids);
+    render(<CommonInspector selected={selected} ids={ids} store={store} tab={tab} styleTab={styleTab} />);
+  };
+
+  it('puts position, size, rotation, lock, flip, alignment and layer order on Layout', () => {
+    renderWithTab('layout');
+    for (const label of ['X', 'Y', 'W', 'H', 'Rotation', 'Lock', 'Flip', 'Align to canvas', 'Layer order', 'Reset to original size']) {
+      expect(screen.getByText(label).closest('[hidden]')).toBeNull();
+    }
+    expect(screen.getByText('Opacity').closest('[hidden]')).not.toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Blend mode', hidden: true }).closest('[hidden]')).not.toBeNull();
+  });
+
+  it('puts opacity and blend mode on Style, hidden-but-mounted while Layout is active', () => {
+    renderWithTab('style');
+    expect(screen.getByText('Opacity').closest('[hidden]')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Blend mode' }).closest('[hidden]')).toBeNull();
+    expect(screen.getByText('X').closest('[hidden]')).not.toBeNull();
+    expect(screen.getByText('Rotation').closest('[hidden]')).not.toBeNull();
+  });
+
+  it('hosts appearance on Effects for text and Adjust for adjustment layers', () => {
+    renderWithTab('effects', 'effects');
+    expect(screen.getByText('Opacity').closest('[hidden]')).toBeNull();
+    expect(screen.getByText('X').closest('[hidden]')).not.toBeNull();
+  });
+
+  it('renders every control exactly once with no tab selected (legacy standalone use)', () => {
+    renderWithTab();
+    for (const label of ['X', 'Opacity', 'Rotation', 'Align to canvas', 'Layer order']) {
+      expect(screen.getAllByText(label)).toHaveLength(1);
+      expect(screen.getByText(label).closest('[hidden]')).toBeNull();
+    }
+  });
+});

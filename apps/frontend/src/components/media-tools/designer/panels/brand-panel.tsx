@@ -306,10 +306,12 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           onChange={(event) => selectBrand(event.target.value || null)}
           className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         >
-          <option value="">{t('general_mode', 'General Mode')}</option>
+          <option value="">{t('designer_general_mode_no_rules', 'General Mode — No brand rules')}</option>
           {brands.filter((brand) => brand.enabled).map((brand) => (
             <option key={brand.id} value={brand.id}>
-              {brand.name}
+              {brand.isDefault
+                ? t('designer_default_brand', '{{name}} — Default', { name: brand.name })
+                : brand.name}
             </option>
           ))}
           {brandUnavailable && (

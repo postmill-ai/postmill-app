@@ -252,10 +252,15 @@ describe('collaboration Yjs contract', () => {
     unsubscribe();
   });
 
-  it('carries and clears video gradient fills and text outlines', () => {
+  it('carries and clears video shape strokes, gradient fills, and text outlines', () => {
     const ydoc = new Y.Doc();
     const doc = makeVideoDoc();
     const clip = (doc.outputs[0] as VideoOutput).tracks[0].clips[0];
+    clip.shape = 'star';
+    clip.sides = 7;
+    clip.innerRatio = 0.3;
+    clip.stroke = '#123456';
+    clip.strokeWidth = 0;
     clip.fillGradient = {
       type: 'linear',
       stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }],
@@ -265,13 +270,28 @@ describe('collaboration Yjs contract', () => {
     sendUpdate(ydoc, doc, last);
 
     let rebuiltClip = (rebuildDocFromY(ydoc.getMap(Y_DOC))!.outputs[0] as VideoOutput).tracks[0].clips[0];
+    expect(rebuiltClip.shape).toBe('star');
+    expect(rebuiltClip.sides).toBe(7);
+    expect(rebuiltClip.innerRatio).toBe(0.3);
+    expect(rebuiltClip.stroke).toBe('#123456');
+    expect(rebuiltClip.strokeWidth).toBe(0);
     expect(rebuiltClip.fillGradient).toEqual(clip.fillGradient);
     expect(rebuiltClip.textStroke).toEqual(clip.textStroke);
 
+    clip.shape = undefined;
+    clip.sides = undefined;
+    clip.innerRatio = undefined;
+    clip.stroke = undefined;
+    clip.strokeWidth = 4;
     clip.fillGradient = undefined;
     clip.textStroke = undefined;
     sendUpdate(ydoc, doc, last);
     rebuiltClip = (rebuildDocFromY(ydoc.getMap(Y_DOC))!.outputs[0] as VideoOutput).tracks[0].clips[0];
+    expect(rebuiltClip.shape).toBeUndefined();
+    expect(rebuiltClip.sides).toBeUndefined();
+    expect(rebuiltClip.innerRatio).toBeUndefined();
+    expect(rebuiltClip.stroke).toBeUndefined();
+    expect(rebuiltClip.strokeWidth).toBe(4);
     expect(rebuiltClip.fillGradient).toBeUndefined();
     expect(rebuiltClip.textStroke).toBeUndefined();
   });
@@ -330,5 +350,53 @@ describe('collaboration Yjs contract', () => {
     // Applying the same state again should not trigger another notification.
     Y.applyUpdate(ydoc, sendUpdate(new Y.Doc(), doc, { current: null }));
     expect(onRemoteDoc).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('motion path collaboration', () => {
+  const motionPath = {
+    points: [{ x: 10, y: 20, tMs: 0 }, { x: 200, y: 300, tMs: 1000 }],
+    ease: 'easeInOut' as const,
+    followRotation: true,
+  };
+
+  it('round-trips paths and keeps them when a peer edits another clip', () => {
+    const author = new Y.Doc();
+    const peer = new Y.Doc();
+    const doc = makeVideoDoc();
+    (doc.outputs[0] as VideoOutput).tracks[0].clips[0].motionPath = motionPath;
+    const lastAuthor: { current: DesignerDoc | null } = { current: null };
+    Y.applyUpdate(peer, sendUpdate(author, doc, lastAuthor));
+
+    const peerDoc = rebuildDocFromY(peer.getMap(Y_DOC))!;
+    expect((peerDoc.outputs[0] as VideoOutput).tracks[0].clips[0].motionPath).toEqual(motionPath);
+    (peerDoc.outputs[0] as VideoOutput).tracks[0].clips[1].opacity = 0.35;
+    const lastPeer: { current: DesignerDoc | null } = {
+      current: rebuildDocFromY(peer.getMap(Y_DOC)),
+    };
+    Y.applyUpdate(author, sendUpdate(peer, peerDoc, lastPeer));
+    const merged = rebuildDocFromY(author.getMap(Y_DOC))!;
+    const clips = (merged.outputs[0] as VideoOutput).tracks[0].clips;
+    expect(clips[0].motionPath).toEqual(motionPath);
+    expect(clips[1].opacity).toBe(0.35);
+  });
+
+  it('preserves an in-progress local path during a remote update', () => {
+    const store = createDesignerStore();
+    store.getState().loadDesign(makeVideoDoc(), 'motion-gesture', 'Motion gesture');
+    const before = store.getState().doc;
+    store.getState().setSelectedClips([{ trackId: 'track-1', clipId: 'clip-a' }]);
+    store.getState().beginGesture();
+    store.getState().updateClipSilent(0, 'track-1', 'clip-a', { motionPath });
+    const remote = deepClone(before);
+    (remote.outputs[0] as VideoOutput).tracks[0].clips[1].opacity = 0.25;
+
+    applyRemoteDoc(store, remote);
+
+    const clips = (store.getState().doc.outputs[0] as VideoOutput).tracks[0].clips;
+    expect(clips[0].motionPath).toEqual(motionPath);
+    expect(clips[1].opacity).toBe(0.25);
+    store.getState().endGesture();
   });
 });

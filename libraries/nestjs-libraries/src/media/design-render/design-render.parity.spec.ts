@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import { DesignRenderService } from './design-render.service';
 import { videoOutputToPosterOutput } from '../designer-doc/video-poster';
+import { seedChildren } from '../designer-doc/seed-copy';
 
 /**
  * Parity fixtures — the tests that would have caught this whole round.
@@ -247,6 +248,41 @@ describe('parity: geometry', () => {
     expect(pixels.at(196, 100)[2]).toBeGreaterThan(240);
   });
 
+  it('renders visible and explicit-zero video shape strokes through the poster projection', async () => {
+    const poster = videoOutputToPosterOutput({
+      id: 'video-stroke-poster',
+      formatId: 'square',
+      name: 'Video stroke poster',
+      width: 200,
+      height: 200,
+      fps: 30,
+      durationMs: 1000,
+      background: '#ffffff',
+      tracks: [{
+        id: 'shape-track',
+        type: 'shape',
+        clips: [
+          {
+            id: 'visible-stroke', startMs: 0, endMs: 1000, shape: 'rect',
+            x: 20, y: 20, width: 80, height: 60,
+            fill: '#ff0000', stroke: '#000000', strokeWidth: 6,
+          },
+          {
+            id: 'zero-stroke', startMs: 0, endMs: 1000, shape: 'rect',
+            x: 120, y: 100, width: 60, height: 60,
+            fill: '#00ff00', stroke: '#000000', strokeWidth: 0,
+          },
+        ],
+      }],
+    });
+
+    const pixels = await render({ ...doc([]), outputs: [poster] });
+    expect(pixels.at(20, 40)).toEqual([0, 0, 0, 255]);
+    expect(pixels.at(50, 40)).toEqual([255, 0, 0, 255]);
+    expect(pixels.at(120, 130)).toEqual([0, 255, 0, 255]);
+    expect(pixels.at(150, 130)).toEqual([0, 255, 0, 255]);
+  });
+
   it('rounds each corner separately when given four radii', async () => {
     const pixels = await render(
       doc([
@@ -402,6 +438,34 @@ describe('parity: type', () => {
     fontFamily: 'sans-serif',
     fill: '#000000',
     ...over,
+  });
+
+  it('renders a reflowed explicit rich run at the inherited control size', async () => {
+    const source = text({
+      id: 'rich-reflow',
+      x: 100,
+      y: 100,
+      width: 600,
+      height: 100,
+      text: 'REFLOW',
+      fontSize: 64,
+      richText: [{ text: 'REFLOW', fontSize: 64, fontWeight: 700 }],
+    });
+    const [scaled] = seedChildren(
+      [source],
+      { width: 1080, height: 1080 },
+      { width: 600, height: 400, formatId: 'custom' },
+      () => undefined
+    );
+    const target = { width: 600, height: 400, formatId: 'custom' };
+    const inherited = { ...scaled, richText: [{ text: 'REFLOW', fontWeight: 700 }] };
+
+    const explicitPixels = await render(doc([scaled], target));
+    const inheritedPixels = await render(doc([inherited], target));
+
+    expect(scaled.fontSize).toBe(29);
+    expect(scaled.richText?.[0].fontSize).toBe(29);
+    expect(explicitPixels.inkBox()).toEqual(inheritedPixels.inkBox());
   });
 
   it('keeps a curved baseline inside the element box', async () => {

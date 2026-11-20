@@ -26,7 +26,7 @@ import {
   getBuffer,
   seedBufferFromImage,
 } from './raster-layers';
-import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { DESIGNER_DOC_VERSION, MAX_OUTPUTS, MAX_PAGES_PER_OUTPUT, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import {
   hasSpeedCurve,
   sourceTimeForClipTime,
@@ -426,6 +426,49 @@ describe('Designer smoke: multi-format linked editing', () => {
 
     expect(result.current.doc.outputs[0].children).toHaveLength(1);
     expect(result.current.doc.outputs[1].children).toHaveLength(1);
+  });
+});
+
+describe('rich-text output reflow', () => {
+  it('scales explicit runs on Add format and resize while preserving inheritance', () => {
+    const store = createDesignerStore(1080, 1080);
+    store.getState().addElement({
+      id: 'rich-source', originId: 'rich-source', type: 'text',
+      text: 'Big rich headline', fontSize: 64, fontFamily: 'Inter', fontWeight: 400,
+      richText: [
+        { text: 'Big ', fontSize: 64, fontWeight: 700, fill: '#112233' },
+        { text: 'rich ', fontSize: 32, fontStyle: 'italic' },
+        { text: 'headline', fontWeight: 500 },
+      ],
+      x: 100, y: 100, width: 600, height: 100, rotation: 0,
+      opacity: 1, locked: false, hidden: false,
+    });
+    const source = store.getState().doc.outputs[0] as DesignerOutput;
+    const sourceJson = JSON.stringify(source);
+
+    expect(store.getState().addOutput({
+      formatId: 'custom', name: 'Small wide', width: 600, height: 400,
+    })).toBe(true);
+
+    const added = store.getState().doc.outputs[1] as DesignerOutput;
+    expect(added.children[0].fontSize).toBe(29);
+    expect(added.children[0].originId).toBe('rich-source');
+    expect(added.children[0].richText).toEqual([
+      { text: 'Big ', fontSize: 29, fontWeight: 700, fill: '#112233' },
+      { text: 'rich ', fontSize: 15, fontStyle: 'italic' },
+      { text: 'headline', fontWeight: 500 },
+    ]);
+    expect(added.children[0].richText?.[2]).not.toHaveProperty('fontSize');
+    expect(JSON.stringify(source)).toBe(sourceJson);
+
+    store.getState().resizeOutput(0, 540, 540, 'custom', 'Half size');
+
+    const resized = store.getState().doc.outputs[0] as DesignerOutput;
+    expect(resized.children[0].fontSize).toBe(32);
+    expect(resized.children[0].richText?.map((run) => run.fontSize)).toEqual([
+      32, 16, undefined,
+    ]);
+    expect(resized.children[0].richText?.[2]).not.toHaveProperty('fontSize');
   });
 });
 
@@ -2452,6 +2495,12 @@ describe('video output variants (add-format for video mode)', () => {
       id: 'title', startMs: 500, endMs: 4000, text: 'Headline',
       x: 460, y: 900, width: 1000, height: 140, fontSize: 64,
     } as never);
+    store.getState().addTrack(0, 'shape');
+    const shapeTrack = vo().tracks.find((track) => track.type === 'shape')!;
+    store.getState().addClip(0, shapeTrack.id, {
+      id: 'plate', startMs: 0, endMs: 4000, shape: 'rect', fill: '#ff0000',
+      x: 100, y: 100, width: 400, height: 300,
+    } as never);
     return store;
   };
   const out = (store: ReturnType<typeof createDesignerStore>, i: number) =>
@@ -2546,6 +2595,28 @@ describe('video output variants (add-format for video mode)', () => {
     expect(after1.x).toBe(999);
   });
 
+  it('propagates shape stroke edits without copying geometry, timing, or a version bump', () => {
+    const store = videoStoreWithContent();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    store.setState((state) => ({ doc: { ...state.doc, version: 10 } }));
+    const v0 = out(store, 0);
+    const v1 = out(store, 1);
+    const source = v0.tracks.find((track) => track.type === 'shape')!.clips[0];
+    const target = v1.tracks.find((track) => track.type === 'shape')!.clips[0];
+
+    store.getState().updateClip(1, v1.tracks.find((track) => track.type === 'shape')!.id, target.id, {
+      stroke: '#123456', strokeWidth: 6, x: 999,
+    });
+
+    const after0 = out(store, 0).tracks.find((track) => track.type === 'shape')!.clips[0];
+    const after1 = out(store, 1).tracks.find((track) => track.type === 'shape')!.clips[0];
+    expect(after0).toMatchObject({ stroke: '#123456', strokeWidth: 6, x: source.x });
+    expect(after1).toMatchObject({ stroke: '#123456', strokeWidth: 6, x: 999 });
+    expect(after0.startMs).toBe(source.startMs);
+    expect(after1.startMs).toBe(target.startMs);
+    expect(store.getState().doc.version).toBe(10);
+  });
+
   it('editFormatOnly keeps content edits local too', () => {
     const store = videoStoreWithContent();
     store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
@@ -2557,8 +2628,14 @@ describe('video output variants (add-format for video mode)', () => {
       text: 'Local only',
     } as never);
 
+    const shapeTrack = v1.tracks.find((track) => track.type === 'shape')!;
+    store.getState().updateClip(1, shapeTrack.id, shapeTrack.clips[0].id, {
+      stroke: '#123456', strokeWidth: 0,
+    });
+
     const after0 = out(store, 0).tracks.find((t) => t.type === 'text')!.clips[0];
     expect(after0.text).toBe('Headline');
+    expect(out(store, 0).tracks.find((track) => track.type === 'shape')!.clips[0].stroke).toBeUndefined();
   });
 });
 
@@ -3337,9 +3414,9 @@ describe('static clipboard paste placement', () => {
 
     const text = pasted.find((child) => child.type === 'text')!;
     const sourceText = source.children.find((child) => child.type === 'text')!;
-    expect(text.fontSize).toBeLessThan(sourceText.fontSize!);
-    expect(text.richText?.map((run) => ({ text: run.text, fontWeight: run.fontWeight }))).toEqual([
-      { text: 'Big headline', fontWeight: 700 },
+    expect(text.fontSize).toBe(29);
+    expect(text.richText?.map((run) => ({ text: run.text, fontWeight: run.fontWeight, fontSize: run.fontSize }))).toEqual([
+      { text: 'Big headline', fontWeight: 700, fontSize: 29 },
     ]);
     expect(text.rotation).toBe(12);
     const image = pasted.find((child) => child.type === 'image')!;
@@ -3455,5 +3532,457 @@ describe('frozen output read-only clipboard actions', () => {
     store.getState().pasteClips(2000);
     store.getState().pasteClipKeyframes();
     expect(store.getState().doc).toBe(before);
+  });
+});
+
+
+describe('motion path recording and document history', () => {
+  const storeWithClip = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 4000, src: '/movie.mp4', x: 10, y: 20,
+    } as never);
+    return { store, trackId };
+  };
+
+  it('starts only for editable visual clips and cancels back to the original path without history', () => {
+    const { store, trackId } = storeWithClip();
+    const historyBefore = store.getState().history.length;
+    expect(store.getState().startMotionPathRecording(0, trackId, 'clip')).toBe(true);
+    const original = store.getState().doc.outputs[0].tracks[0].clips[0].motionPath;
+    store.getState().updateClipSilent(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 1000 }] },
+    });
+    store.getState().cancelMotionPathRecording();
+    expect(store.getState().doc.outputs[0].tracks[0].clips[0].motionPath).toBe(original);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().motionPathRecording).toBeNull();
+
+    store.getState().setTrackLocked(0, trackId, true);
+    expect(store.getState().startMotionPathRecording(0, trackId, 'clip')).toBe(false);
+    store.getState().setTrackLocked(0, trackId, false);
+    store.getState().setOutputFrozen(0, true);
+    expect(store.getState().startMotionPathRecording(0, trackId, 'clip')).toBe(false);
+  });
+
+  it('rescales path times on duration edits and rebases both sides of a split with one Undo each', () => {
+    const { store, trackId } = storeWithClip();
+    store.getState().updateClip(0, trackId, 'clip', {
+      motionPath: {
+        points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 100, tMs: 2000 }, { x: 200, y: 50, tMs: 4000 }],
+        followRotation: true,
+      },
+    });
+    const historyBefore = store.getState().history.length;
+    store.getState().updateClip(0, trackId, 'clip', { endMs: 2000 });
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 1000, 2000]);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+
+    store.getState().splitClip(0, trackId, 'clip', 1000);
+    const clips = store.getState().doc.outputs[0].tracks[0].clips;
+    expect(clips).toHaveLength(2);
+    expect(clips[0].motionPath?.points.at(-1)).toMatchObject({ x: 100, y: 100, tMs: 1000 });
+    expect(clips[1].motionPath?.points[0]).toMatchObject({ x: 100, y: 100, tMs: 1000 });
+    expect(clips[1].motionPath?.points.at(-1)).toMatchObject({ x: 200, y: 50, tMs: 2000 });
+    expect(clips[1].motionPath).toMatchObject({
+      timeOffsetMs: 1000,
+      timeDurationMs: 2000,
+      followRotation: true,
+    });
+    expect(store.getState().history).toHaveLength(historyBefore + 2);
+    store.getState().undo();
+    expect(store.getState().doc.outputs[0].tracks[0].clips).toHaveLength(1);
+  });
+
+  it('keeps motion paths local to linked video variants', () => {
+    const { store, trackId } = storeWithClip();
+    store.getState().addOutput({ formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 });
+    store.getState().setCurrentOutput(0);
+    store.getState().updateClip(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 10, y: 20, tMs: 0 }, { x: 100, y: 200, tMs: 4000 }] },
+    });
+    expect(store.getState().doc.outputs[1].tracks[0].clips[0].motionPath).toBeUndefined();
+describe('exact page and output duplication', () => {
+  const staticStore = () => {
+    const store = createDesignerStore();
+    const source: DesignerOutput = {
+      id: 'source', formatId: 'ig-post', name: 'Instagram Post', width: 400, height: 300,
+      background: '#ffffff', contentLinkGroup: 'linked-set', typeBudget: 1.2,
+      bg: { type: 'color', color: '#fafafa' }, guides: { x: [20], y: [30] },
+      children: [
+        { id: 'folder', type: 'group', x: 0, y: 0, width: 0, height: 0, rotation: 0, opacity: 1, locked: false, hidden: false, originId: 'origin-folder', groupId: 'move-unit' },
+        { id: 'title', parentId: 'folder', groupId: 'move-unit', originId: 'origin-title', type: 'text', text: 'Exact copy', richText: [{ text: 'Exact copy', fontWeight: 700 }], fontSize: 32, x: 20, y: 30, width: 240, height: 50, rotation: 4, opacity: 0.9, locked: false, hidden: false },
+        { id: 'photo', originId: 'origin-photo', type: 'image', src: '/photo.png', fileId: 'file-1', crop: { x: 0.1, y: 0.2, width: 0.7, height: 0.6 }, fitMode: 'cover', x: 30, y: 100, width: 120, height: 90, rotation: 0, opacity: 1, locked: false, hidden: false },
+      ],
+      pages: [{
+        id: 'page-two', name: 'Details', background: { type: 'color', color: '#000000' },
+        children: [
+          { id: 'page-folder', type: 'group', x: 0, y: 0, width: 0, height: 0, rotation: 0, opacity: 1, locked: false, hidden: false, originId: 'page-origin-folder', groupId: 'page-move-unit' },
+          { id: 'page-title', parentId: 'page-folder', groupId: 'page-move-unit', originId: 'page-origin-title', type: 'text', text: 'Page two', x: 10, y: 20, width: 180, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false },
+        ],
+      }],
+    };
+    store.getState().replaceDocTrusted({ ...store.getState().doc, outputs: [source] });
+    store.getState().pushHistory('Fixture');
+    return { store, source };
+  };
+
+  it('duplicates every static page exactly with linked page-one origins and remapped local ids', () => {
+    const { store, source } = staticStore();
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().duplicateOutput(0, { linkContent: true })).toBe(true);
+
+    const after = store.getState().doc;
+    const copy = after.outputs[1] as DesignerOutput;
+    expect(after.outputs).toHaveLength(2);
+    expect(after.outputs[0]).toEqual(source);
+    expect(copy).toMatchObject({
+      formatId: source.formatId, name: 'Instagram Post 2', width: 400, height: 300,
+      background: '#ffffff', contentLinkGroup: 'linked-set', typeBudget: 1.2,
+      bg: { type: 'color', color: '#fafafa' }, guides: { x: [20], y: [30] },
+    });
+    expect(copy.id).not.toBe(source.id);
+    expect(copy.pages?.[0].id).not.toBe('page-two');
+    expect(copy.pages?.[0]).toMatchObject({ name: 'Details', background: { type: 'color', color: '#000000' } });
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().currentPage).toBe(0);
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+
+    const sourceTitle = source.children.find((element) => element.id === 'title')!;
+    const copyTitle = copy.children.find((element) => element.type === 'text')!;
+    const copyFolder = copy.children.find((element) => element.type === 'group')!;
+    const copyPhoto = copy.children.find((element) => element.type === 'image')!;
+    expect(copyTitle.originId).toBe(sourceTitle.originId);
+    expect(copyTitle.parentId).toBe(copyFolder.id);
+    expect(copyTitle.groupId).toBe(copyFolder.groupId);
+    expect(copyTitle.groupId).not.toBe('move-unit');
+    expect(copyTitle.richText).toEqual(sourceTitle.richText);
+    expect(copyPhoto.crop).toEqual(source.children.find((element) => element.id === 'photo')!.crop);
+    expect(copyPhoto.fileId).toBe('file-1');
+    const copiedPageTitle = copy.pages![0].children.find((element) => element.type === 'text')!;
+    const copiedPageFolder = copy.pages![0].children.find((element) => element.type === 'group')!;
+    expect(copiedPageTitle.originId).toBeTruthy();
+    expect(copiedPageTitle.originId).not.toBe('page-origin-title');
+    expect(copiedPageTitle.parentId).toBe(copiedPageFolder.id);
+    expect(copiedPageTitle.groupId).toBe(copiedPageFolder.groupId);
+
+    store.getState().undo();
+    expect(store.getState().doc).toEqual(before);
+    store.getState().redo();
+    expect(store.getState().doc).toEqual(after);
+  });
+
+  it('makes independent static duplicates without sharing origins or link groups', () => {
+    const { store, source } = staticStore();
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().duplicateOutput(0, { linkContent: false })).toBe(true);
+
+    const copy = store.getState().doc.outputs[1] as DesignerOutput;
+    expect(copy.contentLinkGroup).toBeTruthy();
+    expect(copy.contentLinkGroup).not.toBe(source.contentLinkGroup);
+    for (const element of [...copy.children, ...copy.pages![0].children]) {
+      expect(element.originId).toBeUndefined();
+    }
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().setCurrentOutput(0);
+    store.getState().updateElement('title', { text: 'Source only' });
+    expect(copy.children.find((element) => element.type === 'text')?.text).toBe('Exact copy');
+    store.getState().undo();
+    store.getState().undo();
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it.each([true, false])('duplicates video tracks, timing, styles, markers and groups without reflow (linked=%s)', (linkContent) => {
+    const store = createDesignerStore();
+    const source = {
+      id: 'video-source', formatId: 'custom', name: 'Video', width: 640, height: 360,
+      fps: 30, durationMs: 9000, bg: { type: 'color' as const, color: '#123456' },
+      markers: [{ id: 'marker', tMs: 1500, name: 'Beat' }],
+      tracks: [
+        { id: 'video-track', type: 'video' as const, name: 'Footage', gain: 0.8, locked: true, clips: [{
+          id: 'video-clip', originId: 'video-origin', groupId: 'shared-move', startMs: 200, endMs: 8000,
+          trimInMs: 100, trimOutMs: 7800, src: '/movie.mp4', fileId: 'movie-file', x: 11, y: 22,
+          width: 333, height: 144, rotation: 7, crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+          fitMode: 'cover' as const, speed: 1.5, speedCurve: [{ atMs: 0, speed: 1 }, { atMs: 1000, speed: 2 }],
+          keyframes: [{ tMs: 400, props: { x: 50, opacity: 0.5 } }],
+          transitionOut: { type: 'fade' as const, durationMs: 300 }, filters: ['brightness(1.1)'],
+        }] },
+        { id: 'text-track', type: 'text' as const, hidden: true, clips: [{
+          id: 'text-clip', originId: 'text-origin', groupId: 'shared-move', startMs: 500, endMs: 4000,
+          text: 'Headline', fontSize: 64, fontWeight: 700, textStroke: { color: '#ffffff', width: 2 },
+          x: 460, y: 90, width: 100, height: 140,
+        }] },
+      ],
+    };
+    store.getState().replaceDocTrusted({ ...store.getState().doc, mode: 'video', outputs: [source] });
+    store.getState().pushHistory('Fixture');
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().duplicateOutput(0, { linkContent })).toBe(true);
+
+    const after = store.getState().doc;
+    const copy = after.outputs[1] as import('./designer.store').VideoOutput;
+    expect(copy).toMatchObject({ name: 'Video 2', width: 640, height: 360, fps: 30, durationMs: 9000, bg: { type: 'color', color: '#123456' } });
+    expect(copy.id).not.toBe(source.id);
+    expect(copy.markers).toHaveLength(1);
+    expect(copy.markers![0]).toMatchObject({ tMs: 1500, name: 'Beat' });
+    expect(copy.markers![0].id).not.toBe('marker');
+    expect(copy.tracks.map((track) => track.id)).not.toEqual(source.tracks.map((track) => track.id));
+    expect(copy.tracks[0]).toMatchObject({ type: 'video', name: 'Footage', gain: 0.8, locked: true });
+    expect(copy.tracks[1]).toMatchObject({ type: 'text', hidden: true });
+    const copiedVideo = copy.tracks[0].clips[0];
+    expect(copiedVideo).toEqual({
+      ...source.tracks[0].clips[0], id: copiedVideo.id, groupId: copiedVideo.groupId,
+      originId: linkContent ? copiedVideo.originId : undefined,
+    });
+    expect(copiedVideo.id).not.toBe('video-clip');
+    expect(copiedVideo.groupId).not.toBe('shared-move');
+    expect(copiedVideo.groupId).toBe(copy.tracks[1].clips[0].groupId);
+    expect(copiedVideo.keyframes).toEqual(source.tracks[0].clips[0].keyframes);
+    expect(copiedVideo.speedCurve).toEqual(source.tracks[0].clips[0].speedCurve);
+    expect(copy.tracks[1].clips[0]).toEqual({
+      ...source.tracks[1].clips[0], id: copy.tracks[1].clips[0].id, groupId: copy.tracks[1].clips[0].groupId,
+      originId: linkContent ? copy.tracks[1].clips[0].originId : undefined,
+    });
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().undo();
+    expect(store.getState().doc).toEqual(before);
+    store.getState().redo();
+    expect(store.getState().doc).toEqual(after);
+  });
+
+  it('allows independent copies of frozen sources but rejects linked origin backfill and output overflow', () => {
+    const { store, source } = staticStore();
+    const frozen = { ...source, frozen: true, children: source.children.map((element) => ({ ...element, originId: undefined })) };
+    store.getState().replaceDocTrusted({ ...store.getState().doc, outputs: [frozen] });
+    store.getState().pushHistory('Frozen fixture');
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().duplicateOutput(0)).toBe(false);
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().duplicateOutput(0, { linkContent: false })).toBe(true);
+    expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(store.getState().doc.outputs[1].frozen).toBeUndefined();
+
+    const fullOutputs = Array.from({ length: MAX_OUTPUTS }, (_, index) => ({ ...source, id: `output-${index}` }));
+    store.getState().replaceDocTrusted({ ...store.getState().doc, outputs: fullOutputs });
+    store.getState().pushHistory('Full fixture');
+    const fullDoc = store.getState().doc;
+    const fullHistory = store.getState().history.length;
+    expect(store.getState().duplicateOutput(0)).toBe(false);
+    expect(store.getState().doc).toBe(fullDoc);
+    expect(store.getState().history).toHaveLength(fullHistory);
+  });
+
+  it('remaps page folder and move-unit ids with one Undo and respects freeze and page caps', () => {
+    const store = createDesignerStore();
+    for (const id of ['first', 'second']) {
+      store.getState().addElement({ id, type: 'shape', shape: 'rect', x: 10, y: 20, width: 100, height: 80, rotation: 0, opacity: 1, locked: false, hidden: false });
+    }
+    store.getState().groupSelection(['first', 'second']);
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    store.getState().duplicatePage(0);
+
+    const duplicatedDoc = store.getState().doc;
+    const output = duplicatedDoc.outputs[0] as DesignerOutput;
+    const copy = output.pages![0].children;
+    const sourceGroup = before.outputs[0].children.find((element) => element.type === 'group')!;
+    const sourceLeaf = before.outputs[0].children.find((element) => element.id === 'first')!;
+    const sourceOrigins = new Set(before.outputs[0].children.map((element) => element.originId));
+    const copyGroup = copy.find((element) => element.type === 'group')!;
+    const copyLeaf = copy.find((element) => element.type !== 'group')!;
+    expect(copyGroup.id).not.toBe(sourceGroup.id);
+    expect(copyLeaf.groupId).not.toBe(sourceLeaf.groupId);
+    for (const element of copy.filter((item) => item.type !== 'group')) {
+      expect(element.parentId).toBe(copyGroup.id);
+      expect(element.groupId).toBe(copyLeaf.groupId);
+      expect(sourceOrigins.has(element.originId)).toBe(false);
+    }
+    expect(store.getState().history).toHaveLength(historyBefore + 1);
+    store.getState().undo();
+    expect(store.getState().doc).toEqual(before);
+    store.getState().redo();
+    expect(store.getState().doc).toEqual(duplicatedDoc);
+
+    store.getState().setOutputFrozen(0, true);
+    const frozenDoc = store.getState().doc;
+    store.getState().duplicatePage(0);
+    expect(store.getState().doc).toBe(frozenDoc);
+    store.getState().setOutputFrozen(0, false);
+    while ((store.getState().doc.outputs[0] as DesignerOutput).pages!.length < MAX_PAGES_PER_OUTPUT - 1) {
+      store.getState().addPage();
+    }
+    const fullDoc = store.getState().doc;
+    store.getState().duplicatePage(0);
+    expect(store.getState().doc).toBe(fullDoc);
+  });
+});
+
+
+describe('motion path versioning and trim contract', () => {
+  it('stamps a real v14 document when a path is written through updateClipSilent', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 1000, src: '/movie.mp4',
+    } as never);
+    store.getState().replaceDocTrusted({ ...store.getState().doc, version: 14 });
+    expect(store.getState().doc.version).toBe(14);
+
+    expect(store.getState().updateClipSilent(0, trackId, 'clip', {
+      motionPath: { points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 1000 }] },
+    })).toBe(true);
+    expect(store.getState().doc.version).toBe(15);
+  });
+
+  it('rescales path times on trim while preserving ordinary keyframe timestamps', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const trackId = store.getState().doc.outputs[0].tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'clip', startMs: 0, endMs: 4000, src: '/movie.mp4',
+      keyframes: [{ tMs: 0, props: { opacity: 1 } }, { tMs: 4000, props: { opacity: 0.5 } }],
+      motionPath: { points: [{ x: 0, y: 0, tMs: 0 }, { x: 100, y: 100, tMs: 4000 }] },
+    } as never);
+
+    store.getState().updateClip(0, trackId, 'clip', { endMs: 2000 });
+
+    const clip = store.getState().doc.outputs[0].tracks[0].clips[0];
+    expect(clip.motionPath?.points.map((point) => point.tMs)).toEqual([0, 2000]);
+    expect(clip.keyframes?.map((keyframe) => keyframe.tMs)).toEqual([0, 4000]);
+describe('duplication review regressions', () => {
+  it.each(['image', 'video'] as const)('inserts a %s duplicate immediately after a non-last source', (mode) => {
+    const store = createDesignerStore();
+    if (mode === 'video') store.getState().setMode('video');
+    const original = store.getState().doc.outputs[0];
+    const outputs = [
+      { ...original, id: 'before', name: 'Before' },
+      { ...original, id: 'source', name: 'Source' },
+      { ...original, id: 'after', name: 'After' },
+    ];
+    store.getState().replaceDocTrusted({ ...store.getState().doc, outputs });
+
+    expect(store.getState().duplicateOutput(1)).toBe(true);
+
+    expect(store.getState().doc.outputs.map((output) => output.name)).toEqual([
+      'Before', 'Source', 'Source 2', 'After',
+    ]);
+    expect(store.getState().currentOutput).toBe(2);
+  });
+
+  it('backfills and shares origins when duplicating a legacy static source', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'legacy-title', type: 'text', text: 'Original', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().updateElement('legacy-title', { originId: undefined });
+
+    expect(store.getState().duplicateOutput(0)).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    const sourceTitle = outputs[0].children[0];
+    const copyTitle = outputs[1].children[0];
+    expect(sourceTitle.originId).toBeTruthy();
+    expect(copyTitle.originId).toBe(sourceTitle.originId);
+    store.getState().setCurrentOutput(0);
+    store.getState().updateElement('legacy-title', { text: 'Shared edit' });
+    expect(store.getState().doc.outputs[1].children[0].text).toBe('Shared edit');
+  });
+
+  it('backfills and shares origins when duplicating a legacy video source', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'text');
+    const track = store.getState().doc.outputs[0].tracks.find((item) => item.type === 'text')!;
+    store.getState().addClip(0, track.id, {
+      id: 'legacy-title', startMs: 0, endMs: 1000, text: 'Original',
+    } as never);
+    const withoutOrigins = {
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((output) => ({
+        ...output,
+        tracks: output.tracks.map((item) => ({
+          ...item,
+          clips: item.clips.map((clip) => ({ ...clip, originId: undefined })),
+        })),
+      })),
+    };
+    store.getState().replaceDocTrusted(withoutOrigins);
+
+    expect(store.getState().duplicateOutput(0)).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    const sourceTrack = outputs[0].tracks.find((item) => item.type === 'text')!;
+    const copyTrack = outputs[1].tracks.find((item) => item.type === 'text')!;
+    expect(sourceTrack.clips[0].originId).toBeTruthy();
+    expect(copyTrack.clips[0].originId).toBe(sourceTrack.clips[0].originId);
+    store.getState().updateClip(1, copyTrack.id, copyTrack.clips[0].id, { text: 'Shared edit' });
+    expect(store.getState().doc.outputs[0].tracks.find((item) => item.type === 'text')!.clips[0].text)
+      .toBe('Shared edit');
+  });
+
+  it('stamps a duplicated legacy linked source and its eligible siblings with one link group', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'legacy-title', type: 'text', text: 'Original', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addOutput({ formatId: 'x-post', name: 'Legacy sibling', width: 1200, height: 675 });
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: store.getState().doc.outputs.map((output) => ({ ...output, contentLinkGroup: undefined })),
+    });
+    store.getState().setCurrentOutput(0);
+
+    expect(store.getState().duplicateOutput(0)).toBe(true);
+
+    const outputs = store.getState().doc.outputs;
+    const linkGroup = outputs[0].contentLinkGroup;
+    expect(linkGroup).toBeTruthy();
+    expect(outputs.map((output) => output.contentLinkGroup)).toEqual([linkGroup, linkGroup, linkGroup]);
+  });
+
+  it('rejects frozen video origin backfill and creates an unfrozen independent copy', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const track = store.getState().doc.outputs[0].tracks[0];
+    store.getState().addClip(0, track.id, {
+      id: 'clip', startMs: 0, endMs: 1000, src: '/movie.mp4',
+    } as never);
+    const source = store.getState().doc.outputs[0];
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: [{
+        ...source,
+        frozen: true,
+        tracks: source.tracks.map((item) => ({
+          ...item,
+          clips: item.clips.map((clip) => ({ ...clip, originId: undefined })),
+        })),
+      }],
+    });
+    store.getState().pushHistory('Frozen video fixture');
+    const before = store.getState().doc;
+    const historyBefore = store.getState().history.length;
+
+    expect(store.getState().duplicateOutput(0)).toBe(false);
+    expect(store.getState().doc).toBe(before);
+    expect(store.getState().history).toHaveLength(historyBefore);
+    expect(store.getState().duplicateOutput(0, { linkContent: false })).toBe(true);
+    expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(store.getState().doc.outputs[1].frozen).toBeUndefined();
   });
 });

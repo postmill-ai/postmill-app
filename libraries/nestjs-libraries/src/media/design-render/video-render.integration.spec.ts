@@ -408,6 +408,112 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
     }
   }, 120000);
 
+  it('captures closed-shape strokes at 1x and 2x without zero or fallback outlines', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const fs = await import('fs');
+    const os = await import('os');
+    const frameRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shape-stroke-capture-'));
+    const output: VideoOutput = {
+      ...redVideo(1000),
+      width: 320,
+      height: 240,
+      fps: 1,
+      background: '#ffffff',
+      tracks: [{
+        id: 'strokes',
+        type: 'shape',
+        clips: [
+          {
+            id: 'rect-stroke', shape: 'rect', startMs: 0, endMs: 1000,
+            x: 10, y: 10, width: 90, height: 60,
+            fill: '#ff0000', stroke: '#000000', strokeWidth: 4,
+          },
+          {
+            id: 'ellipse-stroke', shape: 'ellipse', startMs: 0, endMs: 1000,
+            x: 110, y: 10, width: 90, height: 60,
+            fill: '#ff0000', stroke: '#0000ff', strokeWidth: 8,
+          },
+          {
+            id: 'star-stroke', shape: 'star', startMs: 0, endMs: 1000,
+            x: 210, y: 10, width: 100, height: 60,
+            fill: '#ff0000', stroke: '#00ff00', strokeWidth: 2,
+          },
+          {
+            id: 'triangle-zero', shape: 'triangle', startMs: 0, endMs: 1000,
+            x: 40, y: 100, width: 100, height: 80,
+            fill: '#ffff00', stroke: '#000000', strokeWidth: 0,
+          },
+          {
+            id: 'polygon-stroke', shape: 'polygon', startMs: 0, endMs: 1000,
+            x: 170, y: 100, width: 100, height: 80,
+            fill: '#ff0000', stroke: '#ff00ff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color-ellipse', shape: 'ellipse', startMs: 0, endMs: 1000,
+            x: 10, y: 190, width: 80, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color-polygon', shape: 'polygon', startMs: 0, endMs: 1000,
+            x: 110, y: 190, width: 90, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+          {
+            id: 'missing-color', shape: 'rect', startMs: 0, endMs: 1000,
+            x: 220, y: 190, width: 80, height: 40,
+            fill: '#00ffff', strokeWidth: 6,
+          },
+        ],
+      }],
+    };
+
+    try {
+      for (const scale of [1, 2]) {
+        const dir = path.join(frameRoot, `${scale}x`);
+        fs.mkdirSync(dir);
+        expect(await capture.captureFrames(output, 1, dir, undefined, undefined, scale)).toBe(1);
+        const { data, info } = await sharp(path.join(dir, 'frame-00001.png'))
+          .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        expect(info.width).toBe(320 * scale);
+        expect(info.height).toBe(240 * scale);
+        const at = (x: number, y: number) => {
+          const index = (y * scale * info.width + x * scale) * info.channels;
+          return [...data.subarray(index, index + 4)];
+        };
+        expect(at(10, 40)).toEqual([0, 0, 0, 255]);
+        expect(at(50, 40)).toEqual([255, 0, 0, 255]);
+        expect(at(155, 10)).toEqual([0, 0, 255, 255]);
+        expect(at(50, 187)).toEqual([255, 255, 255, 255]);
+        expect(at(50, 210)).toEqual([0, 255, 255, 255]);
+        expect(at(155, 187)).toEqual([255, 255, 255, 255]);
+        expect(at(155, 210)).toEqual([0, 255, 255, 255]);
+        expect(at(217, 210)).toEqual([255, 255, 255, 255]);
+        expect(at(220, 210)).toEqual([0, 255, 255, 255]);
+
+        const count = (
+          left: number, top: number, width: number, height: number,
+          predicate: (r: number, g: number, b: number) => boolean,
+        ) => {
+          let matches = 0;
+          for (let y = top * scale; y < (top + height) * scale; y++) {
+            for (let x = left * scale; x < (left + width) * scale; x++) {
+              const index = (y * info.width + x) * info.channels;
+              if (predicate(data[index], data[index + 1], data[index + 2])) matches++;
+            }
+          }
+          return matches;
+        };
+        expect(count(210, 10, 100, 60, (r, g, b) => r < 80 && g > 180 && b < 80))
+          .toBeGreaterThan(10 * scale);
+        expect(count(170, 100, 100, 80, (r, g, b) => r > 180 && g < 80 && b > 180))
+          .toBeGreaterThan(20 * scale);
+        expect(count(40, 100, 100, 80, (r, g, b) => r < 80 && g < 80 && b < 80)).toBe(0);
+      }
+    } finally {
+      fs.rmSync(frameRoot, { recursive: true, force: true });
+    }
+  }, 120000);
+
   it('exports gradient and outlined text over an animated video clip to MP4', async () => {
     const fs = await import('fs');
     const { execFileSync } = await import('child_process');
@@ -591,6 +697,62 @@ describe.skipIf(process.env.RUN_RENDER_INTEGRATION !== '1')('Chromium + ffmpeg v
       expect(second.textPixels('black')).toBeGreaterThan(10);
     } finally {
       fs.rmSync(frameDir, { recursive: true, force: true });
+  it('exports a multi-point motion path at matching times and resolutions', async () => {
+    const capture = new ChromiumFrameCaptureService();
+    const encoder = new FfmpegVideoEncoderService(capture);
+    const fs = await import('fs');
+    const { execFileSync } = await import('child_process');
+    const output = {
+      ...redVideo(1000),
+      width: 200,
+      height: 200,
+      fps: 4,
+      background: '#ffffff',
+      tracks: [{
+        id: 'motion-track',
+        type: 'shape',
+        clips: [{
+          id: 'moving-shape', type: 'shape', shape: 'rect', fill: '#ff0000',
+          startMs: 0, endMs: 1000, x: 20, y: 20, width: 20, height: 20,
+          motionPath: {
+            points: [
+              { x: 20, y: 20, tMs: 0 },
+              { x: 100, y: 20, tMs: 500 },
+              { x: 100, y: 100, tMs: 1000 },
+            ],
+          },
+        }],
+      }],
+    } as any;
+    const expectedCenters = [[30, 30], [60, 30], [110, 30], [110, 70]];
+
+    for (const scale of [1, 2]) {
+      const result = await encoder.encode(output, {
+        fps: 4,
+        scale,
+        bitrateKbps: 500,
+        format: 'mp4',
+      });
+      try {
+        for (let index = 0; index < expectedCenters.length; index++) {
+          const framePath = path.join(path.dirname(result.videoPath), `motion-${scale}-${index}.png`);
+          execFileSync('ffmpeg', [
+            '-y', '-ss', String(index * 0.25), '-i', result.videoPath,
+            '-frames:v', '1', framePath,
+          ], { stdio: 'ignore' });
+          const { data, info } = await sharp(framePath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+          const [x, y] = expectedCenters[index];
+          const pixelX = Math.round(x * scale);
+          const pixelY = Math.round(y * scale);
+          const offset = (pixelY * info.width + pixelX) * info.channels;
+          const actual = [...data.subarray(offset, offset + 4)];
+          for (const [channel, expected] of [255, 0, 0, 255].entries()) {
+            expect(Math.abs(actual[channel] - expected)).toBeLessThanOrEqual(12);
+          }
+        }
+      } finally {
+        encoder.cleanup(path.dirname(result.videoPath));
+      }
     }
   }, 120000);
 });

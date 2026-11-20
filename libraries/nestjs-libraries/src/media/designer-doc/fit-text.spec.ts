@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   applyTextTransform,
   fitTextToBox,
+  fitRichTextToBox,
   justifyLineWords,
+  layoutRichText,
   wrapTextLines,
   type MeasureText,
 } from './fit-text';
@@ -115,6 +117,181 @@ describe('paragraphStarts', () => {
     // 'aaaa aaaa' wraps to two lines at 40px measure each, then 'bb'.
     expect(fitted.lines).toEqual(['aaaa', 'aaaa', 'bb']);
     expect(fitted.paragraphStarts).toEqual([true, false, true]);
+  });
+});
+
+describe('opt-in auto-fit', () => {
+  it('preserves the legacy height-only floor when autoFit is absent', () => {
+    const fitted = fitTextToBox(
+      { text: 'aaaa aaaa aaaa', width: 40, height: 24, fontSize: 20 },
+      measure
+    );
+    expect(fitted.fontSize).toBe(12);
+  });
+
+  it('paints the authored size without shrinking when explicitly off', () => {
+    const fitted = fitTextToBox(
+      { text: 'aaaa aaaa aaaa', width: 40, height: 24, fontSize: 20, autoFit: false },
+      measure
+    );
+    expect(fitted.fontSize).toBe(20);
+    expect(fitted.lines).toHaveLength(3);
+  });
+
+  it('shrinks a long unbroken word to the box width without splitting it', () => {
+    const fitted = fitTextToBox(
+      {
+        text: 'internationalization', width: 50, height: 100, fontSize: 20,
+        autoFit: true, minFontSize: 1,
+      },
+      measure
+    );
+    expect(fitted.lines).toEqual(['internationalization']);
+    expect(fitted.fontSize).toBeLessThanOrEqual(5);
+  });
+
+  it('fits wrapping in both dimensions and respects the minimum', () => {
+    const box = {
+      text: 'aaaa aaaa aaaa aaaa',
+      width: 90,
+      height: 40,
+      fontSize: 20,
+      autoFit: true,
+      minFontSize: 14,
+    };
+    const fitted = fitTextToBox(box, measure);
+    expect(fitted.fontSize).toBe(16);
+    expect(fitted.lines.every((line) => measure(line, fitted.fontSize) <= box.width)).toBe(true);
+    expect(fitted.lines.length * fitted.lineHeight).toBeLessThanOrEqual(box.height);
+
+    const impossible = fitTextToBox({ ...box, height: 10, minFontSize: 18 }, measure);
+    expect(impossible.fontSize).toBe(18);
+    expect(impossible.lines.length * impossible.lineHeight).toBeGreaterThan(box.height);
+  });
+
+  it('uses the 8px default rather than the legacy 60% floor', () => {
+    expect(
+      fitTextToBox(
+        {
+          text: 'internationalization',
+          width: 50,
+          height: 100,
+          fontSize: 20,
+          autoFit: true,
+        },
+        measure
+      ).fontSize
+    ).toBe(8);
+  });
+
+  it.each([undefined, 12])(
+    'never grows text smaller than the requested minimum (%s)',
+    (minFontSize) => {
+      expect(
+        fitTextToBox(
+          {
+            text: 'tiny',
+            width: 1,
+            height: 1,
+            fontSize: 4,
+            autoFit: true,
+            minFontSize,
+          },
+          measure
+        ).fontSize
+      ).toBe(4);
+    }
+  );
+});
+
+describe('rich text auto-fit', () => {
+  const runs = [
+    { text: 'social ', fontWeight: 400 },
+    { text: 'media managers', fontWeight: 700, fontSize: 40 },
+  ];
+
+  it('lays out mixed runs with their own widths and line heights', () => {
+    const layout = layoutRichText(
+      runs,
+      { width: 200, fontSize: 20, lineHeight: 1.2, align: 'left' },
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+    expect(layout.segments.map((seg) => seg.text)).toEqual(['social ', 'media ', 'managers']);
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[1].height).toBe(48);
+  });
+
+  it('scales every run proportionally without mutating authored runs', () => {
+    const authored = runs.map((run) => ({ ...run }));
+    const fitted = fitRichTextToBox(
+      { text: '', width: 150, height: 60, fontSize: 20, autoFit: true },
+      runs,
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+    expect(fitted.fits).toBe(true);
+    expect(fitted.fontSize).toBeLessThan(20);
+    expect(fitted.runs[1].fontSize).toBe(fitted.runs[0].fontSize * 2);
+    expect(runs).toEqual(authored);
+  });
+
+  it('keeps authored rich-run sizes when auto-fit is explicitly off', () => {
+    const fitted = fitRichTextToBox(
+      { text: '', width: 30, height: 20, fontSize: 20, autoFit: false },
+      [{ text: 'unbreakable', fontSize: 40 }],
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+    expect(fitted.fontSize).toBe(20);
+    expect(fitted.runs[0].fontSize).toBe(40);
+    expect(fitted.fits).toBe(false);
+  });
+
+  it('honours the minimum and paragraph alignment', () => {
+    const fitted = fitRichTextToBox(
+      {
+        text: '',
+        width: 30,
+        height: 20,
+        fontSize: 20,
+        minFontSize: 18,
+        autoFit: true,
+        align: 'center',
+      },
+      [{ text: 'unbreakable' }],
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+    expect(fitted.fontSize).toBe(18);
+    expect(fitted.fits).toBe(false);
+    expect(fitted.segments[0].x).toBe((30 - fitted.segments[0].width) / 2);
+  });
+
+  it('never grows a small run to the fitting floor', () => {
+    const fitted = fitRichTextToBox(
+      {
+        text: '',
+        width: 30,
+        height: 20,
+        fontSize: 40,
+        minFontSize: 30,
+        autoFit: true,
+      },
+      [{ text: 'x', fontSize: 4 }, { text: 'unbreakable', fontSize: 40 }],
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+
+    expect(fitted.fontSize).toBe(30);
+    expect(fitted.runs[0].fontSize).toBe(4);
+  });
+
+  it('leaves a justified paragraph last line at natural spacing', () => {
+    const layout = layoutRichText(
+      [{ text: 'aa bb cc' }],
+      { width: 100, fontSize: 20, align: 'justify' },
+      (text, run) => text.length * run.fontSize * 0.5
+    );
+
+    expect(layout.lines).toHaveLength(1);
+    expect(layout.lines[0].endsParagraph).toBe(true);
+    expect(layout.segments.map((segment) => segment.x)).toEqual([0, 30, 60]);
   });
 });
 

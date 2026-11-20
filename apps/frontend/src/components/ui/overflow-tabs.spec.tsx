@@ -119,6 +119,19 @@ describe('OverflowTabs', () => {
     expect(track.contains(trigger)).toBe(false);
   });
 
+  it('applies optional item IDs to tabs for panel labeling', () => {
+    render(
+      <OverflowTabs
+        items={items(2).map((item) => ({ ...item, id: `test-${item.key}-tab` }))}
+        activeKey="k0"
+        semantics="tabs"
+        ariaLabel="More tabs"
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Tab 0' }).id).toBe('test-k0-tab');
+    expect(screen.getByRole('tab', { name: 'Tab 1' }).id).toBe('test-k1-tab');
+  });
+
   it('uses navigation semantics for link bars, never tab roles', () => {
     render(
       <OverflowTabs
