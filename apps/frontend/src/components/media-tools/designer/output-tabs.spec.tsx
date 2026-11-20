@@ -3,6 +3,7 @@ import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
+import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 const toasterShow = vi.hoisted(() => vi.fn());
 const promptOpen = vi.hoisted(() => vi.fn());
@@ -699,5 +700,40 @@ describe('OutputTabs capped removal history', () => {
     expect(screen.queryByRole('button', { name: 'Undo', exact: true })).toBeNull();
     expect(store.getState().doc.outputs).toHaveLength(1);
     expect((store.getState().doc.outputs[0] as any).children[0].x).toBe(999);
+  });
+});
+
+describe('OutputTabs menu guards', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('disables Resize, Rename, and Remove for a frozen format', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setOutputFrozen(0, true);
+    render(<OutputTabs store={store} />);
+
+    const frozenCard = document.querySelector<HTMLElement>('[data-output-index="0"]')!;
+    expect(within(frozenCard).getByRole('button', { name: 'Remove format' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    expect(screen.getByRole('button', { name: 'Resize / change format' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Rename format' })).toHaveProperty('disabled', true);
+    // Duplicating a frozen format is still allowed: it creates an editable copy.
+    expect(screen.getByRole('button', { name: 'Duplicate linked' })).toHaveProperty('disabled', false);
+  });
+
+  it('disables both duplication choices at the format limit', () => {
+    const store = createDesignerStore();
+    const source = store.getState().doc.outputs[0];
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: Array.from({ length: MAX_OUTPUTS }, (_, index) => ({ ...source, id: `output-${index}` })),
+    });
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Format actions for Instagram Post' })[0]);
+    expect(screen.getByRole('button', { name: 'Duplicate linked' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Duplicate independently' })).toHaveProperty('disabled', true);
   });
 });

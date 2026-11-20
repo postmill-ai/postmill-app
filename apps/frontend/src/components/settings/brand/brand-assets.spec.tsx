@@ -40,6 +40,7 @@ vi.mock('@postmill-ai/frontend/components/ui/overflow-tabs', () => ({
       {items.map((item) => (
         <button
           key={item.key}
+          data-section-key={item.key}
           onClick={() => {
             window.history.replaceState(null, '', `#${item.key}`);
             window.dispatchEvent(new HashChangeEvent('hashchange'));
@@ -116,8 +117,13 @@ describe('BrandAssets', () => {
     expect(screen.getByText('Preferred formats')).toBeTruthy();
     expect(screen.getByText('Legacy Sans')).toBeTruthy();
     expect(screen.getByText('Uploaded Sans')).toBeTruthy();
-    for (const section of ['colors', 'fonts', 'logos', 'images', 'formats', 'templates']) {
-      expect(document.getElementById(section)).not.toBeNull();
+    // Every section the nav offers must have a scroll target, so a new
+    // `sections` entry without a matching id fails here.
+    const sectionKeys = Array.from(document.querySelectorAll<HTMLElement>('[data-section-key]'))
+      .map((item) => item.dataset.sectionKey!);
+    expect(sectionKeys).toEqual(expect.arrayContaining(['colors', 'fonts', 'logos', 'images', 'formats', 'templates']));
+    for (const section of sectionKeys) {
+      expect(document.getElementById(section), `#${section} target`).not.toBeNull();
     }
 
     const colorRole = screen.getByRole('combobox', { name: 'Colour role for #111111' });
