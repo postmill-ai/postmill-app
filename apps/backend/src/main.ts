@@ -128,6 +128,7 @@ async function start() {
       '/media/remove-background',
       '/media/inpaint',
       '/media/outpaint',
+      '/media/outpaint/page',
       '/media/magic-grab',
       '/media/upscale',
       '/org-portability/import-uploads',

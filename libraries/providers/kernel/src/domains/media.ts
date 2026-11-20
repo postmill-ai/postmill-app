@@ -156,6 +156,16 @@ export const OUTPAINT_MODES: OutpaintMode[] = [
   'bottom',
 ];
 
+export const OUTPAINT_BACKGROUND_PROMPT =
+  'Extend only the existing background beyond the original image boundaries. Seamlessly continue the surrounding colors, gradients, lighting, shadows, perspective, and texture. Preserve the original subject and composition. Unless explicitly requested below, do not add text, letters, logos, watermarks, people, products, props, or any other new objects or foreground elements.';
+
+export const buildOutpaintPrompt = (prompt?: string): string => {
+  const guidance = prompt?.trim();
+  return guidance
+    ? `${OUTPAINT_BACKGROUND_PROMPT}\n\nAdditional guidance for the new background only: ${guidance}`
+    : OUTPAINT_BACKGROUND_PROMPT;
+};
+
 export interface MediaModelOption {
   id: string;
   label: string;

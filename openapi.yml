@@ -3364,6 +3364,21 @@ paths:
           description: ""
       tags:
         - Media
+  /media/outpaint/page:
+    post:
+      operationId: MediaController_outpaintPage
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutpaintPageImageDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/outpaint:
     post:
       operationId: MediaController_outpaint
@@ -11806,6 +11821,18 @@ components:
           maxLength: 200
       required:
         - fileId
+    OutpaintPageImageDto:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+        maskUrl:
+          type: string
+        prompt:
+          type: string
+      required:
+        - imageUrl
+        - maskUrl
     OutpaintImageDto:
       type: object
       properties:

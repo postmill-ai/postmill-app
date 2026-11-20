@@ -28,8 +28,8 @@ import {
   MediaProviderCapabilities,
   MediaGenerationResult,
 } from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
-import type { MediaGenerateOptions } from '@postmill-ai/provider-kernel';
-import type { OutpaintMode } from '@postmill-ai/provider-kernel';
+import type { MediaGenerateOptions, OutpaintMode } from '@postmill-ai/provider-kernel';
+import { buildOutpaintPrompt } from '@postmill-ai/provider-kernel';
 // Type-only imports: SlideService/CaptionService both inject back into this AI module
 // (slide -> AiDefaultsService -> AiMediaService; caption -> AiMediaService), so a runtime
 // value-import here closes a circular `require` that leaves AiMediaService `undefined` at
@@ -1837,6 +1837,19 @@ export class AiMediaService {
     const metadata = file?.metadata as { internal?: string } | null | undefined;
     if (!file || metadata?.internal !== 'design-asset') return;
     await this._fileService.deleteFile(orgId, file.id).catch(() => undefined);
+  }
+
+  async outpaintPage(
+    imageUrl: string,
+    maskUrl: string,
+    prompt: string | undefined,
+    options?: { orgId?: string },
+  ): Promise<string> {
+    return this.inpaintImage(imageUrl, maskUrl, buildOutpaintPrompt(prompt), {
+      ...options,
+      modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
+      input: { prompt_upsampling: false },
+    });
   }
 
   async outpaintImage(

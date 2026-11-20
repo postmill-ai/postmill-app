@@ -1388,6 +1388,42 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('outpaintPage', () => {
+    it('uses background-only Flux Fill inpainting and appends custom guidance', async () => {
+      const service = bareService();
+      const inpaint = vi.spyOn(service, 'inpaintImage').mockResolvedValue('https://x/expanded-page.png');
+      const generate = vi.spyOn(service, 'generateImage');
+
+      await expect(service.outpaintPage('/page.png', '/mask.png', ' more burgundy gradient ', { orgId: 'org-1' }))
+        .resolves.toBe('https://x/expanded-page.png');
+
+      expect(inpaint).toHaveBeenCalledWith(
+        '/page.png',
+        '/mask.png',
+        expect.stringMatching(/^Extend only the existing background[\s\S]*Additional guidance for the new background only: more burgundy gradient$/),
+        {
+          orgId: 'org-1',
+          modelByProvider: { replicate: 'black-forest-labs/flux-fill-pro' },
+          input: { prompt_upsampling: false },
+        },
+      );
+      const prompt = inpaint.mock.calls[0][2];
+      expect(prompt).toContain('do not add text, letters, logos, watermarks');
+      expect(generate).not.toHaveBeenCalled();
+    });
+
+    it('propagates masked provider failures without an unmasked fallback', async () => {
+      const service = bareService();
+      const upstream = new Error('masked expansion failed');
+      vi.spyOn(service, 'inpaintImage').mockRejectedValue(upstream);
+      const generate = vi.spyOn(service, 'generateImage');
+
+      await expect(service.outpaintPage('/page.png', '/mask.png', undefined, { orgId: 'org-1' }))
+        .rejects.toBe(upstream);
+      expect(generate).not.toHaveBeenCalled();
+    });
+  });
+
   describe('outpaintImage', () => {
     it('throws CapabilityNotAvailable when no provider configured', async () => {
       const service = bareService();

@@ -575,9 +575,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   Outpainting (`outpaint.ts`) uses one prepare/review/Apply candidate flow for selected images and
   whole pages. The dialog owns pending/error state and blocks duplicate requests. Directional input
   is the exact cropped/cover display frame, restored from the same bitmap; canonical mode geometry
-  is independent of provider-returned pixel dimensions. Whole-page Apply inserts a generated
-  extension whose original-page rect is transparent, then translates every ORIGINAL layer by the
-  same centering offset without flattening the selected image, other layers, or page background.
+  is independent of provider-returned pixel dimensions. Directional requests use `POST /media/outpaint`;
+  whole-page requests send the browser-composed source and mask to `POST /media/outpaint/page`, which
+  pins Replicate Flux Fill instead of using the generic inpainting default. Both server paths use the
+  shared background-only expansion prompt and append optional user guidance without dropping its
+  no-unrequested-text-or-objects constraints. Whole-page Apply inserts a generated extension whose
+  original-page rect is transparent, then translates every ORIGINAL layer by the same centering offset
+  without flattening the selected image, other layers, or page background.
   Final compositions are referenced `internal: 'design-asset'` Files, hidden from the library;
   cancel/stale cleanup uses `/media/outpaint/cleanup`, while Apply and Undo/redo retain them.
   `cutout-refine-controls.tsx` arms the same mask for Restore

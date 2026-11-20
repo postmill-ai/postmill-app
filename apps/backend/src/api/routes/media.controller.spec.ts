@@ -36,6 +36,7 @@ function build(
   const aiMediaService: any = {
     urlToBase64Image: vi.fn().mockResolvedValue('data:image/png;base64,abc'),
     outpaintImage: vi.fn().mockResolvedValue('https://cdn/expanded.png'),
+    outpaintPage: vi.fn().mockResolvedValue('https://cdn/expanded-page.png'),
     saveUrlToFile: vi.fn().mockResolvedValue({
       id: 'file-1',
       path: 'http://localhost/uploads/file-1.png',
@@ -257,6 +258,22 @@ describe('MediaController — Designer AI-media routes', () => {
         { orgId: 'org-1' }
       );
       expect(res).toEqual({ url: 'https://cdn/expanded.png' });
+    });
+
+    it('whole-page outpaint delegates the mask and optional prompt without accepting a model', async () => {
+      const { controller, aiMediaService } = build();
+      const res = await controller.outpaintPage(org, {
+        imageUrl: 'https://x/page.png',
+        maskUrl: 'https://x/mask.png',
+        prompt: 'more studio backdrop',
+      });
+      expect(aiMediaService.outpaintPage).toHaveBeenCalledWith(
+        'https://x/page.png',
+        'https://x/mask.png',
+        'more studio backdrop',
+        { orgId: 'org-1' }
+      );
+      expect(res).toEqual({ url: 'https://cdn/expanded-page.png' });
     });
 
     it('magic-grab returns the reconstructed background without persisting a subject copy', async () => {
