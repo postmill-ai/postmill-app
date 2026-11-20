@@ -158,7 +158,14 @@ const galleryTemplates = [
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-async function installMocks(page: Page, doc: any = initialDoc) {
+// `catalog` selects which design/template fixtures back the shared list endpoints:
+// the paged gallery fixtures, or the single source design/template that the
+// Bulk Create flows open by name.
+async function installMocks(
+  page: Page,
+  doc: any = initialDoc,
+  { catalog = 'gallery' }: { catalog?: 'gallery' | 'bulk' } = {},
+) {
   if (process.env.E2E_SKIP_AUTH_SETUP === '1') {
     await page.context().addCookies([{
       name: 'auth',
@@ -222,28 +229,25 @@ async function installMocks(page: Page, doc: any = initialDoc) {
     if (method === 'GET' && pathname === '/media/tools/status') {
       return json(route, { operations: state.mediaOperations, tools: { 'text-to-image': { available: true } } });
     }
-    // Navigating to the Files page is a document request for the same path.
+    // Navigating to the Files page is a document request for the same path;
+    // only the in-app list fetch is mocked so the page itself still loads.
+    // Tests that never upload see the single library fixture the pickers expect.
     if (method === 'GET' && pathname === '/files' && request.resourceType() !== 'document') {
       const search = url.searchParams.get('search')?.toLowerCase() || '';
-      const results = state.libraryFiles.filter((file) =>
+      const availableFiles = state.libraryFiles.length > 0 ? state.libraryFiles : [{
+        id: 'library-image-file', name: 'library-image.png', originalName: 'library-image.png',
+        path: LIBRARY_IMAGE_URL, thumbnail: PNG_DATA_URL, alt: null, thumbnailTimestamp: null,
+        fileSize: 100, type: 'image', tags: null, description: null, folderId: null,
+        createdAt: '2026-11-19T00:00:00.000Z', metadata: { dimensions: { width: 1, height: 1 } },
+      }];
+      const results = availableFiles.filter((file) =>
         !search || String(file.originalName || file.name).toLowerCase().includes(search));
-      return json(route, { pages: 1, results });
+      return json(route, { pages: 1, results, total: results.length, page: 1, limit: 24 });
     }
     if (method === 'GET' && pathname === '/files/search') {
       const search = String(url.searchParams.get('q') || '').toLowerCase();
       return json(route, state.libraryFiles.filter((file) =>
         String(file.originalName || file.name).toLowerCase().includes(search)));
-    }
-    if (method === 'GET' && pathname === '/files') {
-      return json(route, {
-        results: [{
-          id: 'library-image-file', name: 'library-image.png', originalName: 'library-image.png',
-          path: LIBRARY_IMAGE_URL, thumbnail: PNG_DATA_URL, alt: null, thumbnailTimestamp: null,
-          fileSize: 100, type: 'image', tags: null, description: null, folderId: null,
-          createdAt: '2026-11-19T00:00:00.000Z', metadata: { dimensions: { width: 1, height: 1 } },
-        }],
-        total: 1, page: 1, limit: 24,
-      });
     }
     if (method === 'GET' && pathname === '/media/stock/photos') {
       return json(route, {
@@ -259,7 +263,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       state.deletedFiles.push(pathname.slice('/files/'.length));
       return json(route, {});
     }
-    if (method === 'GET' && pathname === '/media/designs') {
+    if (catalog === 'gallery' && method === 'GET' && pathname === '/media/designs') {
       const query = (url.searchParams.get('query') || '').toLowerCase();
       const sort = url.searchParams.get('sort') || 'newest';
       const filtered = galleryDesigns.filter((design) => !query || design.name.toLowerCase().includes(query));
@@ -281,7 +285,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
       return json(route, { designs: ordered.slice(start, start + limit), total: ordered.length, page: pageNumber, limit });
     }
     if (method === 'GET' && pathname === '/media/design-templates/folders') return json(route, []);
-    if (method === 'GET' && pathname === '/media/design-templates') {
+    if (catalog === 'gallery' && method === 'GET' && pathname === '/media/design-templates') {
       state.templateRequests.push(`${pathname}${url.search}`);
       const query = (url.searchParams.get('query') || '').toLowerCase();
       const category = url.searchParams.get('category');
@@ -326,7 +330,7 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         doc: structuredClone(initialDoc),
       });
     }
-    if (method === 'POST' && pathname === '/media/designs') {
+    if (catalog === 'gallery' && method === 'POST' && pathname === '/media/designs') {
       const body = request.postDataJSON() as { name: string; doc: unknown; sourceTemplateId?: string };
       if (body.sourceTemplateId) {
         state.recentTemplateIds = [body.sourceTemplateId, ...state.recentTemplateIds.filter((id) => id !== body.sourceTemplateId)];
@@ -362,9 +366,6 @@ async function installMocks(page: Page, doc: any = initialDoc) {
         : [];
       const designs = [{ id: DESIGN_ID, name: 'Editing UX', doc: state.doc, mode: 'image', updatedAt: '2026-11-19T00:00:00.000Z', previewUrl: PNG_DATA_URL }, ...variations];
       return json(route, { designs, total: designs.length });
-    }
-    if (method === 'GET' && pathname === '/media/design-templates/folders') {
-      return json(route, []);
     }
     if (method === 'GET' && pathname === '/media/design-templates') {
       return json(route, {
@@ -853,7 +854,7 @@ test('canvas-aware text defaults and auto-fit survive variants, reload, and expo
     autoFit: false,
   });
 
-  await page.getByRole('button', { name: /Story/ }).click();
+  await page.locator('[data-format-select="story-output"]').click();
   await addDefaultText();
   // Adding text on Small also placed a linked copy on Story, so the text added here is the last one.
   expect((state.saveDocs.at(-1) as any).outputs[1].children.filter((child: any) => child.text === 'Text').at(-1)).toMatchObject({
@@ -2261,6 +2262,7 @@ test('inspector task tabs keep image AI drafts mounted and persist across reload
   await expect(page.getByRole('tab', { name: 'Layout', exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Style', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
 
   const prompt = page.getByPlaceholder('Inpaint prompt...');
   await expect(prompt).toBeVisible();
@@ -2269,7 +2271,7 @@ test('inspector task tabs keep image AI drafts mounted and persist across reload
   // The tab switch hides the AI section but never unmounts it.
   await page.getByRole('tab', { name: 'Layout', exact: true }).click();
   await expect(prompt).toBeHidden();
-  await expect(page.getByLabel('Focal X', { exact: true })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Focal point preview', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
   await expect(prompt).toHaveValue('remove the background crowd');
 
@@ -2281,6 +2283,7 @@ test('inspector task tabs keep image AI drafts mounted and persist across reload
   // The AI Tools tab was remembered for the image category; the draft itself
   // is session-local and intentionally starts empty after a reload.
   await expect(page.getByRole('tab', { name: 'AI Tools', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
   await expect(page.getByPlaceholder('Inpaint prompt...')).toBeVisible();
 });
 
@@ -2343,8 +2346,8 @@ test('page and format duplication reopen Pages and preserve exact linked content
   const pagesStrip = page.locator('div[aria-label="Pages"][aria-disabled]');
   await expect(pagesStrip).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Instagram Post actions', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Duplicate linked', exact: true }).click();
+  await page.getByRole('button', { name: 'Format actions for Instagram Post', exact: true }).click();
+  await page.getByRole('button', { name: 'Duplicate linked', exact: true }).click();
   await expect.poll(() => state.doc.outputs.length).toBe(2);
   await expect(pagesStrip).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('designer-pages-bar-e2e-org'))).toBeNull();
@@ -2389,7 +2392,7 @@ test('video format right-click duplicates exact timing independently with one Un
   await openDesigner(page);
 
   await page.locator('[data-output-index="0"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Duplicate independently', exact: true }).click();
+  await page.getByRole('button', { name: 'Duplicate independently', exact: true }).click();
 
   await expect.poll(() => state.doc.outputs.length).toBe(2);
   const source = state.doc.outputs[0];
@@ -2695,6 +2698,8 @@ test('inpaint masks are internal while ordinary image replacements stay visible 
   await openDesigner(page);
   await selectEditingLayer(page, 'drop-target');
 
+  await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
+  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
   await page.getByPlaceholder('Inpaint prompt...').fill('Replace the selected area');
   await page.getByRole('button', { name: 'Draw mask…', exact: true }).click();
   await expect(page.locator('[data-workspace-panel="inspector"] canvas')).toBeVisible();
@@ -2703,7 +2708,7 @@ test('inpaint masks are internal while ordinary image replacements stay visible 
 
   const mask = state.uploadRecords.find((file) => file.name.startsWith('mask-'))!;
   expect(mask.internal).toBe('design-asset');
-  await page.getByRole('button', { name: 'Inpaint', exact: true }).click();
+  await page.getByRole('button', { name: 'Generate', exact: true }).click();
   await expect.poll(() => state.inpaintCalls.length).toBe(1);
   expect(state.inpaintCalls[0].maskUrl).toBe(mask.path);
 
@@ -2823,7 +2828,7 @@ test('Browse Templates filters canonical categories and records Apply for recent
 });
 
 test('Bulk Create entry points preserve source context and batches survive navigation and reload', async ({ page }) => {
-  const state = await installMocks(page);
+  const state = await installMocks(page, initialDoc, { catalog: 'bulk' });
   await openDesigner(page);
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -2838,12 +2843,12 @@ test('Bulk Create entry points preserve source context and batches survive navig
 
   await page.goto('/media/designer');
   await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
-  await page.getByText('Editing UX', { exact: true }).click();
+  await page.getByRole('button', { name: 'Open Editing UX', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Editing UX');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
 
   await page.getByRole('button', { name: 'Browse templates', exact: true }).click();
-  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+  await page.locator('[data-template-id="template-1"]').getByRole('button', { name: 'Bulk Create from this template' }).click();
   const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
   await expect(dialog).toContainText('Source: Catalog Template');
   await dialog.locator('input[type="file"]').setInputFiles({
@@ -2882,7 +2887,7 @@ test('Bulk Create entry points preserve source context and batches survive navig
   await expect(page.getByText('Variation 2', { exact: true })).toHaveCount(0);
 
   await page.getByText('Catalog Template', { exact: true }).click();
-  await page.getByText('Variation 2', { exact: true }).click();
+  await page.getByRole('button', { name: 'Open Variation 2', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Design name' })).toHaveValue('Variation 2');
   await expect(page).toHaveURL(/designId=variation-2/);
   await page.reload();
@@ -2891,11 +2896,11 @@ test('Bulk Create entry points preserve source context and batches survive navig
 
 
 test('Bulk Create from an image template works over an unrelated video canvas', async ({ page }) => {
-  await installMocks(page, initialVideoDoc);
+  await installMocks(page, initialVideoDoc, { catalog: 'bulk' });
   await openDesigner(page);
 
   await page.getByRole('button', { name: 'Browse templates', exact: true }).click();
-  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+  await page.locator('[data-template-id="template-1"]').getByRole('button', { name: 'Bulk Create from this template' }).click();
 
   await expect(page.getByRole('dialog', { name: 'Bulk Create' })).toContainText('Source: Catalog Template');
   await expect(page.getByText('Bulk Create is available for image designs.')).toHaveCount(0);
@@ -2903,12 +2908,12 @@ test('Bulk Create from an image template works over an unrelated video canvas', 
 
 
 test('Start dialog Bulk Create keeps the selected template in the editor after close', async ({ page }) => {
-  const state = await installMocks(page);
+  const state = await installMocks(page, initialDoc, { catalog: 'bulk' });
   await page.goto('/media/designer');
 
   await page.getByRole('button', { name: /Bulk Create Turn a spreadsheet/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Templates', exact: true }).click();
-  await page.getByRole('button', { name: 'Bulk Create from this template' }).click();
+  await page.locator('[data-template-id="template-1"]').getByRole('button', { name: 'Bulk Create from this template' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Bulk Create' });
   await expect(dialog).toContainText('Source: Catalog Template');

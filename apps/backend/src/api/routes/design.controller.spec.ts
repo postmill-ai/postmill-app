@@ -6,6 +6,7 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { DesignImportValidationPipe } from '@postmill-ai/nestjs-libraries/upload/design-import.validation';
 import { ImportLibraryDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/import-library-design.dto';
+import { ConvertDesignToVideoDto } from '@postmill-ai/nestjs-libraries/dtos/design/convert-design-to-video.dto';
 import { validate } from 'class-validator';
 import {
   AuthorizationActions,
@@ -111,6 +112,9 @@ describe('DesignController', () => {
     validateStrict: ReturnType<typeof vi.fn>;
     applyOps: ReturnType<typeof vi.fn>;
   };
+  let designVideoConversionService: {
+    convertDesignToVideo: ReturnType<typeof vi.fn>;
+  };
   let controller: DesignController;
   let templateController: DesignTemplateController;
 
@@ -155,6 +159,9 @@ describe('DesignController', () => {
       validateStrict: vi.fn(),
       applyOps: vi.fn(),
     };
+    designVideoConversionService = {
+      convertDesignToVideo: vi.fn(),
+    };
     controller = new DesignController(
       designService as any,
       fileService as any,
@@ -164,7 +171,8 @@ describe('DesignController', () => {
       designerDocService as any,
       {} as any,
       designExportService as any,
-      designBulkCreateService as any
+      designBulkCreateService as any,
+      designVideoConversionService as any
     );
     templateController = new DesignTemplateController(designService as any, {} as any, designExportService as any);
   });
@@ -296,30 +304,32 @@ describe('DesignController', () => {
       designService.listDesigns.mockResolvedValue(result);
 
       expect(await controller.list(org)).toBe(result);
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 20, { query: undefined, sort: undefined, userId: undefined });
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 20, { query: undefined, sort: undefined, userId: undefined }, false);
     });
 
     it('passes explicit page and limit', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0, page: 2, limit: 10 });
 
       await controller.list(org, '2', '10');
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10, { query: undefined, sort: undefined, userId: undefined });
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 2, 10, { query: undefined, sort: undefined, userId: undefined }, false);
     });
 
     it('passes bounded search and recent sort with the current user', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0, page: 1, limit: 100 });
-      await controller.list(org, '1', '500', `  ${'x'.repeat(210)}  `, 'recent', user);
+      await controller.list(org, '1', '500', `  ${'x'.repeat(210)}  `, 'recent', undefined, user);
       expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 100, {
         query: 'x'.repeat(200), sort: 'recent', userId: 'user-1',
-      });
+      }, false);
     });
 
     it('uses the opt-in root grouping without changing the default list', async () => {
       designService.listDesigns.mockResolvedValue({ designs: [], total: 0 });
 
-      await controller.list(org, '1', '50', 'root');
+      await controller.list(org, '1', '50', undefined, undefined, 'root');
 
-      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 50, true);
+      expect(designService.listDesigns).toHaveBeenCalledWith('org-1', 1, 50, {
+        query: undefined, sort: undefined, userId: undefined,
+      }, true);
     });
   });
 
@@ -516,6 +526,43 @@ describe('DesignController', () => {
 
       expect(await controller.create(org, user, body)).toBe(created);
       expect(designService.createDesign).toHaveBeenCalledWith('org-1', 'user-1', body);
+    });
+  });
+
+  describe('POST /media/designs/:id/convert-to-video', () => {
+    it('is gated on media:create and delegates with the stable idempotency key', async () => {
+      expect(Reflect.getMetadata(
+        CHECK_POLICIES_KEY,
+        DesignController.prototype.convertToVideo,
+      )).toEqual([[AuthorizationActions.Create, Sections.MEDIA]]);
+      expect(Reflect.getMetadata(
+        REQUIRE_PERMISSION_KEY,
+        DesignController.prototype.convertToVideo,
+      )).toEqual({ resource: 'media', action: 'create' });
+
+      const converted = { design: { id: 'video-1' }, summary: { totalPages: 1 } };
+      designVideoConversionService.convertDesignToVideo.mockResolvedValue(converted);
+      expect(await controller.convertToVideo(
+        org,
+        user,
+        'source-1',
+        { pageDurationMs: 5000 },
+        'attempt-1',
+      )).toBe(converted);
+      expect(designVideoConversionService.convertDesignToVideo).toHaveBeenCalledWith(
+        'org-1', 'user-1', 'source-1', 5000, 'attempt-1',
+      );
+    });
+
+    it('validates the page duration bounds', async () => {
+      expect(await validate(Object.assign(new ConvertDesignToVideoDto(), { pageDurationMs: 5000 })))
+        .toHaveLength(0);
+      expect(await validate(Object.assign(new ConvertDesignToVideoDto(), { pageDurationMs: 99 })))
+        .not.toHaveLength(0);
+      expect(await validate(Object.assign(new ConvertDesignToVideoDto(), { pageDurationMs: 5000.5 })))
+        .not.toHaveLength(0);
+      expect(await validate(Object.assign(new ConvertDesignToVideoDto(), { pageDurationMs: 180001 })))
+        .not.toHaveLength(0);
     });
   });
 

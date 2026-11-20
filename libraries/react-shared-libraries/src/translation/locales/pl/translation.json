@@ -5070,6 +5070,7 @@
   "brand_kit_section_templates": "Szablony",
   "brand_kit_more_sections": "Więcej sekcji zestawu marki",
   "brand_kit_sections": "Sekcje zestawu marki",
+  "brand_kit_save_status": "Stan zapisu zestawu marki",
   "brand_color_roles_hint": "Opcjonalnie wskaż AI Designer, jak używać każdego koloru. Kolory mogą współdzielić rolę jako uporządkowane opcje; kolory bez roli pozostają w palecie.",
   "brand_logo_roles_hint": "Oznacz logo główne, ikonę i wersję ciemną. Pozostałe logo pozostają dostępne bez roli.",
   "brand_logo_clear_role": "Wyczyść rolę",

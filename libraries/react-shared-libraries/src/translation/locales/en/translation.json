@@ -5026,6 +5026,7 @@
   "brand_kit_section_templates": "Templates",
   "brand_kit_more_sections": "More Brand Kit sections",
   "brand_kit_sections": "Brand Kit sections",
+  "brand_kit_save_status": "Brand Kit save status",
   "brand_color_roles_hint": "Optionally tell AI Designer how to use each colour. Colours can share a role as ordered choices; unassigned colours stay in the palette.",
   "brand_logo_roles_hint": "Label the main, icon, and dark-version logos. Other logos stay available as unassigned.",
   "brand_logo_clear_role": "Clear role",

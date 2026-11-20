@@ -53,15 +53,15 @@ describe('DesignRepository Brand Kit template ordering (integration)', () => {
       expect(await repository.countTemplatesByOrg(organizationId)).toBe(27);
       expect(await repository.countTemplatesByOrg(organizationId, 'org')).toBe(26);
 
-      const brandSearch = await repository.findTemplatesByOrg(organizationId, 1, 24, brandId, 'org', 'launch col');
+      const brandSearch = await repository.findTemplatesByOrg(organizationId, 1, 24, brandId, 'org', { query: 'launch col' });
       expect(brandSearch.map((template) => template.id)).toEqual([brandTemplateId]);
-      expect(await repository.countTemplatesByOrg(organizationId, 'org', 'launch col')).toBe(1);
+      expect(await repository.countTemplatesByOrg(organizationId, 'org', { query: 'launch col' })).toBe(1);
 
-      const ordinarySearch = await repository.findTemplatesByOrg(organizationId, 1, 24, undefined, 'org', 'ordinary 2');
+      const ordinarySearch = await repository.findTemplatesByOrg(organizationId, 1, 24, undefined, 'org', { query: 'ordinary 2' });
       expect(ordinarySearch).toHaveLength(5);
       expect(ordinarySearch.every((template) => template.name.toLowerCase().includes('ordinary 2'))).toBe(true);
-      expect(await repository.countTemplatesByOrg(organizationId, 'org', 'ordinary 2')).toBe(5);
-      expect(await repository.findTemplatesByOrg(organizationId, 1, 24, brandId, 'org', 'no match')).toEqual([]);
+      expect(await repository.countTemplatesByOrg(organizationId, 'org', { query: 'ordinary 2' })).toBe(5);
+      expect(await repository.findTemplatesByOrg(organizationId, 1, 24, brandId, 'org', { query: 'no match' })).toEqual([]);
     } finally {
       await prisma.designTemplate.deleteMany({ where: { organizationId } });
       await prisma.designTemplate.deleteMany({ where: { id: systemTemplateId } });

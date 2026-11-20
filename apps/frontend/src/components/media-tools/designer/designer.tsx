@@ -1950,7 +1950,7 @@ const DesignerContent: FC<
         <StartDialog
           store={store}
           fetchFn={fetch}
-          onImportSuccess={syncImportedDesignLocation}
+          onImportSuccess={syncDesignLocation}
           onBulkCreate={openBulkCreate}
           initialBatchId={initialBatchId}
           onDone={() => setShowStart(false)}

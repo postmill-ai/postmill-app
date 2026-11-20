@@ -1,6 +1,6 @@
 import { inject } from 'vitest';
 import { getTestPrisma } from '@postmill-ai/nestjs-libraries/testing/test-db';
-import { PrismaRepository, PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaService, PrismaTransaction } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { DesignRepository } from './design.repository';
 
 const makeRepository = (prisma: ReturnType<typeof getTestPrisma>) => new DesignRepository(
@@ -10,6 +10,9 @@ const makeRepository = (prisma: ReturnType<typeof getTestPrisma>) => new DesignR
   new PrismaRepository<'designVersion'>(prisma as unknown as PrismaService),
   new PrismaRepository<'file'>(prisma as unknown as PrismaService),
   new PrismaRepository<'designerRecentOpen'>(prisma as unknown as PrismaService),
+  new PrismaRepository<'designBatch'>(prisma as unknown as PrismaService),
+  new PrismaRepository<'designShare'>(prisma as unknown as PrismaService),
+  new PrismaTransaction(prisma as unknown as PrismaService),
 );
 
 describe('DesignRepository gallery queries (integration)', () => {

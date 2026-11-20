@@ -3,6 +3,7 @@ import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { computePopoverLeft, computePopoverPlacement, OutputTabs } from './output-tabs';
 import { createDesignerStore } from './designer.store';
+import { MAX_OUTPUTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 const toasterShow = vi.hoisted(() => vi.fn());
 const promptOpen = vi.hoisted(() => vi.fn());
@@ -180,6 +181,47 @@ describe('OutputTabs repeated dimensions', () => {
   });
 });
 
+describe('OutputTabs pages visibility notification', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('notifies when a newly added image format contains multiple pages', () => {
+    const store = createDesignerStore();
+    store.getState().addPage();
+    const onPagesContentAdded = vi.fn();
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(onPagesContentAdded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not notify for a single-page image format', () => {
+    const store = createDesignerStore();
+    const onPagesContentAdded = vi.fn();
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(onPagesContentAdded).not.toHaveBeenCalled();
+  });
+
+  it('does not notify for a video format', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const onPagesContentAdded = vi.fn();
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add format' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom size' }));
+
+    expect(onPagesContentAdded).not.toHaveBeenCalled();
+  });
+});
+
 
 describe('OutputTabs format workflows', () => {
   beforeAll(() => {
@@ -206,10 +248,22 @@ describe('OutputTabs format workflows', () => {
     const freeze = screen.getAllByRole('button', { name: 'Freeze format' })[0];
     fireEvent.click(freeze);
     expect(store.getState().doc.outputs[0].frozen).toBe(true);
+    expect(screen.getByText('Frozen').className).toContain('bg-studioBorder/20');
     expect(screen.getByRole('button', { name: 'Add format' })).toHaveProperty('disabled', false);
+
+    // Frozen must never borrow the selected accent: only the current format is highlighted.
+    act(() => store.getState().setCurrentOutput(1));
+    const frozenCard = document.querySelector('[data-output-index="0"]')!;
+    const selectedCard = document.querySelector('[data-output-index="1"]')!;
+    expect(frozenCard.className).not.toContain('border-designerAccent');
+    expect(frozenCard.querySelector(':scope > button')!.className).not.toContain('bg-designerAccent/10');
+    expect(selectedCard.className).toContain('border-designerAccent');
+    expect(selectedCard.querySelector(':scope > button')!.className).toContain('bg-designerAccent/10');
+    act(() => store.getState().setCurrentOutput(0));
 
     fireEvent.click(screen.getByRole('button', { name: 'Unfreeze format' }));
     expect(store.getState().doc.outputs[0].frozen).toBeUndefined();
+    expect(screen.queryByText('Frozen')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /X 1200×675/ }));
     expect(store.getState().currentOutput).toBe(1);
   });
@@ -284,6 +338,89 @@ describe('OutputTabs format workflows', () => {
     expect(store.getState().editFormatOnly).toBe(false);
     expect(screen.queryByRole('button', { name: 'Resume linked editing' })).toBeNull();
     expect(store.getState().doc.outputs.map((out: any) => out.children[0].originId)).toEqual(origins);
+  });
+});
+
+describe('OutputTabs duplication actions', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('duplicates a page-bearing format from its actions menu and reopens Pages', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', text: 'Linked', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false,
+    });
+    store.getState().addPage();
+    const onPagesContentAdded = vi.fn();
+    const historyLength = store.getState().history.length;
+    render(<OutputTabs store={store} onPagesContentAdded={onPagesContentAdded} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate linked' }));
+
+    expect(store.getState().doc.outputs).toHaveLength(2);
+    expect(store.getState().currentOutput).toBe(1);
+    expect(store.getState().doc.outputs[1].children[0].originId)
+      .toBe(store.getState().doc.outputs[0].children[0].originId);
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+    expect(onPagesContentAdded).toHaveBeenCalledTimes(1);
+    act(() => store.getState().undo());
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('duplicates a video format independently from right-click without reflow', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const track = store.getState().doc.outputs[0].tracks[0];
+    store.getState().addClip(0, track.id, {
+      id: 'clip', startMs: 100, endMs: 2000, src: '/movie.mp4', x: 12, y: 24, width: 320, height: 180,
+    } as never);
+    const historyLength = store.getState().history.length;
+    render(<OutputTabs store={store} />);
+
+    fireEvent.contextMenu(document.querySelector('[data-output-index="0"]')!, {
+      clientX: 30, clientY: 40,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate independently' }));
+
+    const outputs = store.getState().doc.outputs;
+    expect(outputs).toHaveLength(2);
+    const sourceClip = outputs[0].tracks[0].clips[0];
+    const copyClip = outputs[1].tracks[0].clips[0];
+    expect(copyClip).toMatchObject({ x: 12, y: 24, width: 320, height: 180, startMs: 100, endMs: 2000 });
+    expect(copyClip.id).not.toBe(sourceClip.id);
+    expect(copyClip.originId).toBeUndefined();
+    expect(store.getState().history).toHaveLength(historyLength + 1);
+  });
+
+  it('warns when duplication is refused for a frozen source', () => {
+    const store = createDesignerStore();
+    store.getState().addElement({
+      id: 'headline', type: 'text', x: 0, y: 0, width: 200, height: 40,
+      rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Unlinked',
+    });
+    store.getState().updateElement('headline', { originId: undefined });
+    store.getState().setOutputFrozen(0, true);
+    toasterShow.mockClear();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate linked' }));
+
+    expect(toasterShow).toHaveBeenCalledWith('This format is frozen. Unfreeze it to edit.', 'warning');
+    expect(store.getState().doc.outputs).toHaveLength(1);
+  });
+
+  it('opens the existing resize popover from the format action menu', () => {
+    const store = createDesignerStore();
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resize / change format' }));
+
+    expect(screen.getByText('Resize Format')).toBeTruthy();
   });
 });
 
@@ -563,5 +700,64 @@ describe('OutputTabs capped removal history', () => {
     expect(screen.queryByRole('button', { name: 'Undo', exact: true })).toBeNull();
     expect(store.getState().doc.outputs).toHaveLength(1);
     expect((store.getState().doc.outputs[0] as any).children[0].x).toBe(999);
+  });
+});
+
+describe('OutputTabs menu guards', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('disables Resize, Rename, and Remove for a frozen format', () => {
+    const store = createDesignerStore();
+    store.getState().addOutput({ formatId: 'x-post', name: 'X', width: 1200, height: 675 });
+    store.getState().setOutputFrozen(0, true);
+    render(<OutputTabs store={store} />);
+
+    const frozenCard = document.querySelector<HTMLElement>('[data-output-index="0"]')!;
+    expect(within(frozenCard).getByRole('button', { name: 'Remove format' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Format actions for Instagram Post' }));
+    expect(screen.getByRole('button', { name: 'Resize / change format' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Rename format' })).toHaveProperty('disabled', true);
+    // Duplicating a frozen format is still allowed: it creates an editable copy.
+    expect(screen.getByRole('button', { name: 'Duplicate linked' })).toHaveProperty('disabled', false);
+  });
+
+  it('disables both duplication choices at the format limit', () => {
+    const store = createDesignerStore();
+    const source = store.getState().doc.outputs[0];
+    store.getState().replaceDocTrusted({
+      ...store.getState().doc,
+      outputs: Array.from({ length: MAX_OUTPUTS }, (_, index) => ({ ...source, id: `output-${index}` })),
+    });
+    render(<OutputTabs store={store} />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Format actions for Instagram Post' })[0]);
+    expect(screen.getByRole('button', { name: 'Duplicate linked' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Duplicate independently' })).toHaveProperty('disabled', true);
+  });
+});
+
+describe('OutputTabs More formats list', () => {
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('anchors a right-clicked row menu to the More formats button, which stays mounted', async () => {
+    const store = createDesignerStore();
+    ['A', 'B', 'C', 'D', 'E', 'F'].forEach((name, index) =>
+      store.getState().addOutput({ formatId: `custom-${index}`, name, width: 1000 + index, height: 1000 }));
+    render(<OutputTabs store={store} />);
+
+    const more = screen.getByRole('button', { name: 'More formats' });
+    more.getBoundingClientRect = () => ({
+      left: 500, right: 532, top: 600, bottom: 680, width: 32, height: 80, x: 500, y: 600, toJSON: () => ({}),
+    });
+    fireEvent.click(more);
+    const row = screen.getAllByRole('button', { name: 'Format actions for C' }).at(-1)!.parentElement!;
+    fireEvent.contextMenu(row);
+
+    const menu = screen.getByRole('button', { name: 'Duplicate linked' }).closest<HTMLElement>('[style]')!;
+    await waitFor(() => expect(menu.style.left).toBe('500px'));
   });
 });

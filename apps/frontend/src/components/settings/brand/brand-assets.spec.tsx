@@ -40,6 +40,7 @@ vi.mock('@postmill-ai/frontend/components/ui/overflow-tabs', () => ({
       {items.map((item) => (
         <button
           key={item.key}
+          data-section-key={item.key}
           onClick={() => {
             window.history.replaceState(null, '', `#${item.key}`);
             window.dispatchEvent(new HashChangeEvent('hashchange'));
@@ -116,14 +117,22 @@ describe('BrandAssets', () => {
     expect(screen.getByText('Preferred formats')).toBeTruthy();
     expect(screen.getByText('Legacy Sans')).toBeTruthy();
     expect(screen.getByText('Uploaded Sans')).toBeTruthy();
+    // Every section the nav offers must have a scroll target, so a new
+    // `sections` entry without a matching id fails here.
+    const sectionKeys = Array.from(document.querySelectorAll<HTMLElement>('[data-section-key]'))
+      .map((item) => item.dataset.sectionKey!);
+    expect(sectionKeys).toEqual(expect.arrayContaining(['colors', 'fonts', 'logos', 'images', 'formats', 'templates']));
+    for (const section of sectionKeys) {
+      expect(document.getElementById(section), `#${section} target`).not.toBeNull();
+    }
 
     const colorRole = screen.getByRole('combobox', { name: 'Colour role for #111111' });
     fireEvent.change(colorRole, { target: { value: 'primary' } });
-    expect(screen.getByRole('status').textContent).toBe('Unsaved changes');
+    expect(screen.getByRole('status', { name: 'Brand Kit save status' }).textContent).toBe('Unsaved changes');
     fireEvent.click(screen.getByRole('button', { name: 'Fonts' }));
 
     expect((colorRole as HTMLSelectElement).value).toBe('primary');
-    expect(screen.getByRole('status').textContent).toBe('Unsaved changes');
+    expect(screen.getByRole('status', { name: 'Brand Kit save status' }).textContent).toBe('Unsaved changes');
     expect(scrollIntoView).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -136,7 +145,7 @@ describe('BrandAssets', () => {
     ]);
     expect(body.logoFileIds).toEqual(['legacy-logo', { fileId: 'main-logo', role: 'main' }]);
     expect(body.fontFamilies).toEqual(['Legacy Sans']);
-    expect(screen.getByRole('status').textContent).toBe('All changes saved');
+    expect(screen.getByRole('status', { name: 'Brand Kit save status' }).textContent).toBe('All changes saved');
   });
 
   it('opens the initial hash and adds each catalog family only once', () => {

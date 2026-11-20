@@ -30,6 +30,7 @@ import { readErrorMessage } from './read-error-message';
 import { clipEdgeUpdate, planTrackDrop, resolveClipPlacement } from './clip-geometry';
 import { getSourceDurationMs } from './clip-source-duration';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
+import { useBoundedMenuPlacement } from './use-bounded-menu-placement';
 import { expandClipRefs } from './video-selection';
 import {
   moveClipPreservingDuration,
@@ -1567,6 +1568,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   } | null>(null);
   const [clipTransformPrompt, setClipTransformPrompt] = useState('');
   const [clipTransformMode, setClipTransformMode] = useState<'upscale' | 'remove-bg' | 'video-to-video' | null>(null);
+  const clipMenuRef = useRef<HTMLDivElement>(null);
+  const clipMenuPoint = useMemo(
+    () => (clipMenu ? { x: clipMenu.x, y: clipMenu.y + 8 } : null),
+    [clipMenu],
+  );
+  const clipMenuPlacement = useBoundedMenuPlacement(clipMenuRef, clipMenuPoint, clipTransformMode ?? 'main');
   const [trackSettings, setTrackSettings] = useState<{
     trackId: string;
     x: number;
@@ -4548,11 +4555,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             }}
           />
           <div
-            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[160px]"
+            ref={clipMenuRef}
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[160px] overflow-y-auto"
             style={{
-              left: clipMenu.x,
-              top: clipMenu.y + 8,
-              transform: 'translateX(-50%)',
+              left: clipMenuPlacement?.left ?? clipMenu.x,
+              top: clipMenuPlacement?.top ?? clipMenu.y + 8,
+              maxWidth: clipMenuPlacement?.maxWidth,
+              maxHeight: clipMenuPlacement?.maxHeight,
             }}
           >
             {(() => {

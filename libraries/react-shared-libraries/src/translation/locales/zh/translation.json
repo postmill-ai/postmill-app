@@ -5027,6 +5027,7 @@
   "brand_kit_section_templates": "模板",
   "brand_kit_more_sections": "更多品牌套件部分",
   "brand_kit_sections": "品牌套件部分",
+  "brand_kit_save_status": "品牌套件保存状态",
   "brand_color_roles_hint": "可选择告知 AI Designer 如何使用每种颜色。多个颜色可共享一个角色作为有序选项；未指定角色的颜色仍保留在调色板中。",
   "brand_logo_roles_hint": "标记主徽标、图标和深色版本。其他徽标仍可在未指定角色的情况下使用。",
   "brand_logo_clear_role": "清除角色",

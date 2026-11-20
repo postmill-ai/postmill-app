@@ -5026,6 +5026,7 @@
   "brand_kit_section_templates": "Sjablonen",
   "brand_kit_more_sections": "Meer Brand Kit-secties",
   "brand_kit_sections": "Brand Kit-secties",
+  "brand_kit_save_status": "Opslagstatus van de Brand Kit",
   "brand_color_roles_hint": "Geef eventueel aan hoe AI Designer elke kleur moet gebruiken. Kleuren kunnen een rol delen als geordende keuzes; kleuren zonder rol blijven in het palet.",
   "brand_logo_roles_hint": "Label het hoofdlogo, pictogram en de donkere versie. Andere logo's blijven zonder rol beschikbaar.",
   "brand_logo_clear_role": "Rol wissen",

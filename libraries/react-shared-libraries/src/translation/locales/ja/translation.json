@@ -5027,6 +5027,7 @@
   "brand_kit_section_templates": "テンプレート",
   "brand_kit_more_sections": "ブランドキットのその他のセクション",
   "brand_kit_sections": "ブランドキットのセクション",
+  "brand_kit_save_status": "ブランドキットの保存状況",
   "brand_color_roles_hint": "各カラーの用途を任意でAI Designerに指定できます。複数のカラーが役割を共有して順序付きの選択肢になります。役割のないカラーもパレットに残ります。",
   "brand_logo_roles_hint": "メイン、アイコン、ダーク版のロゴを指定できます。その他のロゴも未割り当てのまま利用できます。",
   "brand_logo_clear_role": "役割をクリア",

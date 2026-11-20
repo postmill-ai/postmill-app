@@ -46,6 +46,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const updateElement = store((s: any) => s.updateElement);
   const updateElements = store((s: any) => s.updateElements);
+  const updateElementsSilent = store((s: any) => s.updateElementsSilent);
   const { preview, cancel } = usePresetPreview(store);
 
   const [aiLoading, setAiLoading] = useState<string | false>(false);
@@ -478,18 +479,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         </div>
       )}
       </InspectorTabGroup>
-
-      <div className="grid grid-cols-3 gap-1">
-        <button type="button" onClick={fitImageToFrame} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-          {t('designer_fit_to_frame', 'Fit to frame')}
-        </button>
-        <button type="button" onClick={fitImageToCanvas} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-          {t('designer_fit_to_canvas', 'Fit to canvas')}
-        </button>
-        <button type="button" onClick={centerImage} className="px-2 py-1.5 rounded-sm border border-studioBorder text-[11px] text-textColor hover:bg-boxHover">
-          {t('designer_center', 'Center')}
-        </button>
-      </div>
 
       <InspectorTabGroup for="ai" active={tab}>
         {isSingle && <ImageAiTools key={element.id} element={element} store={store} />}
