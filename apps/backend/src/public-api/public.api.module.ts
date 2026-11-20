@@ -17,6 +17,7 @@ import { PublicIntegrationsController } from '@postmill-ai/backend/public-api/ro
 import { PublicAnalyticsV1Controller } from '@postmill-ai/backend/public-api/routes/v1/public.analytics.v1.controller';
 import { PublicCampaignController } from '@postmill-ai/backend/public-api/routes/public.campaign.controller';
 import { PublicAnalyticsController } from '@postmill-ai/backend/public-api/routes/public.analytics.controller';
+import { PublicDesignShareController } from '@postmill-ai/backend/public-api/routes/public.design-share.controller';
 import { PublicAuthMiddleware } from '@postmill-ai/backend/services/auth/public.auth.middleware';
 import { CsrfMiddleware } from '@postmill-ai/backend/services/auth/csrf.middleware';
 import { AuthContextResolver } from '@postmill-ai/nestjs-libraries/auth/auth-context.resolver';
@@ -33,7 +34,7 @@ const authenticatedController = [
   PublicIntegrationsController,
   PublicAnalyticsV1Controller,
 ];
-const publicController = [PublicCampaignController, PublicAnalyticsController];
+const publicController = [PublicCampaignController, PublicAnalyticsController, PublicDesignShareController];
 @Module({
   imports: [UploadModule],
   controllers: [...authenticatedController, ...publicController],

@@ -1,6 +1,6 @@
 import { inject } from 'vitest';
 import { getTestPrisma } from '@postmill-ai/nestjs-libraries/testing/test-db';
-import { PrismaRepository, PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaService, PrismaTransaction } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { DesignRepository } from './design.repository';
 
 describe('DesignRepository Brand Kit template ordering (integration)', () => {
@@ -13,6 +13,9 @@ describe('DesignRepository Brand Kit template ordering (integration)', () => {
       new PrismaRepository<'designVersion'>(prisma as unknown as PrismaService),
       new PrismaRepository<'file'>(prisma as unknown as PrismaService),
       new PrismaRepository<'designerRecentOpen'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designBatch'>(prisma as unknown as PrismaService),
+      new PrismaRepository<'designShare'>(prisma as unknown as PrismaService),
+      new PrismaTransaction(prisma as unknown as PrismaService),
     );
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const organizationId = `template-org-${suffix}`;

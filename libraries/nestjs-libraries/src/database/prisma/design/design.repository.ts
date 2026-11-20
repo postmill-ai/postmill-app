@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaTransaction } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import {
   DesignerGallerySort,
   templateCategoryKey,
@@ -94,6 +94,7 @@ const paginationSql = (params: any[], page?: number, limit?: number) => {
   return `LIMIT $${params.length - 1} OFFSET $${params.length}`;
 };
 
+
 @Injectable()
 export class DesignRepository {
   constructor(
@@ -104,6 +105,8 @@ export class DesignRepository {
     private readonly _file: PrismaRepository<'file'>,
     private readonly _recentOpen: PrismaRepository<'designerRecentOpen'>,
     private readonly _designBatch: PrismaRepository<'designBatch'>,
+    private readonly _designShare: PrismaRepository<'designShare'>,
+    private readonly _transaction: PrismaTransaction,
   ) {}
 
   findById(orgId: string, id: string) {
@@ -189,11 +192,20 @@ export class DesignRepository {
     return this._design.model.design.create({ data });
   }
 
-  update(id: string, orgId: string, data: { name?: string; doc?: any; width?: number; height?: number; previewDataUrl?: string; previewFileId?: string | null }) {
-    return this._design.model.design.update({
+  async update(id: string, orgId: string, data: { name?: string; doc?: any; width?: number; height?: number; previewDataUrl?: string; previewFileId?: string | null }) {
+    const update = this._design.model.design.update({
       where: { id, organizationId: orgId },
       data,
     });
+    if (data.doc === undefined) return update;
+    const [updated] = await this._transaction.model.$transaction([
+      update,
+      this._designShare.model.designShare.updateMany({
+        where: { designId: id, organizationId: orgId },
+        data: { approvedAt: null, approvedBy: null },
+      }),
+    ]);
+    return updated;
   }
 
   softDelete(id: string, orgId: string) {

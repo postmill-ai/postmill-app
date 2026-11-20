@@ -155,9 +155,10 @@ navigation, unsaved-state retention, legacy/custom fonts, and visual-role save/r
 refuses to load outside GitHub Actions. Do not run its server or Playwright on the production host.
 
 `96-designer-editing-ux.spec.ts` also has `playwright.designer-editing.config.ts` for its
-network-mocked canvas interaction cases. Only with `E2E_SKIP_AUTH_SETUP=1` does the spec install a
-mock-only auth cookie; real-session configs keep their saved session. It mocks identity, organization,
-design, render, and upload routes and starts no `webServer`. Set `E2E_BASE` to an already-running
+network-mocked canvas interaction cases, alongside `98-designer-sharing.spec.ts` for team/public share
+flows. Only with `E2E_SKIP_AUTH_SETUP=1` do these specs install a
+mock-only auth cookie; real-session configs keep their saved session. They mock identity, organization,
+design, render, and upload routes and start no `webServer`. Set `E2E_BASE` to an already-running
 loopback worktree frontend and run `pnpm exec playwright test --config
 playwright.designer-editing.config.ts` from `e2e/`. The `production-editing` job in
 `.github/workflows/designer-browser.yml` builds the frontend, starts that production bundle only on

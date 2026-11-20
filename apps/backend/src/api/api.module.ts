@@ -75,6 +75,7 @@ import { RolesController } from '@postmill-ai/backend/api/routes/roles.controlle
 import { StockMediaController } from '@postmill-ai/backend/api/routes/stock-media.controller';
 import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
 import { DesignController, DesignRenderFrameController, DesignTemplateController, DesignerProxyController } from '@postmill-ai/backend/api/routes/design.controller';
+import { DesignShareController } from '@postmill-ai/backend/api/routes/design-share.controller';
 import { EmailWebhooksController } from '@postmill-ai/backend/api/routes/email-webhooks.controller';
 import { MediaJobsWebhookController } from '@postmill-ai/backend/api/routes/media-jobs-webhook.controller';
 import { AiGuardMiddleware } from '@postmill-ai/backend/services/ai/ai-guard.middleware';
@@ -159,6 +160,7 @@ export const authenticatedController = [
   RolesController,
   StockMediaController,
   DesignController,
+  DesignShareController,
   DesignTemplateController,
   DesignerProxyController,
   ReplicateStudioController,

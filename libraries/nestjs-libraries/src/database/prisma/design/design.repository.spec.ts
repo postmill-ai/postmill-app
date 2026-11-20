@@ -46,12 +46,19 @@ function makeModel() {
       count: vi.fn(),
       deleteMany: vi.fn(),
     },
+    designShare: {
+      updateMany: vi.fn(),
+    },
+    $transaction: vi.fn(async (operations) => operations),
   };
 }
 
 function makeRepo(model = makeModel()) {
   return {
     repo: new DesignRepository(
+      { model } as any,
+      { model } as any,
+      { model } as any,
       { model } as any,
       { model } as any,
       { model } as any,
@@ -387,5 +394,34 @@ describe('DesignRepository — Bulk Create batches', () => {
     expect(model.designBatch.deleteMany).toHaveBeenCalledWith({
       where: { id: 'batch-1', organizationId: 'org-1' },
     });
+  });
+});
+
+
+describe('DesignRepository — share approval invalidation', () => {
+  it('updates a document and resets its share approval in one transaction', async () => {
+    const { repo, model } = makeRepo();
+    const doc = { mode: 'image', outputs: [] };
+
+    await repo.update('design-1', 'org-1', { doc });
+
+    expect(model.$transaction).toHaveBeenCalledTimes(1);
+    expect(model.design.update).toHaveBeenCalledWith({
+      where: { id: 'design-1', organizationId: 'org-1' },
+      data: { doc },
+    });
+    expect(model.designShare.updateMany).toHaveBeenCalledWith({
+      where: { designId: 'design-1', organizationId: 'org-1' },
+      data: { approvedAt: null, approvedBy: null },
+    });
+  });
+
+  it('preserves approval for name and preview-only updates', async () => {
+    const { repo, model } = makeRepo();
+
+    await repo.update('design-1', 'org-1', { name: 'Renamed', previewFileId: 'preview-1' });
+
+    expect(model.$transaction).not.toHaveBeenCalled();
+    expect(model.designShare.updateMany).not.toHaveBeenCalled();
   });
 });

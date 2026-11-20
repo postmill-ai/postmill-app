@@ -122,6 +122,26 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   on every call — a revoked grant or expired token fails closed
   (`FederationRepository.findByAccessToken`).
 
+## Public design-share capabilities
+
+- Client preview URLs carry a `randomBytes(32)` token in `/share/design/<token>` and
+  `/public/design-share/:token`; management reads/writes require `media:update`, so viewers cannot lift
+  or change the link. Team Can view remains session-authenticated and requires `media:read`.
+- Public reads return only design/output/page display metadata, bounded comments, and approval. Never
+  return the editable DesignerDoc, organization metadata, or asset URLs; preview PNGs render server-side
+  with `private, no-store`. Resolve enabled + unexpired + non-soft-deleted design on every metadata,
+  image, comment, and approval call, using a uniform 404 for invalid tokens.
+- Comment/approval names cap at 80 characters and comment bodies at 2,000. Disabling comments rejects new
+  submissions but preserves existing feedback. Approval is an atomic first-write-wins update. Public
+  routes have tighter per-IP throttles and no session middleware; anonymous and authenticated image
+  rendering share the same 600/hour budget. Preview components cache each output/page Blob for their
+  lifetime, so back-navigation does not trigger another render and HTTP remains `private, no-store`.
+  Team Can
+  view is a read-only route, not an ACL for teammates who already have edit permission. Re-enabling a
+  disabled link rotates its token and clears approval; every document update atomically clears approval
+  for the new revision while retaining comments. Organization import regenerates and disables
+  DesignShare tokens while retaining feedback.
+
 ## CSRF
 
 - Required on cookie-authenticated mutating routes. Enforcement: every controller in

@@ -759,7 +759,7 @@ export class OrgImportService {
     }
     for (const field of ORG_PORTABILITY_REGENERATED_TOKEN_FIELDS[model] || []) {
       if (model === 'CommsProviderConfig') row[field] = randomBytes(24).toString('base64url');
-      else if (model === 'AnalyticsShare') row[field] = randomBytes(32).toString('hex');
+      else if (model === 'AnalyticsShare' || model === 'DesignShare') row[field] = randomBytes(32).toString('hex');
       else row[field] = null;
     }
     if (model === 'Integration') Object.assign(row, { disabled: true, inBetweenSteps: false, refreshNeeded: false });
@@ -767,7 +767,7 @@ export class OrgImportService {
     if (model === 'Plugs') row.activated = false;
     if (model === 'Post' && row.state !== 'PUBLISHED') row.state = 'DRAFT';
     if (model === 'Campaign') row.shareEnabled = false;
-    if (model === 'AnalyticsShare') row.enabled = false;
+    if (model === 'AnalyticsShare' || model === 'DesignShare') row.enabled = false;
     if (PROVIDER_CONFIGS.has(model)) {
       if ('enabled' in row) row.enabled = false;
       if ('isActive' in row) row.isActive = false;

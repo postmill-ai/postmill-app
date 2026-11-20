@@ -377,9 +377,19 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   A render failure keeps the previous preview, and preview replacement cleans up only the old File
   row it actually replaced. Legacy remote video clips with no File row use the bounded streaming
   frame extractor (never the 256 MB whole-buffer path), and only successful posters stay cached.
-  Share opens a dialog whose URL is derived from `currentDesignId` as `/media/designer?designId=<id>`;
-  it never copies the generic current location. Deep-linked loads reject HTTP and error-shaped
-  responses with a visible unavailable state instead of treating an error body as a DesignerDoc.
+  Share opens a dialog whose team Can edit URL is derived from `currentDesignId` as
+  `/media/designer?designId=<id>`; Can view targets `/media/designer/view?designId=<id>` instead.
+  The view route never mounts the editable store, autosave, or collaboration socket. Team and public
+  previews share `design-preview-view.tsx`, server-render selected outputs/pages through
+  `DesignPreviewService`, and use the video time-zero poster. One `DesignShare` per design stores the
+  client token, enabled/comments settings, expiry, approval, and bounded feedback. Client links live at
+  `/share/design/<token>` and reflect the latest saved doc; opening Share does not implicitly save.
+  Re-enabling a disabled link rotates its token and clears the old approval. Any document update clears
+  approval atomically through `DesignRepository.update`, so the latest saved revision can be approved
+  again; comments remain as history and metadata-only updates do not reset approval. Can view is only a
+  read-only route, not an ACL: the dialog states that teammates with existing edit access can still edit.
+  Deep-linked loads reject HTTP and error-shaped responses with a visible unavailable state instead
+  of treating an error body as a DesignerDoc.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame

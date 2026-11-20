@@ -552,7 +552,7 @@ const DesignerContent: FC<
     if (!id) return;
     modals.openModal({
       title: translate('designer_share_design', 'Share design'),
-      size: 560,
+      size: 640,
       children: (
         <ShareDialog
           designId={id}

@@ -18,8 +18,8 @@ export async function runExactDesignSharing(page: Page): Promise<void> {
   await expect(dialog).toBeVisible();
   const expected = new URL('/media/designer', new URL(base).origin);
   expected.searchParams.set('designId', designId);
-  await expect(dialog.getByLabel('Design link', { exact: true })).toHaveValue(expected.toString());
-  const shared = new URL(await dialog.getByLabel('Design link', { exact: true }).inputValue());
+  await expect(dialog.getByLabel('Team link', { exact: true })).toHaveValue(expected.toString());
+  const shared = new URL(await dialog.getByLabel('Team link', { exact: true }).inputValue());
   expect(shared.searchParams.get('designId')).toBe(designId);
   expect([...shared.searchParams.keys()]).toEqual(['designId']);
   assertNoBrowserFailures();

@@ -71,9 +71,10 @@ export class DesignPreviewService {
    */
   private async _resolveVideoPosters(
     doc: DesignerDoc,
-    orgId: string
+    orgId: string,
+    outputIndex: number
   ): Promise<VideoPosterMap | undefined> {
-    const output = doc.outputs?.[0];
+    const output = doc.outputs?.[outputIndex];
     if (!output || !('tracks' in output)) return undefined;
     const fileIds = new Set<string>();
     const clipsBySrc: Array<{ id: string; src: string }> = [];
@@ -116,8 +117,8 @@ export class DesignPreviewService {
     return posters.size ? posters : undefined;
   }
 
-  private _assertRequiredVideoAssets(doc: DesignerDoc, posters?: VideoPosterMap): void {
-    const output = doc.outputs?.[0];
+  private _assertRequiredVideoAssets(doc: DesignerDoc, posters: VideoPosterMap | undefined, outputIndex: number): void {
+    const output = doc.outputs?.[outputIndex];
     if (!output || !('tracks' in output)) return;
     for (const track of output.tracks) {
       if (track.hidden) continue;
@@ -140,9 +141,9 @@ export class DesignPreviewService {
     }
   }
 
-  private _withAudioOnlyPlaceholder(doc: DesignerDoc, source: DesignerDoc): DesignerDoc {
-    const sourceOutput = source.outputs?.[0];
-    const output = doc.outputs?.[0] as any;
+  private _withAudioOnlyPlaceholder(doc: DesignerDoc, source: DesignerDoc, outputIndex: number): DesignerDoc {
+    const sourceOutput = source.outputs?.[outputIndex];
+    const output = doc.outputs?.[outputIndex] as any;
     if (
       !sourceOutput ||
       !('tracks' in sourceOutput) ||
@@ -173,7 +174,9 @@ export class DesignPreviewService {
     };
     return {
       ...doc,
-      outputs: [{ ...output, children: [backdrop, label] }, ...doc.outputs.slice(1)],
+      outputs: doc.outputs.map((item, index) =>
+        index === outputIndex ? { ...output, children: [backdrop, label] } : item
+      ),
     };
   }
 
@@ -184,25 +187,28 @@ export class DesignPreviewService {
    */
   async renderPreviewBuffer(
     doc: DesignerDoc,
-    opts?: { orgId?: string }
+    opts?: { orgId?: string; outputIndex?: number; pageNumber?: number }
   ): Promise<Buffer> {
+    const outputIndex = opts?.outputIndex ?? 0;
+    const pageNumber = opts?.pageNumber ?? 0;
     const isVideo =
       doc.mode === 'video' ||
       (doc.outputs ?? []).some((out) => 'tracks' in (out as object));
     if (!isVideo) {
-      await this._designRenderService.assertVisualAssets(doc, 0, opts);
-      return this._designRenderService.renderPage(doc, 0, opts);
+      await this._designRenderService.assertVisualAssets(doc, outputIndex, opts, pageNumber);
+      return this._designRenderService.renderPage(doc, outputIndex, opts, pageNumber);
     }
     const videoPosters = opts?.orgId
-      ? await this._resolveVideoPosters(doc, opts.orgId)
+      ? await this._resolveVideoPosters(doc, opts.orgId, outputIndex)
       : undefined;
-    this._assertRequiredVideoAssets(doc, videoPosters);
+    this._assertRequiredVideoAssets(doc, videoPosters, outputIndex);
     const renderDoc = this._withAudioOnlyPlaceholder(
       docWithVideoPosters(doc, videoPosters),
-      doc
+      doc,
+      outputIndex
     );
-    await this._designRenderService.assertVisualAssets(renderDoc, 0, opts);
-    return this._designRenderService.renderPage(renderDoc, 0, opts);
+    await this._designRenderService.assertVisualAssets(renderDoc, outputIndex, opts, pageNumber);
+    return this._designRenderService.renderPage(renderDoc, outputIndex, opts, pageNumber);
   }
 
   /**

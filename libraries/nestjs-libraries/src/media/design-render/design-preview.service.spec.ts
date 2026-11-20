@@ -170,7 +170,51 @@ describe('DesignPreviewService', () => {
       const out = await service.renderPreviewBuffer(imageDoc, { orgId: 'org-1' });
 
       expect(out).toEqual(Buffer.from('png'));
-      expect(renderService.renderPage).toHaveBeenCalledWith(imageDoc, 0, { orgId: 'org-1' });
+      expect(renderService.renderPage).toHaveBeenCalledWith(imageDoc, 0, { orgId: 'org-1' }, 0);
+    });
+
+    it('renders a later image output and page without changing default callers', async () => {
+      const pagedDoc = {
+        ...imageDoc,
+        outputs: [
+          imageDoc.outputs[0],
+          {
+            ...imageDoc.outputs[0],
+            id: 'out-2',
+            pages: [{ id: 'page-2', children: [{ type: 'text' }] }],
+          },
+        ],
+      };
+      await service.renderPreviewBuffer(pagedDoc, { orgId: 'org-1', outputIndex: 1, pageNumber: 1 });
+
+      expect(renderService.assertVisualAssets).toHaveBeenCalledWith(
+        pagedDoc,
+        1,
+        { orgId: 'org-1', outputIndex: 1, pageNumber: 1 },
+        1,
+      );
+      expect(renderService.renderPage).toHaveBeenCalledWith(
+        pagedDoc,
+        1,
+        { orgId: 'org-1', outputIndex: 1, pageNumber: 1 },
+        1,
+      );
+    });
+
+    it('projects a later video output through its own poster', async () => {
+      const doc = {
+        ...videoDoc,
+        outputs: [
+          videoDoc.outputs[0],
+          { ...videoDoc.outputs[0], id: 'out-2', name: 'Second reel' },
+        ],
+      };
+      await service.renderPreviewBuffer(doc, { orgId: 'org-1', outputIndex: 1 });
+
+      const [renderDoc, outputIndex, , pageNumber] = renderService.renderPage.mock.calls[0];
+      expect(outputIndex).toBe(1);
+      expect(pageNumber).toBe(0);
+      expect(renderDoc.outputs[1].children[0].type).toBe('text');
     });
 
     it('projects a video doc through the poster before rendering', async () => {
