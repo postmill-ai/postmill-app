@@ -3676,6 +3676,7 @@ test.describe('Designer non-destructive cutout refinement', () => {
 
     await page.getByRole('tab', { name: 'AI Tools', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Background', exact: true }).click();
+    await page.getByRole('radio', { name: 'Preserve frame', exact: true }).click();
     await page.getByRole('button', { name: 'Apply result', exact: true }).click();
     await expect.poll(() => mocks.doc.outputs[0].children![0].maskSrc).toContain('/mock-masks/');
 
